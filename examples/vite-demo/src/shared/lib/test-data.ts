@@ -1,24 +1,19 @@
 /**
- * Deterministic test-data generators used by the demo pages.
+ * Mock ROS2 message generators used by the streaming demo pages.
  *
- * These intentionally produce interesting-looking signals (multiple harmonics,
- * drift, noise, bursts, outliers) so the visual output actually exercises the
- * renderer under conditions similar to real robotics sensors.
+ * Demos receive these raw message objects (as if from a real subscriber)
+ * and convert them to FluxionRender-shaped records via user-owned
+ * `transform` functions — the same pattern you'd use when piping
+ * rclnodejs / roslib / ros2-web-bridge output into the renderer.
  *
- * All timestamps are **host-relative milliseconds** (callers should subtract
- * their own `T0 = performance.now()` on start).
+ * Keep these generators deterministic-with-noise so the visual output is
+ * still interesting frame-to-frame without being unreproducible.
  */
 
-/** Host-relative time origin. Store once per demo instance. */
-export function createTimeOrigin(): () => number {
-  const t0 = performance.now();
-  return () => performance.now() - t0;
-}
+// ────────────────────────────────────────────────────────────────────────
+// Deterministic PRNG (Mulberry32)
+// ────────────────────────────────────────────────────────────────────────
 
-/**
- * Seeded Mulberry32 PRNG. Identical seed -> identical stream.
- * Returned function yields floats in [0, 1).
- */
 export function rng(seed: number): () => number {
   let state = seed >>> 0;
   return () => {
@@ -32,58 +27,163 @@ export function rng(seed: number): () => number {
 
 const globalNoise = rng(0x9e3779b9);
 
-/** Typed streaming sample shape. Matches `LineSample` from the library. */
-export interface StreamSample {
-  t: number;
-  y: number;
+// ────────────────────────────────────────────────────────────────────────
+// ROS2-style message shapes
+// ────────────────────────────────────────────────────────────────────────
+
+/** Equivalent to std_msgs/Header. */
+export interface Header {
+  stamp: { sec: number; nanosec: number };
+  frame_id: string;
 }
 
 /**
- * Single streaming sample with multi-frequency sine + slow drift +
- * gaussian-ish noise. `y` stays roughly in `[-1.5, 1.5]`.
+ * Convert a ROS2 header stamp into host-relative milliseconds. Nanosecond
+ * precision is lost (ms is float64), but the chart's ring buffer stores
+ * Float32 anyway, so the rounding is below the noise floor.
  */
-export function generateStreamSample(
+export function stampToMs(header: Header): number {
+  return header.stamp.sec * 1000 + header.stamp.nanosec / 1e6;
+}
+
+function buildHeader(tMs: number, frameId: string): Header {
+  const sec = Math.floor(tMs / 1000);
+  const nanosec = Math.floor((tMs - sec * 1000) * 1e6);
+  return { stamp: { sec, nanosec }, frame_id: frameId };
+}
+
+/** Lightweight equivalent of std_msgs/Float32Stamped-ish. */
+export interface Float32StampedMessage {
+  header: Header;
+  data: number;
+}
+
+/** Equivalent to sensor_msgs/LaserScan. */
+export interface LaserScanMessage {
+  header: Header;
+  angle_min: number;
+  angle_max: number;
+  angle_increment: number;
+  time_increment: number;
+  scan_time: number;
+  range_min: number;
+  range_max: number;
+  ranges: Float32Array;
+  /** ROS2 permits length 0 (no reflectivity reported). */
+  intensities: Float32Array;
+}
+
+// ────────────────────────────────────────────────────────────────────────
+// Generators (produce raw ROS2-shaped output)
+// ────────────────────────────────────────────────────────────────────────
+
+export interface StreamSignalOpts {
+  freqHz?: number;
+  amplitude?: number;
+  /** Phase offset used to stagger series in multi-line demos. */
+  seriesOffset?: number;
+}
+
+function signalValue(tMs: number, opts: StreamSignalOpts = {}): number {
+  const { freqHz = 0.8, amplitude = 1, seriesOffset = 0 } = opts;
+  const ts = tMs / 1000;
+  const carrier = Math.sin(2 * Math.PI * freqHz * ts + seriesOffset) * amplitude;
+  const harmonic =
+    Math.sin(2 * Math.PI * freqHz * 2.7 * ts + seriesOffset) * amplitude * 0.4;
+  const drift = Math.sin(2 * Math.PI * 0.07 * ts + seriesOffset * 0.5) * 0.3;
+  const noise = (globalNoise() - 0.5) * 0.2;
+  return carrier + harmonic + drift + noise;
+}
+
+/**
+ * Single Float32 stamped sample — one mock subscriber callback fire.
+ */
+export function generateFloat32StampedMessage(
   tMs: number,
-  freqHz = 0.8,
-  amplitude = 1,
-): StreamSample {
-  const t = tMs / 1000;
-  const carrier = Math.sin(2 * Math.PI * freqHz * t) * amplitude;
-  const harmonic = Math.sin(2 * Math.PI * freqHz * 3.1 * t) * amplitude * 0.3;
-  const drift = Math.sin(2 * Math.PI * 0.05 * t) * 0.4;
-  const noise = (globalNoise() - 0.5) * 0.15;
-  return { t: tMs, y: carrier + harmonic + drift + noise };
+  opts: StreamSignalOpts = {},
+): Float32StampedMessage {
+  return {
+    header: buildHeader(tMs, "sensor_frame"),
+    data: signalValue(tMs, opts),
+  };
 }
 
 /**
- * Burst of `count` typed samples spanning `dtMs` per sample, starting at
- * `tStartMs`. Used by the multi-stream demo to stress-push hundreds of
- * samples per interval tick — caller forwards to `line.pushBatch(...)`.
+ * Burst of N stamped samples — simulates a batched subscriber that delivers
+ * the last `count` samples at once. Used by the multi-series stress demo.
  */
-export function generateStreamBatch(
+export function generateFloat32StampedBatch(
   tStartMs: number,
   count: number,
   dtMs: number,
-  opts: { seriesOffset?: number; freqHz?: number; amplitude?: number } = {},
-): StreamSample[] {
-  const { seriesOffset = 0, freqHz = 1, amplitude = 1 } = opts;
-  const out: StreamSample[] = new Array(count);
+  opts: StreamSignalOpts = {},
+): Float32StampedMessage[] {
+  const out: Float32StampedMessage[] = new Array(count);
   for (let i = 0; i < count; i++) {
     const t = tStartMs + i * dtMs;
-    const ts = t / 1000;
-    const carrier = Math.sin(2 * Math.PI * freqHz * ts + seriesOffset) * amplitude;
-    const harmonic =
-      Math.sin(2 * Math.PI * freqHz * 2.7 * ts + seriesOffset) * amplitude * 0.4;
-    const drift = Math.sin(2 * Math.PI * 0.07 * ts + seriesOffset * 0.5) * 0.3;
-    const noise = (globalNoise() - 0.5) * 0.2;
-    out[i] = { t, y: carrier + harmonic + drift + noise };
+    out[i] = {
+      header: buildHeader(t, "sensor_frame"),
+      data: signalValue(t, opts),
+    };
   }
   return out;
 }
 
 /**
- * One-shot xy dataset for the static demo: a noisy sine over an x-range.
- * Returns interleaved `[x0, y0, x1, y1, ...]` of length `n * 2`.
+ * Rotating mock LaserScan. Produces `pointCount` ray returns per message,
+ * with a star-shaped range envelope that slowly morphs with `frame`, plus
+ * ~5% outliers to simulate range noise.
+ */
+export function generateLaserScanMessage(
+  frame: number,
+  pointCount: number,
+  opts: { rangeMax?: number; rangeMin?: number } = {},
+): LaserScanMessage {
+  const { rangeMax = 30, rangeMin = 0.5 } = opts;
+  const ranges = new Float32Array(pointCount);
+  const intensities = new Float32Array(pointCount);
+  const phase = frame * 0.01;
+  const rot = frame * 0.004;
+  const angleMin = rot;
+  const angleIncrement = (Math.PI * 2) / pointCount;
+
+  for (let i = 0; i < pointCount; i++) {
+    const angle = angleMin + i * angleIncrement;
+    let r =
+      10 +
+      Math.sin(angle * 5 + phase) * 4 +
+      Math.cos(angle * 2 - phase * 2) * 3 +
+      Math.sin(angle * 13 + phase * 0.5) * 1.5;
+    // ~5% outlier injection
+    if (globalNoise() < 0.05) r += (globalNoise() - 0.5) * 8;
+    else r += (globalNoise() - 0.5) * 0.3;
+    if (r < rangeMin) r = rangeMin;
+    if (r > rangeMax) r = rangeMax;
+    ranges[i] = r;
+    intensities[i] = Math.min(1, r / rangeMax);
+  }
+
+  return {
+    header: buildHeader(frame * 8.33, "laser_frame"), // ~120Hz stamp
+    angle_min: angleMin,
+    angle_max: angleMin + Math.PI * 2,
+    angle_increment: angleIncrement,
+    time_increment: 1 / 1e6,
+    scan_time: 1 / 120,
+    range_min: rangeMin,
+    range_max: rangeMax,
+    ranges,
+    intensities,
+  };
+}
+
+// ────────────────────────────────────────────────────────────────────────
+// Static demo helper (not ROS2) — kept for the static-xy demo.
+// ────────────────────────────────────────────────────────────────────────
+
+/**
+ * One-shot noisy sine over an x range. Returns interleaved xy Float32Array.
+ * Used by the static-xy demo which does not consume ROS2 messages.
  */
 export function generateStaticSineXY(
   n: number,
@@ -103,45 +203,11 @@ export function generateStaticSineXY(
   return out;
 }
 
-/**
- * Rotating 2D LiDAR scan stressing renderer with `pointCount` points per frame.
- *
- * Geometry: star-shaped obstacle field that slowly morphs via `frame`-driven
- * phase, plus ~5% random outliers to simulate range noise. Output is
- * `[x, y, z, intensity, ...]` stride=4.
- */
-export function generateLidarScan(
-  frame: number,
-  pointCount: number,
-  opts: { rangeMax?: number } = {},
-): Float32Array {
-  const { rangeMax = 30 } = opts;
-  const out = new Float32Array(pointCount * 4);
-  const phase = frame * 0.01;
-  const rot = frame * 0.004;
-  for (let i = 0; i < pointCount; i++) {
-    const baseAngle = (i / pointCount) * Math.PI * 2;
-    const angle = baseAngle + rot;
-    // Star-shaped range varying with angle and phase
-    let r =
-      10 +
-      Math.sin(angle * 5 + phase) * 4 +
-      Math.cos(angle * 2 - phase * 2) * 3 +
-      Math.sin(angle * 13 + phase * 0.5) * 1.5;
-    // Outlier injection ~5%
-    const roll = globalNoise();
-    if (roll < 0.05) r += (globalNoise() - 0.5) * 8;
-    else r += (globalNoise() - 0.5) * 0.3;
-    if (r < 0.5) r = 0.5;
-    if (r > rangeMax) r = rangeMax;
-    const x = Math.cos(angle) * r;
-    const y = Math.sin(angle) * r;
-    const intensity = Math.min(1, r / rangeMax);
-    const o = i * 4;
-    out[o] = x;
-    out[o + 1] = y;
-    out[o + 2] = 0;
-    out[o + 3] = intensity;
-  }
-  return out;
+// ────────────────────────────────────────────────────────────────────────
+// Host-relative time origin helper (used by AllDemoPage's shared timing)
+// ────────────────────────────────────────────────────────────────────────
+
+export function createTimeOrigin(): () => number {
+  const t0 = performance.now();
+  return () => performance.now() - t0;
 }

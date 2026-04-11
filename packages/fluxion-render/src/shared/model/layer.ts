@@ -5,6 +5,14 @@ import type { Viewport } from "./viewport";
  * is a cross-cutting interface used by entities (layer implementations) and
  * features (engine, layer-stack).
  *
+ * Frame lifecycle (driven by `Engine.render`):
+ *   1. `viewport.beginScan()` — reset per-frame aggregates
+ *   2. `scan(viewport)` — OPTIONAL pre-draw phase. Layers use this to update
+ *      shared viewport state (bounds, observed y extents) before anyone reads
+ *      it in draw. Called in stack insertion order.
+ *   3. `draw(ctx, viewport)` — actual rendering. Reads bounds written during
+ *      scan. Called in stack insertion order.
+ *
  * `setData` receives the live `Viewport` so streaming layers can update
  * shared state (e.g. `viewport.latestT`) at the exact moment new data lands,
  * before the next draw frame fires.
@@ -14,6 +22,12 @@ export interface Layer {
   setConfig(config: unknown): void;
   setData(buffer: ArrayBuffer, length: number, viewport: Viewport): void;
   resize(viewport: Viewport): void;
+  /**
+   * Optional pre-draw hook. Runs for every layer (in insertion order) before
+   * any layer's `draw`. Use this to write into `viewport` state that other
+   * layers will consume in their draw.
+   */
+  scan?(viewport: Viewport): void;
   draw(ctx: OffscreenCanvasRenderingContext2D, viewport: Viewport): void;
   dispose(): void;
 }

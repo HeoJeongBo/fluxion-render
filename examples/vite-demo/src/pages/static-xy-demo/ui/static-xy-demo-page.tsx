@@ -1,4 +1,8 @@
-import { useFluxionCanvas } from "@heojeongbo/fluxion-render/react";
+import {
+  axisGridLayer,
+  lineStaticLayer,
+  useFluxionCanvas,
+} from "@heojeongbo/fluxion-render/react";
 import { useEffect, useRef, useState } from "react";
 import { generateStaticSineXY } from "../../../shared/lib/test-data";
 
@@ -19,19 +23,15 @@ export interface StaticXyDemoPageProps {
 export function StaticXyDemoPage({ compactHud = false }: StaticXyDemoPageProps = {}) {
   const { containerRef, host } = useFluxionCanvas({
     layers: [
-      {
-        id: "axis",
-        kind: "axis-grid",
-        config: {
-          xRange: [X_MIN, X_MAX],
-          yRange: [-1.2, 1.2],
-        },
-      },
-      {
-        id: "plot",
-        kind: "line-static",
-        config: { color: "#4fc3f7", lineWidth: 1.5, layout: "xy" },
-      },
+      axisGridLayer("axis", {
+        xRange: [X_MIN, X_MAX],
+        yRange: [-1.2, 1.2],
+      }),
+      lineStaticLayer("plot", {
+        color: "#4fc3f7",
+        lineWidth: 1.5,
+        layout: "xy",
+      }),
     ],
   });
 

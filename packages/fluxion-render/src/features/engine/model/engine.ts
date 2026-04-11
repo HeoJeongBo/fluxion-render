@@ -100,6 +100,12 @@ export class Engine {
   private render() {
     const ctx = this.ctx;
     if (!ctx || !this.canvas) return;
+    // 2-pass: scan (orchestration: time window, observed y, bounds) then
+    // draw. AxisGridLayer.scan writes bounds; LineChartLayer.scan reads
+    // bounds and publishes observed y extents; AxisGridLayer.draw finishes
+    // the y-auto computation using those extents.
+    this.viewport.beginScan();
+    this.stack.scanAll(this.viewport);
     const { dpr } = this.viewport;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.fillStyle = this.bgColor;

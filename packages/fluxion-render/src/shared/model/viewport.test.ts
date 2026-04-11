@@ -19,6 +19,21 @@ describe("Viewport", () => {
     expect(v.latestT).toBe(2500);
   });
 
+  it("observedYMin/Max initialized to +/- Infinity", () => {
+    const v = new Viewport();
+    expect(v.observedYMin).toBe(Number.POSITIVE_INFINITY);
+    expect(v.observedYMax).toBe(Number.NEGATIVE_INFINITY);
+  });
+
+  it("beginScan resets observed y extents", () => {
+    const v = new Viewport();
+    v.observedYMin = -5;
+    v.observedYMax = 10;
+    v.beginScan();
+    expect(v.observedYMin).toBe(Number.POSITIVE_INFINITY);
+    expect(v.observedYMax).toBe(Number.NEGATIVE_INFINITY);
+  });
+
   it("setSize updates dimensions and dpr", () => {
     const v = new Viewport();
     v.setSize(800, 600, 2);

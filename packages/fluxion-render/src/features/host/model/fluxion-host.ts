@@ -114,6 +114,9 @@ export class FluxionHost {
   configLayer(id: string, config: LineChartStaticConfig): void;
   configLayer(id: string, config: LidarScatterConfig): void;
   configLayer(id: string, config: AxisGridConfig): void;
+  // Dynamic fallback for helpers like `useLayerConfig` that carry an opaque
+  // config alongside the layer id.
+  configLayer(id: string, config: unknown): void;
   configLayer(id: string, config: unknown): void {
     this.post({ op: Op.CONFIG, id, config });
   }

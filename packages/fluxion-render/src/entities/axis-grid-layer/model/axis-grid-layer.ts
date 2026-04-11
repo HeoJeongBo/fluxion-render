@@ -38,8 +38,49 @@ export interface AxisGridConfig {
    * (`"X.Xs"`) is used instead.
    */
   xTickFormat?: string;
+
+  // ─── y scaling ────────────────────────────────────────────
+  /**
+   * "fixed" (default): use configured `yRange`.
+   * "auto": data-driven. Reads `viewport.observedYMin/Max` during draw,
+   * applies padding and clamps, updates `bounds.yMin/yMax`. Requires at
+   * least one data layer (e.g. `LineChartLayer`) in the stack to publish
+   * observations via its `scan()` pass.
+   */
+  yMode?: "fixed" | "auto";
+  /** Padding ratio applied above/below the observed range. Default 0.1 (10%). */
+  yAutoPadding?: number;
+  /** Absolute lower clamp after padding. */
+  yAutoMin?: number;
+  /** Absolute upper clamp after padding. */
+  yAutoMax?: number;
+
+  // ─── Visual toggles (all default true) ────────────────────
+  /** Show vertical grid lines at x ticks. */
+  showXGrid?: boolean;
+  /** Show horizontal grid lines at y ticks. */
+  showYGrid?: boolean;
+  /** Show the x=0 / y=0 axis lines when 0 is inside the range. */
+  showAxes?: boolean;
+  /** Show tick labels along the x axis. */
+  showXLabels?: boolean;
+  /** Show tick labels along the y axis. */
+  showYLabels?: boolean;
 }
 
+/**
+ * Owns the viewport bounds orchestration for a chart: x window (fixed or
+ * time-sliding), y range (fixed or data-driven auto), and renders the
+ * visible grid/axes/labels on top.
+ *
+ * Orchestration (scan + bounds computation) runs independently of the
+ * visual toggles — you can turn every `show*` off and still use this layer
+ * purely as a controller. LayerStack insertion order matters: add this
+ * before any data layer so the bounds are written before they're read.
+ *
+ * v0.3 limitation: single-axis only. `observedYMin/Max` live on `Viewport`,
+ * so a second `AxisGridLayer` in the same stack would bleed observations.
+ */
 export class AxisGridLayer implements Layer {
   readonly id: string;
   private gridColor = "rgba(255,255,255,0.08)";
@@ -53,6 +94,15 @@ export class AxisGridLayer implements Layer {
   private timeWindowMs = 5000;
   private timeOrigin: number | null = null;
   private xTickFormat = "HH:mm:ss";
+  private yMode: "fixed" | "auto" = "fixed";
+  private yAutoPadding = 0.1;
+  private yAutoMin: number | undefined;
+  private yAutoMax: number | undefined;
+  private showXGrid = true;
+  private showYGrid = true;
+  private showAxes = true;
+  private showXLabels = true;
+  private showYLabels = true;
 
   constructor(id: string) {
     this.id = id;
@@ -78,16 +128,27 @@ export class AxisGridLayer implements Layer {
     if (c.timeWindowMs !== undefined) this.timeWindowMs = c.timeWindowMs;
     if (c.timeOrigin !== undefined) this.timeOrigin = c.timeOrigin;
     if (c.xTickFormat !== undefined) this.xTickFormat = c.xTickFormat;
+    if (c.yMode !== undefined) this.yMode = c.yMode;
+    if (c.yAutoPadding !== undefined) this.yAutoPadding = c.yAutoPadding;
+    if (c.yAutoMin !== undefined) this.yAutoMin = c.yAutoMin;
+    if (c.yAutoMax !== undefined) this.yAutoMax = c.yAutoMax;
+    if (c.showXGrid !== undefined) this.showXGrid = c.showXGrid;
+    if (c.showYGrid !== undefined) this.showYGrid = c.showYGrid;
+    if (c.showAxes !== undefined) this.showAxes = c.showAxes;
+    if (c.showXLabels !== undefined) this.showXLabels = c.showXLabels;
+    if (c.showYLabels !== undefined) this.showYLabels = c.showYLabels;
   }
 
   setData(_buffer: ArrayBuffer, _length: number, _viewport: Viewport): void {}
 
   resize(_viewport: Viewport): void {}
 
-  draw(ctx: OffscreenCanvasRenderingContext2D, viewport: Viewport): void {
-    // Axis layer owns world bounds; apply them before any data layer reads
-    // viewport.bounds. LayerStack draws in insertion order, so as long as
-    // the axis layer is added first, data layers will see up-to-date bounds.
+  /**
+   * Orchestration pass: establish x bounds so data layers' `scan` can filter
+   * visible samples correctly. yMode:"auto" is finalized in `draw` after all
+   * line layers have published their observations.
+   */
+  scan(viewport: Viewport): void {
     if (this.xMode === "time") {
       const latestT = viewport.latestT;
       this.bounds.xMin = latestT - this.timeWindowMs;
@@ -96,55 +157,104 @@ export class AxisGridLayer implements Layer {
     if (this.applyToViewport) {
       viewport.setBounds(this.bounds);
     }
-    const { widthPx: w, heightPx: h } = viewport;
+  }
 
+  draw(ctx: OffscreenCanvasRenderingContext2D, viewport: Viewport): void {
+    // Finalize y-auto bounds. Runs after all line-layer scans have
+    // published their observed extents into the viewport.
+    if (this.yMode === "auto") {
+      let yMin = viewport.observedYMin;
+      let yMax = viewport.observedYMax;
+      if (!Number.isFinite(yMin) || !Number.isFinite(yMax)) {
+        // No data yet — fall back to configured yRange. If that is also
+        // degenerate (defaults [-1, 1] from construction), use [-1, 1].
+        yMin = this.bounds.yMin;
+        yMax = this.bounds.yMax;
+        if (yMin === yMax) {
+          yMin = -1;
+          yMax = 1;
+        }
+      } else if (yMin === yMax) {
+        // Flat line — expand so stroke has vertical room.
+        yMin -= 0.5;
+        yMax += 0.5;
+      } else {
+        const pad = (yMax - yMin) * this.yAutoPadding;
+        yMin -= pad;
+        yMax += pad;
+      }
+      if (this.yAutoMin !== undefined && yMin < this.yAutoMin) yMin = this.yAutoMin;
+      if (this.yAutoMax !== undefined && yMax > this.yAutoMax) yMax = this.yAutoMax;
+      this.bounds.yMin = yMin;
+      this.bounds.yMax = yMax;
+      if (this.applyToViewport) viewport.setBounds(this.bounds);
+    }
+
+    const { widthPx: w, heightPx: h } = viewport;
     const xTicks = niceTicks(this.bounds.xMin, this.bounds.xMax, this.targetTicks);
     const yTicks = niceTicks(this.bounds.yMin, this.bounds.yMax, this.targetTicks);
 
-    ctx.strokeStyle = this.gridColor;
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    for (let i = 0; i < xTicks.length; i++) {
-      const x = Math.round(viewport.xToPx(xTicks[i])) + 0.5;
-      ctx.moveTo(x, 0);
-      ctx.lineTo(x, h);
+    // ── Grid lines ──
+    if (this.showXGrid || this.showYGrid) {
+      ctx.strokeStyle = this.gridColor;
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      if (this.showXGrid) {
+        for (let i = 0; i < xTicks.length; i++) {
+          const x = Math.round(viewport.xToPx(xTicks[i])) + 0.5;
+          ctx.moveTo(x, 0);
+          ctx.lineTo(x, h);
+        }
+      }
+      if (this.showYGrid) {
+        for (let i = 0; i < yTicks.length; i++) {
+          const y = Math.round(viewport.yToPx(yTicks[i])) + 0.5;
+          ctx.moveTo(0, y);
+          ctx.lineTo(w, y);
+        }
+      }
+      ctx.stroke();
     }
-    for (let i = 0; i < yTicks.length; i++) {
-      const y = Math.round(viewport.yToPx(yTicks[i])) + 0.5;
-      ctx.moveTo(0, y);
-      ctx.lineTo(w, y);
-    }
-    ctx.stroke();
 
-    ctx.strokeStyle = this.axisColor;
-    ctx.beginPath();
-    if (this.bounds.xMin < 0 && this.bounds.xMax > 0) {
-      const x0 = Math.round(viewport.xToPx(0)) + 0.5;
-      ctx.moveTo(x0, 0);
-      ctx.lineTo(x0, h);
+    // ── Zero axes ──
+    if (this.showAxes) {
+      ctx.strokeStyle = this.axisColor;
+      ctx.beginPath();
+      if (this.bounds.xMin < 0 && this.bounds.xMax > 0) {
+        const x0 = Math.round(viewport.xToPx(0)) + 0.5;
+        ctx.moveTo(x0, 0);
+        ctx.lineTo(x0, h);
+      }
+      if (this.bounds.yMin < 0 && this.bounds.yMax > 0) {
+        const y0 = Math.round(viewport.yToPx(0)) + 0.5;
+        ctx.moveTo(0, y0);
+        ctx.lineTo(w, y0);
+      }
+      ctx.stroke();
     }
-    if (this.bounds.yMin < 0 && this.bounds.yMax > 0) {
-      const y0 = Math.round(viewport.yToPx(0)) + 0.5;
-      ctx.moveTo(0, y0);
-      ctx.lineTo(w, y0);
-    }
-    ctx.stroke();
 
-    ctx.fillStyle = this.labelColor;
-    ctx.font = this.font;
-    ctx.textBaseline = "top";
-    for (let i = 0; i < xTicks.length; i++) {
-      const x = viewport.xToPx(xTicks[i]);
-      ctx.fillText(
-        formatTick(xTicks[i], this.xMode, this.timeOrigin, this.xTickFormat),
-        x + 2,
-        h - 12,
-      );
-    }
-    ctx.textBaseline = "middle";
-    for (let i = 0; i < yTicks.length; i++) {
-      const y = viewport.yToPx(yTicks[i]);
-      ctx.fillText(String(yTicks[i]), 2, y - 6);
+    // ── Labels ──
+    if (this.showXLabels || this.showYLabels) {
+      ctx.fillStyle = this.labelColor;
+      ctx.font = this.font;
+      if (this.showXLabels) {
+        ctx.textBaseline = "top";
+        for (let i = 0; i < xTicks.length; i++) {
+          const x = viewport.xToPx(xTicks[i]);
+          ctx.fillText(
+            formatTick(xTicks[i], this.xMode, this.timeOrigin, this.xTickFormat),
+            x + 2,
+            h - 12,
+          );
+        }
+      }
+      if (this.showYLabels) {
+        ctx.textBaseline = "middle";
+        for (let i = 0; i < yTicks.length; i++) {
+          const y = viewport.yToPx(yTicks[i]);
+          ctx.fillText(String(yTicks[i]), 2, y - 6);
+        }
+      }
     }
   }
 

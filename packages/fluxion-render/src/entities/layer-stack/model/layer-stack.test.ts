@@ -82,6 +82,43 @@ describe("LayerStack", () => {
     expect(b.resize).toHaveBeenCalledWith(v);
   });
 
+  it("scanAll calls scan on layers that implement it (insertion order)", () => {
+    const stack = new LayerStack();
+    const order: string[] = [];
+    const withScan: Layer = {
+      id: "a",
+      setConfig() {},
+      setData(_b, _l, _v) {},
+      resize() {},
+      scan: () => order.push("a"),
+      draw() {},
+      dispose() {},
+    };
+    const noScan: Layer = {
+      id: "b",
+      setConfig() {},
+      setData(_b, _l, _v) {},
+      resize() {},
+      draw() {},
+      dispose() {},
+    };
+    const withScan2: Layer = {
+      id: "c",
+      setConfig() {},
+      setData(_b, _l, _v) {},
+      resize() {},
+      scan: () => order.push("c"),
+      draw() {},
+      dispose() {},
+    };
+    stack.add(withScan);
+    stack.add(noScan);
+    stack.add(withScan2);
+    stack.scanAll(new Viewport());
+    // noScan is skipped (optional), scan order follows insertion order
+    expect(order).toEqual(["a", "c"]);
+  });
+
   it("disposeAll clears state and calls dispose on each layer", () => {
     const stack = new LayerStack();
     const a = makeStubLayer("a");

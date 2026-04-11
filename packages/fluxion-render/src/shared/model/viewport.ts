@@ -19,6 +19,17 @@ export class Viewport {
    */
   latestT = 0;
 
+  /**
+   * Per-frame aggregate of observed y values across all data layers that
+   * currently overlap the visible time window. `AxisGridLayer` in
+   * `yMode: "auto"` reads these in draw to compute bounds.yMin/yMax.
+   *
+   * Initialised to +/-Infinity by `beginScan()` at the top of every frame,
+   * then layers merge their visible-window min/max in via `scan()`.
+   */
+  observedYMin = Number.POSITIVE_INFINITY;
+  observedYMax = Number.NEGATIVE_INFINITY;
+
   setSize(width: number, height: number, dpr: number) {
     this.widthPx = width;
     this.heightPx = height;
@@ -27,6 +38,12 @@ export class Viewport {
 
   setBounds(b: Bounds) {
     this.bounds = b;
+  }
+
+  /** Called by Engine at the start of each render frame before scan pass. */
+  beginScan(): void {
+    this.observedYMin = Number.POSITIVE_INFINITY;
+    this.observedYMax = Number.NEGATIVE_INFINITY;
   }
 
   xToPx(x: number): number {

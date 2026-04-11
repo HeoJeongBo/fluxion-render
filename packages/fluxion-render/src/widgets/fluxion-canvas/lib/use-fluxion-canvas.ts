@@ -1,13 +1,24 @@
 import { type RefObject, useCallback, useEffect, useRef, useState } from "react";
+import type { AxisGridConfig } from "../../../entities/axis-grid-layer";
+import type { LidarScatterConfig } from "../../../entities/lidar-scatter-layer";
+import type { LineChartConfig } from "../../../entities/line-chart-layer";
+import type { LineChartStaticConfig } from "../../../entities/line-chart-static-layer";
 import { FluxionHost, type FluxionHostOptions } from "../../../features/host";
-import type { LayerKind } from "../../../shared/protocol";
 import { type ResizeInfo, useResizeObserver } from "./use-resize-observer";
 
-export interface FluxionLayerSpec {
-  id: string;
-  kind: LayerKind;
-  config?: unknown;
-}
+/**
+ * Declarative layer spec used by `useFluxionCanvas` and `<FluxionCanvas/>`.
+ *
+ * Discriminated union: `kind` narrows `config` to the matching layer-specific
+ * type, so wrong fields are caught at compile time. Prefer the layer factory
+ * helpers (`lineLayer`, `axisGridLayer`, etc.) for ergonomic construction —
+ * they encode the kind so callers don't repeat themselves.
+ */
+export type FluxionLayerSpec =
+  | { id: string; kind: "line"; config?: LineChartConfig }
+  | { id: string; kind: "line-static"; config?: LineChartStaticConfig }
+  | { id: string; kind: "lidar"; config?: LidarScatterConfig }
+  | { id: string; kind: "axis-grid"; config?: AxisGridConfig };
 
 export interface UseFluxionCanvasOptions {
   layers: FluxionLayerSpec[];

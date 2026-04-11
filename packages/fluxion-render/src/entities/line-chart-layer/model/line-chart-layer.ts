@@ -50,6 +50,30 @@ export class LineChartLayer implements Layer {
 
   resize(_viewport: Viewport): void {}
 
+  /**
+   * Pre-draw pass: compute the visible-window min/max of y values in this
+   * layer's ring buffer and merge them into `viewport.observedYMin/Max`.
+   * AxisGridLayer with `yMode: "auto"` reads the aggregate in draw.
+   *
+   * `viewport.bounds.xMin` was already written by AxisGridLayer.scan (which
+   * runs earlier in insertion order), so we can filter stale samples here.
+   */
+  scan(viewport: Viewport): void {
+    if (this.ring.length === 0) return;
+    const xMin = viewport.bounds.xMin;
+    let localMin = viewport.observedYMin;
+    let localMax = viewport.observedYMax;
+    this.ring.forEach((data, off) => {
+      const t = data[off];
+      if (t < xMin) return;
+      const y = data[off + 1];
+      if (y < localMin) localMin = y;
+      if (y > localMax) localMax = y;
+    });
+    viewport.observedYMin = localMin;
+    viewport.observedYMax = localMax;
+  }
+
   draw(ctx: OffscreenCanvasRenderingContext2D, viewport: Viewport): void {
     if (this.ring.length < 2) return;
 

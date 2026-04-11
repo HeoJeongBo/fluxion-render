@@ -29,6 +29,18 @@ export class LayerStack {
     }
   }
 
+  /**
+   * Pre-draw pass. Layers that implement `scan` update shared viewport state
+   * (bounds, observed extents) here so downstream layers' `draw` sees the
+   * correct values. Iterates in insertion order so axis-grid (added first)
+   * writes bounds before data layers read them.
+   */
+  scanAll(viewport: Viewport): void {
+    for (let i = 0; i < this.layers.length; i++) {
+      this.layers[i].scan?.(viewport);
+    }
+  }
+
   drawAll(ctx: OffscreenCanvasRenderingContext2D, viewport: Viewport): void {
     for (let i = 0; i < this.layers.length; i++) {
       this.layers[i].draw(ctx, viewport);
