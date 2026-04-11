@@ -1,9 +1,6 @@
 {
   "name": "@heojeongbo/fluxion-render",
   "version": "0.1.0",
-  "publishConfig": {
-    "access": "public"
-  },
   "description": "High-performance OffscreenCanvas rendering engine for real-time robotics data (charts, LiDAR, streaming).",
   "type": "module",
   "sideEffects": false,
@@ -21,15 +18,47 @@
     }
   },
   "files": [
-    "dist",
-    "src"
+    "dist"
   ],
   "scripts": {
     "build": "tsup",
     "dev": "tsup --watch",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "release": "release-it",
+    "release:minor": "release-it minor",
+    "release:major": "release-it major",
+    "release:patch": "release-it patch",
+    "release:dry": "release-it --dry-run"
+  },
+  "keywords": [
+    "fluxion",
+    "render",
+    "canvas",
+    "offscreencanvas",
+    "webworker",
+    "chart",
+    "streaming",
+    "lidar",
+    "robotics",
+    "ros2",
+    "real-time",
+    "visualization"
+  ],
+  "author": "heojeongbo <heojungbo@gmail.com> (https://github.com/HeoJeongBo)",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/HeoJeongBo/fluxion-render.git",
+    "directory": "packages/fluxion-render"
+  },
+  "homepage": "https://github.com/HeoJeongBo/fluxion-render#readme",
+  "bugs": {
+    "url": "https://github.com/HeoJeongBo/fluxion-render/issues"
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "peerDependencies": {
     "react": ">=18"
@@ -40,6 +69,7 @@
     }
   },
   "devDependencies": {
+    "@release-it/conventional-changelog": "^10.0.6",
     "@testing-library/dom": "^10.4.1",
     "@testing-library/react": "^16.3.2",
     "@types/react": "^18.3.3",
@@ -48,6 +78,7 @@
     "happy-dom": "^20.8.9",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
+    "release-it": "^19.2.4",
     "tsup": "^8.2.4",
     "typescript": "^5.5.4",
     "vitest": "^4.1.4"

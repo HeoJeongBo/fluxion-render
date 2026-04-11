@@ -1,0 +1,37 @@
+{
+  "$schema": "https://unpkg.com/release-it/schema/release-it.json",
+  "git": {
+    "commitMessage": "chore: release @heojeongbo/fluxion-render v${version}",
+    "tagName": "v${version}",
+    "requireCleanWorkingDir": true,
+    "requireBranch": "main",
+    "push": true
+  },
+  "github": {
+    "release": true,
+    "releaseName": "Release v${version}",
+    "releaseNotes": null
+  },
+  "npm": {
+    "publish": true,
+    "publishPath": "."
+  },
+  "hooks": {
+    "before:init": [
+      "pnpm --filter @heojeongbo/fluxion-render typecheck",
+      "pnpm --filter @heojeongbo/fluxion-render test",
+      "pnpm --filter @heojeongbo/fluxion-render build"
+    ],
+    "before:release": [],
+    "after:bump": ["echo 'Version bumped to ${version}'"],
+    "after:release": [
+      "echo 'Successfully released ${name} v${version} to ${repo.repository}.'"
+    ]
+  },
+  "plugins": {
+    "@release-it/conventional-changelog": {
+      "preset": "angular",
+      "infile": "CHANGELOG.md"
+    }
+  }
+}

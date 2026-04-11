@@ -22,6 +22,10 @@ lerna-debug.log*
 .env.*
 !.env.example
 
+# npm auth — use .npmrc.example as template, never commit tokens
+.npmrc
+!.npmrc.example
+
 # Editor / IDE
 .vscode/
 .idea/

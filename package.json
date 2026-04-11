@@ -8,7 +8,12 @@
     "typecheck": "pnpm -r typecheck",
     "test": "pnpm -r run test",
     "format": "biome format --write .",
-    "format:check": "biome format ."
+    "format:check": "biome format .",
+    "release": "pnpm --filter @heojeongbo/fluxion-render release",
+    "release:dry": "pnpm --filter @heojeongbo/fluxion-render release:dry",
+    "release:patch": "pnpm --filter @heojeongbo/fluxion-render release:patch",
+    "release:minor": "pnpm --filter @heojeongbo/fluxion-render release:minor",
+    "release:major": "pnpm --filter @heojeongbo/fluxion-render release:major"
   },
   "packageManager": "pnpm@9.0.0",
   "devDependencies": {
