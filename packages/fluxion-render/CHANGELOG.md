@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.1](https://github.com/HeoJeongBo/fluxion-render/compare/v0.2.0...v0.2.1) (2026-04-11)
+
+
+### Features
+
+* color set option ([792bd66](https://github.com/HeoJeongBo/fluxion-render/commit/792bd66ff860f50877c6404c458a2ff79f2ac4a9))
+
 # 0.2.0 (2026-04-11)
 
 
