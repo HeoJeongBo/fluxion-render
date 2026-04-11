@@ -1,0 +1,18 @@
+{
+  "name": "fluxion-render-monorepo",
+  "private": true,
+  "version": "0.0.0",
+  "scripts": {
+    "build": "pnpm --filter @heojeongbo/fluxion-render build",
+    "dev": "pnpm --filter @heojeongbo/fluxion-render build && pnpm -r --parallel --filter @heojeongbo/fluxion-render --filter vite-demo run dev",
+    "typecheck": "pnpm -r typecheck",
+    "test": "pnpm -r run test",
+    "format": "biome format --write .",
+    "format:check": "biome format ."
+  },
+  "packageManager": "pnpm@9.0.0",
+  "devDependencies": {
+    "@biomejs/biome": "^2.4.11",
+    "typescript": "^5.5.4"
+  }
+}
