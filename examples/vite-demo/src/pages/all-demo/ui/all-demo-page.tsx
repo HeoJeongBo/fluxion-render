@@ -1,9 +1,10 @@
 import { useState } from "react";
+import { THEME } from "../../../shared/ui/theme";
+import { WindowSelector } from "../../../shared/ui/window-selector";
 import { LidarDemoPage } from "../../lidar-demo";
 import { LineDemoPage } from "../../line-demo";
 import { StaticXyDemoPage } from "../../static-xy-demo";
 import { StreamDemoPage } from "../../stream-demo";
-import { WindowSelector } from "../../../shared/ui/window-selector";
 
 const DEFAULT_WINDOW_MS = 5000;
 
@@ -31,15 +32,16 @@ export function AllDemoPage() {
           alignItems: "center",
           gap: 12,
           padding: "8px 16px",
-          borderBottom: "1px solid #1b1f2a",
+          borderBottom: `1px solid ${THEME.page.border}`,
+          background: THEME.panel.background,
           fontSize: 12,
-          color: "#9ad",
+          color: THEME.page.textSecondary,
         }}
       >
-        <strong style={{ color: "#e6e6e6" }}>All demos</strong>
+        <strong style={{ color: THEME.page.textPrimary }}>All demos</strong>
         <span>time window:</span>
         <WindowSelector value={windowMs} onChange={setWindowMs} />
-        <span style={{ marginLeft: "auto", color: "#6a7a90" }}>
+        <span style={{ marginLeft: "auto", color: THEME.page.textMuted }}>
           applies to Stream / Multi-stream (time-based charts)
         </span>
       </div>
@@ -51,7 +53,7 @@ export function AllDemoPage() {
           gridTemplateColumns: "1fr 1fr",
           gridTemplateRows: "1fr 1fr",
           gap: 1,
-          background: "#1b1f2a",
+          background: THEME.page.border,
         }}
       >
         <Cell title="Stream (120Hz)">
@@ -78,7 +80,7 @@ function Cell({ title, children }: { title: string; children: React.ReactNode })
         position: "relative",
         minWidth: 0,
         minHeight: 0,
-        background: "#0b0d12",
+        background: THEME.panel.background,
       }}
     >
       <div
@@ -89,7 +91,7 @@ function Cell({ title, children }: { title: string; children: React.ReactNode })
           fontSize: 10,
           letterSpacing: 0.5,
           textTransform: "uppercase",
-          color: "#6a7a90",
+          color: THEME.page.textMuted,
           pointerEvents: "none",
           zIndex: 1,
         }}

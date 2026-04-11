@@ -1,3 +1,5 @@
+import { THEME } from "../theme";
+
 export interface WindowOption {
   label: string;
   ms: number;
@@ -38,8 +40,8 @@ export function WindowSelector({
         display: "inline-flex",
         gap: 4,
         padding: 2,
-        background: "rgba(42, 50, 71, 0.7)",
-        border: "1px solid #2a3247",
+        background: THEME.panel.background,
+        border: `1px solid ${THEME.panel.border}`,
         borderRadius: 6,
       }}
     >
@@ -51,8 +53,8 @@ export function WindowSelector({
             type="button"
             onClick={() => onChange(opt.ms)}
             style={{
-              background: active ? "#4a5a80" : "transparent",
-              color: active ? "#fff" : "#9ad",
+              background: active ? THEME.button.background : "transparent",
+              color: active ? THEME.button.text : THEME.page.textSecondary,
               border: "none",
               padding: `${padY}px ${padX}px`,
               borderRadius: 4,

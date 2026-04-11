@@ -5,6 +5,7 @@ import {
 } from "@heojeongbo/fluxion-render/react";
 import { useEffect, useRef, useState } from "react";
 import { generateStaticSineXY } from "../../../shared/lib/test-data";
+import { THEME } from "../../../shared/ui/theme";
 
 const X_MIN = -5;
 const X_MAX = 5;
@@ -22,10 +23,14 @@ export interface StaticXyDemoPageProps {
  */
 export function StaticXyDemoPage({ compactHud = false }: StaticXyDemoPageProps = {}) {
   const { containerRef, host } = useFluxionCanvas({
+    hostOptions: { bgColor: THEME.chart.canvasBg },
     layers: [
       axisGridLayer("axis", {
         xRange: [X_MIN, X_MAX],
         yRange: [-1.2, 1.2],
+        gridColor: THEME.chart.gridColor,
+        axisColor: THEME.chart.axisColor,
+        labelColor: THEME.chart.labelColor,
       }),
       lineStaticLayer("plot", {
         color: "#4fc3f7",
@@ -62,7 +67,7 @@ export function StaticXyDemoPage({ compactHud = false }: StaticXyDemoPageProps =
           alignItems: "center",
           gap: 8,
           fontSize: compactHud ? 11 : 12,
-          color: "#9ad",
+          color: THEME.page.textSecondary,
         }}
       >
         <span>
@@ -72,13 +77,14 @@ export function StaticXyDemoPage({ compactHud = false }: StaticXyDemoPageProps =
           type="button"
           onClick={resample}
           style={{
-            background: "#2a3247",
-            color: "#e6e6e6",
-            border: "1px solid #2a3247",
+            background: THEME.button.background,
+            color: THEME.button.text,
+            border: `1px solid ${THEME.button.border}`,
             padding: compactHud ? "2px 6px" : "4px 10px",
             borderRadius: 6,
             cursor: "pointer",
             fontSize: compactHud ? 11 : 12,
+            fontFamily: "inherit",
           }}
         >
           Resample

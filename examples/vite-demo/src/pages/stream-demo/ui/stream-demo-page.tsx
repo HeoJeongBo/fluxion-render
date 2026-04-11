@@ -12,6 +12,7 @@ import {
   generateFloat32StampedBatch,
   stampToMs,
 } from "../../../shared/lib/test-data";
+import { THEME } from "../../../shared/ui/theme";
 import { WindowSelector } from "../../../shared/ui/window-selector";
 
 const BATCH_HZ = 60;
@@ -53,6 +54,7 @@ export function StreamDemoPage({
   const timeOrigin = useMemo(() => Date.now(), []);
 
   const { containerRef, host } = useFluxionCanvas({
+    hostOptions: { bgColor: THEME.chart.canvasBg },
     layers: [
       axisGridLayer("axis", {
         xMode: "time",
@@ -60,6 +62,9 @@ export function StreamDemoPage({
         timeOrigin,
         xTickFormat: "HH:mm:ss",
         yMode: "auto",
+        gridColor: THEME.chart.gridColor,
+        axisColor: THEME.chart.axisColor,
+        labelColor: THEME.chart.labelColor,
       }),
       ...SERIES.map((s) =>
         lineLayer(s.id, {
@@ -103,7 +108,7 @@ export function StreamDemoPage({
           alignItems: "center",
           gap: 8,
           fontSize: compactHud ? 11 : 12,
-          color: "#9ad",
+          color: THEME.page.textSecondary,
         }}
       >
         {!hideSelector && (

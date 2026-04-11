@@ -29,6 +29,12 @@ export interface FluxionHostOptions {
    * Pass a factory that returns a constructed Worker.
    */
   workerFactory?: () => Worker;
+  /**
+   * Canvas background color, applied every frame before layers draw.
+   * Defaults to `"#0b0d12"` (dark) when omitted. Use `setBgColor` to change
+   * it at runtime (e.g. for a theme toggle).
+   */
+  bgColor?: string;
 }
 
 function defaultWorkerFactory(): Worker {
@@ -77,9 +83,18 @@ export class FluxionHost {
         width,
         height,
         dpr,
+        bgColor: opts.bgColor,
       },
       [offscreen],
     );
+  }
+
+  /**
+   * Update the canvas background color at runtime. Takes effect on the next
+   * rendered frame. Useful for theme toggles without tearing down the host.
+   */
+  setBgColor(color: string): void {
+    this.post({ op: Op.SET_BG_COLOR, color });
   }
 
   /**

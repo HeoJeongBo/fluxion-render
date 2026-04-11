@@ -12,6 +12,7 @@ import {
   generateFloat32StampedMessage,
   stampToMs,
 } from "../../../shared/lib/test-data";
+import { THEME } from "../../../shared/ui/theme";
 import { WindowSelector } from "../../../shared/ui/window-selector";
 
 const TARGET_HZ = 120;
@@ -51,6 +52,7 @@ export function LineDemoPage({
   const timeOrigin = useMemo(() => Date.now(), []);
 
   const { containerRef, host } = useFluxionCanvas({
+    hostOptions: { bgColor: THEME.chart.canvasBg },
     layers: [
       axisGridLayer("axis", {
         xMode: "time",
@@ -58,6 +60,9 @@ export function LineDemoPage({
         timeOrigin,
         xTickFormat: "HH:mm:ss.SSS",
         yMode: "auto",
+        gridColor: THEME.chart.gridColor,
+        axisColor: THEME.chart.axisColor,
+        labelColor: THEME.chart.labelColor,
       }),
       lineLayer("line", { color: "#4fc3f7", lineWidth: 1.5, capacity: 8192 }),
     ],
@@ -89,7 +94,7 @@ export function LineDemoPage({
           alignItems: "center",
           gap: 8,
           fontSize: compactHud ? 11 : 12,
-          color: "#9ad",
+          color: THEME.page.textSecondary,
         }}
       >
         {!hideSelector && (

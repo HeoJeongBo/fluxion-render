@@ -228,6 +228,43 @@ describe("FluxionHost", () => {
     host.dispose();
   });
 
+  it("constructor forwards bgColor into the INIT message", () => {
+    const { worker, posts } = makeFakeWorker();
+    const host = new FluxionHost(makeCanvas(), {
+      workerFactory: () => worker,
+      bgColor: "#ffffff",
+    });
+    const init = posts[0].msg as { op: number; bgColor?: string };
+    expect(init.op).toBe(Op.INIT);
+    expect(init.bgColor).toBe("#ffffff");
+    host.dispose();
+  });
+
+  it("omitting bgColor leaves the init field undefined (engine default applies)", () => {
+    const { worker, posts } = makeFakeWorker();
+    const host = new FluxionHost(makeCanvas(), {
+      workerFactory: () => worker,
+    });
+    const init = posts[0].msg as { op: number; bgColor?: string };
+    expect(init.op).toBe(Op.INIT);
+    expect(init.bgColor).toBeUndefined();
+    host.dispose();
+  });
+
+  it("setBgColor posts a SET_BG_COLOR message", () => {
+    const { worker, posts } = makeFakeWorker();
+    const host = new FluxionHost(makeCanvas(), {
+      workerFactory: () => worker,
+    });
+    posts.length = 0;
+    host.setBgColor("#ff00aa");
+    expect(posts).toHaveLength(1);
+    const msg = posts[0].msg as { op: number; color: string };
+    expect(msg.op).toBe(Op.SET_BG_COLOR);
+    expect(msg.color).toBe("#ff00aa");
+    host.dispose();
+  });
+
   it("resize posts a RESIZE message with dpr", () => {
     const { worker, posts } = makeFakeWorker();
     const host = new FluxionHost(makeCanvas(), {

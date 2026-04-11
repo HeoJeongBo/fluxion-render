@@ -41,7 +41,11 @@ export class Engine {
   dispatch(msg: HostMsg): void {
     switch (msg.op) {
       case Op.INIT:
-        this.init(msg.canvas, msg.width, msg.height, msg.dpr);
+        this.init(msg.canvas, msg.width, msg.height, msg.dpr, msg.bgColor);
+        break;
+      case Op.SET_BG_COLOR:
+        this.bgColor = msg.color;
+        this.scheduler.markDirty();
         break;
       case Op.RESIZE:
         this.resize(msg.width, msg.height, msg.dpr);
@@ -80,9 +84,16 @@ export class Engine {
     }
   }
 
-  private init(canvas: OffscreenCanvas, width: number, height: number, dpr: number) {
+  private init(
+    canvas: OffscreenCanvas,
+    width: number,
+    height: number,
+    dpr: number,
+    bgColor?: string,
+  ) {
     this.canvas = canvas;
     this.ctx = canvas.getContext("2d");
+    if (bgColor !== undefined) this.bgColor = bgColor;
     this.resize(width, height, dpr);
     this.scheduler.start();
     this.scheduler.markDirty();

@@ -8,6 +8,7 @@ import {
   generateLaserScanMessage,
   type LaserScanMessage,
 } from "../../../shared/lib/test-data";
+import { THEME } from "../../../shared/ui/theme";
 
 const TARGET_HZ = 120;
 const POINTS_PER_SCAN = 30_000;
@@ -57,6 +58,7 @@ export interface LidarDemoPageProps {
  */
 export function LidarDemoPage({ compactHud = false }: LidarDemoPageProps = {}) {
   const { containerRef, host } = useFluxionCanvas({
+    hostOptions: { bgColor: THEME.chart.canvasBg },
     layers: [
       axisGridLayer("axis", {
         xRange: [-RANGE_MAX, RANGE_MAX],
@@ -94,7 +96,7 @@ export function LidarDemoPage({ compactHud = false }: LidarDemoPageProps = {}) {
           top: 8,
           right: 12,
           fontSize: compactHud ? 11 : 12,
-          color: "#9ad",
+          color: THEME.page.textSecondary,
         }}
       >
         {hz} Hz · {POINTS_PER_SCAN.toLocaleString()} pts

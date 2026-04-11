@@ -11,6 +11,7 @@ export const Op = {
   CONFIG: 5,
   DATA: 6,
   DISPOSE: 7,
+  SET_BG_COLOR: 8,
 } as const;
 export type Op = (typeof Op)[keyof typeof Op];
 
@@ -24,6 +25,11 @@ export interface InitMsg {
   width: number;
   height: number;
   dpr: number;
+  /**
+   * Optional canvas background color. Applied every frame before layers draw.
+   * Default (when omitted): `"#0b0d12"` — matches the engine's dark default.
+   */
+  bgColor?: string;
 }
 
 export interface ResizeMsg {
@@ -63,6 +69,15 @@ export interface DisposeMsg {
   op: typeof Op.DISPOSE;
 }
 
+/**
+ * Canvas-scope (engine-level) background color update. Takes effect on the
+ * next rendered frame. Separate from `CONFIG` because `CONFIG` is layer-scope.
+ */
+export interface SetBgColorMsg {
+  op: typeof Op.SET_BG_COLOR;
+  color: string;
+}
+
 export type HostMsg =
   | InitMsg
   | ResizeMsg
@@ -70,4 +85,5 @@ export type HostMsg =
   | RemoveLayerMsg
   | ConfigMsg
   | DataMsg
-  | DisposeMsg;
+  | DisposeMsg
+  | SetBgColorMsg;
