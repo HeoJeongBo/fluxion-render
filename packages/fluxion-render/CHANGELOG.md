@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.3](https://github-personal/HeoJeongBo/fluxion-render/compare/v0.2.2...v0.2.3) (2026-04-16)
+
+
+### Features
+
+* update md ([d825cb6](https://github-personal/HeoJeongBo/fluxion-render/commit/d825cb608c8d657e16a064ad247c4eb7a4640329))
+
 ## [0.2.2](https://github-personal/HeoJeongBo/fluxion-render/compare/v0.2.1...v0.2.2) (2026-04-16)
 
 
