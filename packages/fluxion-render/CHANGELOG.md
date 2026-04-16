@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.2](https://github-personal/HeoJeongBo/fluxion-render/compare/v0.2.1...v0.2.2) (2026-04-16)
+
+
+### Features
+
+* add worker pool ([b84c72a](https://github-personal/HeoJeongBo/fluxion-render/commit/b84c72ae1431674e7320114098d1da89119884cd))
+
 ## [0.2.1](https://github.com/HeoJeongBo/fluxion-render/compare/v0.2.0...v0.2.1) (2026-04-11)
 
 
