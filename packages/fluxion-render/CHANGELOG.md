@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.4](https://github-personal/HeoJeongBo/fluxion-render/compare/v0.2.3...v0.2.4) (2026-04-16)
+
+
+### Features
+
+* debounce on resize ([7e660ce](https://github-personal/HeoJeongBo/fluxion-render/commit/7e660cee2671a859c0fed401e86843f30a8d5b36))
+
 ## [0.2.3](https://github-personal/HeoJeongBo/fluxion-render/compare/v0.2.2...v0.2.3) (2026-04-16)
 
 
