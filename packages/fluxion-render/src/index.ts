@@ -1,5 +1,8 @@
 export {
+  configureDefaultPool,
   FluxionHost,
+  FluxionWorkerPool,
+  getDefaultPool,
   LidarLayerHandle,
   LineLayerHandle,
   LineStaticLayerHandle,
@@ -8,6 +11,7 @@ export type {
   FluxionDataSink,
   FluxionHostOptions,
   FluxionTypedArray,
+  FluxionWorkerPoolOptions,
   LidarPoint,
   LidarStride,
   LineSample,

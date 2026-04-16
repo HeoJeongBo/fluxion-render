@@ -12,6 +12,8 @@ export const Op = {
   DATA: 6,
   DISPOSE: 7,
   SET_BG_COLOR: 8,
+  POOL_INIT: 9,
+  POOL_DISPOSE: 10,
 } as const;
 export type Op = (typeof Op)[keyof typeof Op];
 
@@ -30,6 +32,7 @@ export interface InitMsg {
    * Default (when omitted): `"#0b0d12"` — matches the engine's dark default.
    */
   bgColor?: string;
+  hostId?: string;
 }
 
 export interface ResizeMsg {
@@ -37,6 +40,7 @@ export interface ResizeMsg {
   width: number;
   height: number;
   dpr: number;
+  hostId?: string;
 }
 
 export interface AddLayerMsg {
@@ -44,17 +48,20 @@ export interface AddLayerMsg {
   id: string;
   kind: LayerKind;
   config?: unknown;
+  hostId?: string;
 }
 
 export interface RemoveLayerMsg {
   op: typeof Op.REMOVE_LAYER;
   id: string;
+  hostId?: string;
 }
 
 export interface ConfigMsg {
   op: typeof Op.CONFIG;
   id: string;
   config: unknown;
+  hostId?: string;
 }
 
 export interface DataMsg {
@@ -63,10 +70,12 @@ export interface DataMsg {
   buffer: ArrayBuffer;
   dtype: DType;
   length: number;
+  hostId?: string;
 }
 
 export interface DisposeMsg {
   op: typeof Op.DISPOSE;
+  hostId?: string;
 }
 
 /**
@@ -76,6 +85,24 @@ export interface DisposeMsg {
 export interface SetBgColorMsg {
   op: typeof Op.SET_BG_COLOR;
   color: string;
+  hostId?: string;
+}
+
+/** Pool-only: register a new engine for `hostId` in the worker. */
+export interface PoolInitMsg {
+  op: typeof Op.POOL_INIT;
+  hostId: string;
+  canvas: OffscreenCanvas;
+  width: number;
+  height: number;
+  dpr: number;
+  bgColor?: string;
+}
+
+/** Pool-only: tear down the engine for `hostId` without terminating the worker. */
+export interface PoolDisposeMsg {
+  op: typeof Op.POOL_DISPOSE;
+  hostId: string;
 }
 
 export type HostMsg =
@@ -86,4 +113,6 @@ export type HostMsg =
   | ConfigMsg
   | DataMsg
   | DisposeMsg
-  | SetBgColorMsg;
+  | SetBgColorMsg
+  | PoolInitMsg
+  | PoolDisposeMsg;

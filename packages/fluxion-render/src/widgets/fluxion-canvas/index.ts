@@ -18,6 +18,7 @@ export type {
 } from "./lib/use-fluxion-stream";
 export { useFluxionStream } from "./lib/use-fluxion-stream";
 export { useLayerConfig } from "./lib/use-layer-config";
+export { useFluxionWorkerPool } from "./lib/use-fluxion-worker-pool";
 export type {
   FluxionCanvasHandle,
   FluxionCanvasProps,

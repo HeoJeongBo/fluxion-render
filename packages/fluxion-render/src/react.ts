@@ -1,4 +1,10 @@
-export { FluxionHost } from "./features/host";
+export {
+  configureDefaultPool,
+  FluxionHost,
+  FluxionWorkerPool,
+  getDefaultPool,
+  type FluxionWorkerPoolOptions,
+} from "./features/host";
 export type { LayerKind } from "./shared/protocol";
 export {
   axisGridLayer,
@@ -8,16 +14,15 @@ export {
   lineStaticLayer,
   useFluxionCanvas,
   useFluxionStream,
+  useFluxionWorkerPool,
   useLayerConfig,
   useResizeObserver,
-} from "./widgets/fluxion-canvas";
-export type {
-  FluxionCanvasHandle,
-  FluxionCanvasProps,
-  FluxionLayerSpec,
-  ResizeInfo,
-  UseFluxionCanvasOptions,
-  UseFluxionCanvasResult,
-  UseFluxionStreamOptions,
-  UseFluxionStreamResult,
+  type FluxionCanvasHandle,
+  type FluxionCanvasProps,
+  type FluxionLayerSpec,
+  type ResizeInfo,
+  type UseFluxionCanvasOptions,
+  type UseFluxionCanvasResult,
+  type UseFluxionStreamOptions,
+  type UseFluxionStreamResult,
 } from "./widgets/fluxion-canvas";

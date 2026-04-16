@@ -2,6 +2,8 @@ import type { AxisGridConfig } from "../../../entities/axis-grid-layer";
 import type { LidarScatterConfig } from "../../../entities/lidar-scatter-layer";
 import type { LineChartConfig } from "../../../entities/line-chart-layer";
 import type { LineChartStaticConfig } from "../../../entities/line-chart-static-layer";
+import type { FluxionWorkerPool } from "../../../features/worker-pool";
+import { getDefaultPool } from "../../../features/worker-pool";
 import { Op, type DType, type HostMsg, type LayerKind } from "../../../shared/protocol";
 import {
   LidarLayerHandle,
@@ -27,6 +29,7 @@ export interface FluxionHostOptions {
    * Override the worker URL. Useful when bundlers don't support
    * `new Worker(new URL('./fluxion-worker.js', import.meta.url))`.
    * Pass a factory that returns a constructed Worker.
+   * When provided, bypasses the default worker pool and runs in solo mode.
    */
   workerFactory?: () => Worker;
   /**
@@ -35,14 +38,14 @@ export interface FluxionHostOptions {
    * it at runtime (e.g. for a theme toggle).
    */
   bgColor?: string;
+  /**
+   * Worker pool to use. When omitted, the module-level default pool is used
+   * automatically (4 workers shared across all hosts).
+   * Use `configureDefaultPool` to change the default pool size.
+   */
+  pool?: FluxionWorkerPool;
 }
 
-function defaultWorkerFactory(): Worker {
-  // Vite / modern bundlers resolve this to a separate worker chunk.
-  return new Worker(new URL("./fluxion-worker.js", import.meta.url), {
-    type: "module",
-  });
-}
 
 function dtypeOf(arr: FluxionTypedArray): DType {
   if (arr instanceof Float32Array) return "f32";
@@ -64,11 +67,17 @@ function dtypeOf(arr: FluxionTypedArray): DType {
  *   host.dispose();
  */
 export class FluxionHost {
-  private worker: Worker;
+  private worker: { postMessage(msg: unknown, transfer?: Transferable[]): void; terminate(): void };
   private disposed = false;
 
   constructor(canvas: HTMLCanvasElement, opts: FluxionHostOptions = {}) {
-    this.worker = (opts.workerFactory ?? defaultWorkerFactory)();
+    if (opts.workerFactory) {
+      // Solo mode: caller provided a custom factory — bypass the pool entirely.
+      this.worker = opts.workerFactory();
+    } else {
+      // Pool mode: use the explicit pool or fall back to the module-level default.
+      this.worker = (opts.pool ?? getDefaultPool()).acquire();
+    }
 
     const offscreen = canvas.transferControlToOffscreen();
     const dpr = typeof devicePixelRatio === "number" ? devicePixelRatio : 1;

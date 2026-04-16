@@ -2,11 +2,12 @@ import { useState } from "react";
 import { AllDemoPage } from "../pages/all-demo";
 import { LidarDemoPage } from "../pages/lidar-demo";
 import { LineDemoPage } from "../pages/line-demo";
+import { PoolDemoPage } from "../pages/pool-demo";
 import { StaticXyDemoPage } from "../pages/static-xy-demo";
 import { StreamDemoPage } from "../pages/stream-demo";
 import { TabBar, type TabBarItem } from "../widgets/tab-bar";
 
-type Tab = "all" | "line" | "stream" | "static" | "lidar";
+type Tab = "all" | "line" | "stream" | "static" | "lidar" | "pool";
 
 const tabs: readonly TabBarItem<Tab>[] = [
   { id: "all", label: "All" },
@@ -14,6 +15,7 @@ const tabs: readonly TabBarItem<Tab>[] = [
   { id: "stream", label: "Multi-stream" },
   { id: "static", label: "Static xy" },
   { id: "lidar", label: "LiDAR 30k" },
+  { id: "pool", label: "Pool (40 charts)" },
 ];
 
 export function App() {
@@ -35,6 +37,7 @@ export function App() {
         {tab === "stream" && <StreamDemoPage />}
         {tab === "static" && <StaticXyDemoPage />}
         {tab === "lidar" && <LidarDemoPage />}
+        {tab === "pool" && <PoolDemoPage />}
       </main>
     </div>
   );
