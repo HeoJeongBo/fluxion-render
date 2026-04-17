@@ -1,5 +1,5 @@
+import { formatTick } from "../../../shared/lib/axis-ticks";
 import { niceTicks } from "../../../shared/lib/math";
-import { formatClock } from "../../../shared/lib/time-format";
 import type { Layer } from "../../../shared/model/layer";
 import type { Bounds, Viewport } from "../../../shared/model/viewport";
 
@@ -66,6 +66,11 @@ export interface AxisGridConfig {
   showXLabels?: boolean;
   /** Show tick labels along the y axis. */
   showYLabels?: boolean;
+  /**
+   * Canvas setLineDash pattern for grid lines. Default [] (solid).
+   * Example: [3, 3] produces the dashed style used by recharts.
+   */
+  gridDashArray?: number[];
 }
 
 /**
@@ -103,6 +108,7 @@ export class AxisGridLayer implements Layer {
   private showAxes = true;
   private showXLabels = true;
   private showYLabels = true;
+  private gridDashArray: number[] = [];
 
   constructor(id: string) {
     this.id = id;
@@ -137,6 +143,7 @@ export class AxisGridLayer implements Layer {
     if (c.showAxes !== undefined) this.showAxes = c.showAxes;
     if (c.showXLabels !== undefined) this.showXLabels = c.showXLabels;
     if (c.showYLabels !== undefined) this.showYLabels = c.showYLabels;
+    if (c.gridDashArray !== undefined) this.gridDashArray = c.gridDashArray;
   }
 
   setData(_buffer: ArrayBuffer, _length: number, _viewport: Viewport): void {}
@@ -198,6 +205,7 @@ export class AxisGridLayer implements Layer {
     if (this.showXGrid || this.showYGrid) {
       ctx.strokeStyle = this.gridColor;
       ctx.lineWidth = 1;
+      if (this.gridDashArray.length > 0) ctx.setLineDash(this.gridDashArray);
       ctx.beginPath();
       if (this.showXGrid) {
         for (let i = 0; i < xTicks.length; i++) {
@@ -214,6 +222,7 @@ export class AxisGridLayer implements Layer {
         }
       }
       ctx.stroke();
+      if (this.gridDashArray.length > 0) ctx.setLineDash([]);
     }
 
     // ── Zero axes ──
@@ -259,21 +268,4 @@ export class AxisGridLayer implements Layer {
   }
 
   dispose(): void {}
-}
-
-function formatTick(
-  value: number,
-  mode: "fixed" | "time",
-  timeOrigin: number | null,
-  pattern: string,
-): string {
-  if (mode === "time") {
-    if (timeOrigin != null) {
-      return formatClock(timeOrigin + value, pattern);
-    }
-    // Elapsed-only fallback (timeOrigin missing).
-    const s = value / 1000;
-    return `${s.toFixed(1)}s`;
-  }
-  return String(value);
 }

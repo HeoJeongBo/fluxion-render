@@ -34,8 +34,8 @@ export const THEME = {
   },
   chart: {
     canvasBg: "#ffffff",
-    gridColor: "rgba(0,0,0,0.08)",
-    axisColor: "rgba(0,0,0,0.4)",
-    labelColor: "rgba(0,0,0,0.7)",
+    gridColor: "#cccccc",
+    axisColor: "#666666",
+    labelColor: "#666666",
   },
 } as const;

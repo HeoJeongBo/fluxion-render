@@ -29,6 +29,7 @@ export function StaticXyDemoPage({ compactHud = false }: StaticXyDemoPageProps =
         xRange: [X_MIN, X_MAX],
         yRange: [-1.2, 1.2],
         gridColor: THEME.chart.gridColor,
+        gridDashArray: [3, 3],
         axisColor: THEME.chart.axisColor,
         labelColor: THEME.chart.labelColor,
       }),

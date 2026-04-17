@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { AllDemoPage } from "../pages/all-demo";
+import { ExternalAxesDemoPage } from "../pages/external-axes-demo";
 import { LidarDemoPage } from "../pages/lidar-demo";
 import { LineDemoPage } from "../pages/line-demo";
 import { PoolDemoPage } from "../pages/pool-demo";
@@ -7,7 +8,7 @@ import { StaticXyDemoPage } from "../pages/static-xy-demo";
 import { StreamDemoPage } from "../pages/stream-demo";
 import { TabBar, type TabBarItem } from "../widgets/tab-bar";
 
-type Tab = "all" | "line" | "stream" | "static" | "lidar" | "pool";
+type Tab = "all" | "line" | "stream" | "static" | "lidar" | "pool" | "external-axes";
 
 const tabs: readonly TabBarItem<Tab>[] = [
   { id: "all", label: "All" },
@@ -16,6 +17,7 @@ const tabs: readonly TabBarItem<Tab>[] = [
   { id: "static", label: "Static xy" },
   { id: "lidar", label: "LiDAR 30k" },
   { id: "pool", label: "Pool (40 charts)" },
+  { id: "external-axes", label: "External axes" },
 ];
 
 export function App() {
@@ -38,6 +40,7 @@ export function App() {
         {tab === "static" && <StaticXyDemoPage />}
         {tab === "lidar" && <LidarDemoPage />}
         {tab === "pool" && <PoolDemoPage />}
+        {tab === "external-axes" && <ExternalAxesDemoPage />}
       </main>
     </div>
   );

@@ -38,6 +38,7 @@ function MiniChart({ index }: { index: number }) {
         timeOrigin,
         yMode: "auto",
         gridColor: THEME.chart.gridColor,
+        gridDashArray: [3, 3],
         axisColor: THEME.chart.axisColor,
         labelColor: THEME.chart.labelColor,
       }),

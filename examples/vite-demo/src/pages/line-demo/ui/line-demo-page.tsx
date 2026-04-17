@@ -61,6 +61,7 @@ export function LineDemoPage({
         xTickFormat: "HH:mm:ss.SSS",
         yMode: "auto",
         gridColor: THEME.chart.gridColor,
+        gridDashArray: [3, 3],
         axisColor: THEME.chart.axisColor,
         labelColor: THEME.chart.labelColor,
       }),
