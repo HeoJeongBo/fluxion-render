@@ -1,5 +1,12 @@
 # Changelog
 
+# [0.3.0](https://github-personal/HeoJeongBo/fluxion-render/compare/v0.2.4...v0.3.0) (2026-04-17)
+
+
+### Features
+
+* add external axis ([5c21bc6](https://github-personal/HeoJeongBo/fluxion-render/commit/5c21bc68c71dab64e6e39d0f2962ceae86d99a42))
+
 ## [0.2.4](https://github-personal/HeoJeongBo/fluxion-render/compare/v0.2.3...v0.2.4) (2026-04-16)
 
 
