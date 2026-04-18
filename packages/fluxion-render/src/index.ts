@@ -24,5 +24,9 @@ export type { LidarScatterConfig } from "./entities/lidar-scatter-layer";
 export type { AxisGridConfig } from "./entities/axis-grid-layer";
 export type { TickFormatter } from "./shared/lib/time-format";
 export { formatClock, makeClockFormatter } from "./shared/lib/time-format";
-export type { AxisTick, AxisTickSet, ComputeAxisTicksOptions } from "./shared/lib/axis-ticks";
+export type {
+  AxisTick,
+  AxisTickSet,
+  ComputeAxisTicksOptions,
+} from "./shared/lib/axis-ticks";
 export { computeAxisTicks, formatTick } from "./shared/lib/axis-ticks";

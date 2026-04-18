@@ -34,7 +34,12 @@ export function computeAxisTicks(opts: ComputeAxisTicksOptions): AxisTickSet {
 
   const xTicks: AxisTick[] = xRaw.map((v) => ({
     value: v,
-    label: formatTick(v, opts.xMode ?? "fixed", opts.timeOrigin ?? null, opts.xTickFormat ?? "HH:mm:ss"),
+    label: formatTick(
+      v,
+      opts.xMode ?? "fixed",
+      opts.timeOrigin ?? null,
+      opts.xTickFormat ?? "HH:mm:ss",
+    ),
     fraction: xSpan > 0 ? (v - xMin) / xSpan : 0,
   }));
 

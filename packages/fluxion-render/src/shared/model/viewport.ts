@@ -23,12 +23,19 @@ export class Viewport {
    * Per-frame aggregate of observed y values across all data layers that
    * currently overlap the visible time window. `AxisGridLayer` in
    * `yMode: "auto"` reads these in draw to compute bounds.yMin/yMax.
-   *
-   * Initialised to +/-Infinity by `beginScan()` at the top of every frame,
-   * then layers merge their visible-window min/max in via `scan()`.
    */
   observedYMin = Number.POSITIVE_INFINITY;
   observedYMax = Number.NEGATIVE_INFINITY;
+
+  /**
+   * Vertical inset padding in CSS pixels. When set > 0, `yToPx` maps the
+   * data range into `[yPadPx, heightPx - yPadPx]` instead of `[0, heightPx]`.
+   * This keeps grid lines and data strokes away from the canvas top/bottom
+   * edge, matching the external axis canvas's padding so they stay aligned.
+   *
+   * Set by `AxisGridLayer` from its `yPadPx` config.
+   */
+  yPadPx = 0;
 
   setSize(width: number, height: number, dpr: number) {
     this.widthPx = width;
@@ -53,6 +60,8 @@ export class Viewport {
 
   yToPx(y: number): number {
     const { yMin, yMax } = this.bounds;
-    return this.heightPx - ((y - yMin) / (yMax - yMin)) * this.heightPx;
+    const pad = this.yPadPx;
+    const usable = this.heightPx - pad * 2;
+    return pad + usable - ((y - yMin) / (yMax - yMin)) * usable;
   }
 }

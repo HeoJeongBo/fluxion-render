@@ -1,9 +1,10 @@
+import type { FluxionHost } from "@heojeongbo/fluxion-render";
 import {
   axisGridLayer,
+  FluxionCanvas,
   lineStaticLayer,
-  useFluxionCanvas,
 } from "@heojeongbo/fluxion-render/react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { generateStaticSineXY } from "../../../shared/lib/test-data";
 import { THEME } from "../../../shared/ui/theme";
 
@@ -15,23 +16,20 @@ export interface StaticXyDemoPageProps {
   compactHud?: boolean;
 }
 
-/**
- * Static xy plot: one-shot push of a pre-computed Float32Array. Demonstrates
- * the non-streaming `kind: "line-static"` path. The "Resample" button pushes
- * a new dataset, showing that setData replaces (rather than appends) for the
- * static variant.
- */
 export function StaticXyDemoPage({ compactHud = false }: StaticXyDemoPageProps = {}) {
-  const { containerRef, host } = useFluxionCanvas({
-    hostOptions: { bgColor: THEME.chart.canvasBg },
-    layers: [
+  const [host, setHost] = useState<FluxionHost | null>(null);
+
+  const layers = useMemo(
+    () => [
       axisGridLayer("axis", {
         xRange: [X_MIN, X_MAX],
         yRange: [-1.2, 1.2],
         gridColor: THEME.chart.gridColor,
         gridDashArray: [3, 3],
         axisColor: THEME.chart.axisColor,
-        labelColor: THEME.chart.labelColor,
+        showXLabels: false,
+        showYLabels: false,
+        yPadPx: 8,
       }),
       lineStaticLayer("plot", {
         color: "#4fc3f7",
@@ -39,7 +37,8 @@ export function StaticXyDemoPage({ compactHud = false }: StaticXyDemoPageProps =
         layout: "xy",
       }),
     ],
-  });
+    [],
+  );
 
   const seedRef = useRef(1);
   const [version, setVersion] = useState(0);
@@ -58,7 +57,14 @@ export function StaticXyDemoPage({ compactHud = false }: StaticXyDemoPageProps =
 
   return (
     <div style={{ position: "relative", width: "100%", height: "100%" }}>
-      <div ref={containerRef} style={{ width: "100%", height: "100%" }} />
+      <FluxionCanvas
+        externalAxes
+        axisLayerId="axis"
+        axisColor={THEME.chart.labelColor}
+        layers={layers}
+        hostOptions={{ bgColor: THEME.chart.canvasBg }}
+        onReady={setHost}
+      />
       <div
         style={{
           position: "absolute",

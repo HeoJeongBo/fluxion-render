@@ -7,7 +7,7 @@ import type { Layer } from "../../../shared/model/layer";
 import { Scheduler } from "../../../shared/model/scheduler";
 import { Viewport } from "../../../shared/model/viewport";
 import type { HostMsg, LayerKind } from "../../../shared/protocol";
-import { Op } from "../../../shared/protocol";
+import { Op, WorkerOp } from "../../../shared/protocol";
 
 function createLayer(id: string, kind: LayerKind): Layer {
   switch (kind) {
@@ -33,6 +33,9 @@ export class Engine {
   private readonly stack = new LayerStack();
   private readonly scheduler: Scheduler;
   private bgColor = "#0b0d12";
+  private hostId: string | undefined;
+  private lastSentYMin = Number.NaN;
+  private lastSentYMax = Number.NaN;
 
   constructor() {
     this.scheduler = new Scheduler(() => this.render());
@@ -41,6 +44,7 @@ export class Engine {
   dispatch(msg: HostMsg): void {
     switch (msg.op) {
       case Op.INIT:
+        this.hostId = msg.hostId;
         this.init(msg.canvas, msg.width, msg.height, msg.dpr, msg.bgColor);
         break;
       case Op.SET_BG_COLOR:
@@ -122,6 +126,24 @@ export class Engine {
     ctx.fillStyle = this.bgColor;
     ctx.fillRect(0, 0, this.viewport.widthPx, this.viewport.heightPx);
     this.stack.drawAll(ctx, this.viewport);
+
+    // Notify main thread when effective y bounds change (yMode:"auto").
+    // Only posts when the values actually differ to avoid flooding.
+    const { yMin, yMax } = this.viewport.bounds;
+    if (yMin !== this.lastSentYMin || yMax !== this.lastSentYMax) {
+      this.lastSentYMin = yMin;
+      this.lastSentYMax = yMax;
+      try {
+        self.postMessage({
+          op: WorkerOp.BOUNDS_UPDATE,
+          hostId: this.hostId,
+          yMin,
+          yMax,
+        });
+      } catch {
+        // Worker context may not support postMessage in tests
+      }
+    }
   }
 
   private dispose() {

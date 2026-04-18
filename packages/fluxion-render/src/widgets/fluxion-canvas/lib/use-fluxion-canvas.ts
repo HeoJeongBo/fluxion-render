@@ -75,6 +75,8 @@ export function useFluxionCanvas(
     canvas.style.display = "block";
     canvas.style.width = "100%";
     canvas.style.height = "100%";
+    canvas.style.minWidth = "0";
+    canvas.style.minHeight = "0";
     container.appendChild(canvas);
 
     const current = optionsRef.current;

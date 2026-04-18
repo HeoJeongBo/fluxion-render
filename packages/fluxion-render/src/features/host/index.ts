@@ -1,4 +1,8 @@
-export type { FluxionHostOptions, FluxionTypedArray } from "./model/fluxion-host";
+export type {
+  BoundsChangeListener,
+  FluxionHostOptions,
+  FluxionTypedArray,
+} from "./model/fluxion-host";
 export { FluxionHost } from "./model/fluxion-host";
 export { FluxionWorkerPool, configureDefaultPool, getDefaultPool } from "../worker-pool";
 export type { FluxionWorkerPoolOptions } from "../worker-pool";

@@ -19,6 +19,7 @@ self.onmessage = (e: MessageEvent<HostMsg>) => {
         height: msg.height,
         dpr: msg.dpr,
         bgColor: msg.bgColor,
+        hostId: msg.hostId,
       });
       return;
     }

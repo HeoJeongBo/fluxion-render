@@ -1,4 +1,9 @@
-import type { HostMsg, InitMsg, PoolDisposeMsg, PoolInitMsg } from "../../../shared/protocol";
+import type {
+  HostMsg,
+  InitMsg,
+  PoolDisposeMsg,
+  PoolInitMsg,
+} from "../../../shared/protocol";
 import { Op } from "../../../shared/protocol";
 
 export interface WorkerLike {
@@ -24,6 +29,11 @@ export interface FluxionWorkerPoolOptions {
 
 class PooledWorkerHandle implements WorkerLike {
   private _terminated = false;
+  private readonly _listeners: Array<{
+    type: string;
+    fn: EventListener;
+    wrapper: EventListener;
+  }> = [];
 
   constructor(
     private readonly pool: FluxionWorkerPool,
@@ -31,6 +41,37 @@ class PooledWorkerHandle implements WorkerLike {
     private readonly workerIndex: number,
     readonly hostId: string,
   ) {}
+
+  /**
+   * Subscribe to worker→main messages that belong to this host.
+   * Filters by `hostId` so multiple hosts sharing a single worker
+   * each only see their own messages (e.g. BOUNDS_UPDATE).
+   */
+  addEventListener(type: string, listener: EventListener): void {
+    const wrapper: EventListener = (evt: Event) => {
+      const e = evt as MessageEvent;
+      const msg = e.data;
+      if (
+        msg &&
+        typeof msg === "object" &&
+        "hostId" in msg &&
+        msg.hostId === this.hostId
+      ) {
+        listener(evt);
+      }
+    };
+    this._listeners.push({ type, fn: listener, wrapper });
+    this.worker.addEventListener(type, wrapper);
+  }
+
+  removeEventListener(type: string, listener: EventListener): void {
+    const idx = this._listeners.findIndex((l) => l.type === type && l.fn === listener);
+    if (idx >= 0) {
+      const entry = this._listeners[idx];
+      this.worker.removeEventListener(type, entry.wrapper);
+      this._listeners.splice(idx, 1);
+    }
+  }
 
   postMessage(msg: HostMsg, transfer?: Transferable[]): void {
     if (this._terminated) return;
@@ -71,6 +112,11 @@ class PooledWorkerHandle implements WorkerLike {
 
   _markTerminated(): void {
     this._terminated = true;
+    // Remove all message listeners from the underlying worker
+    for (const { type, wrapper } of this._listeners) {
+      this.worker.removeEventListener(type, wrapper);
+    }
+    this._listeners.length = 0;
   }
 }
 

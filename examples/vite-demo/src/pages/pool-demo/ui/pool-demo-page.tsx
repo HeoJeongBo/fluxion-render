@@ -1,11 +1,11 @@
-import type { LineSample } from "@heojeongbo/fluxion-render";
+import type { FluxionHost, LineSample } from "@heojeongbo/fluxion-render";
 import {
   axisGridLayer,
+  FluxionCanvas,
   lineLayer,
-  useFluxionCanvas,
   useFluxionStream,
 } from "@heojeongbo/fluxion-render/react";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { generateFloat32StampedBatch, stampToMs } from "../../../shared/lib/test-data";
 import { THEME } from "../../../shared/ui/theme";
 
@@ -28,23 +28,28 @@ function MiniChart({ index }: { index: number }) {
   const color = COLORS[index % COLORS.length]!;
   const freqHz = 0.5 + (index % 7) * 0.3;
   const timeOrigin = useMemo(() => Date.now(), []);
+  const [host, setHost] = useState<FluxionHost | null>(null);
 
-  const { containerRef, host } = useFluxionCanvas({
-    hostOptions: { bgColor: THEME.chart.canvasBg },
-    layers: [
+  const layers = useMemo(
+    () => [
       axisGridLayer("axis", {
         xMode: "time",
         timeWindowMs: 5000,
         timeOrigin,
         yMode: "auto",
-        gridColor: THEME.chart.gridColor,
+        showXGrid: true,
+        showYGrid: true,
+        showXLabels: false,
+        showYLabels: false,
+        gridColor: "#dddddd",
         gridDashArray: [3, 3],
         axisColor: THEME.chart.axisColor,
-        labelColor: THEME.chart.labelColor,
+        yPadPx: 8,
       }),
       lineLayer("line", { color, lineWidth: 1.5, capacity: 2048 }),
     ],
-  });
+    [timeOrigin, color],
+  );
 
   useFluxionStream({
     host,
@@ -56,7 +61,10 @@ function MiniChart({ index }: { index: number }) {
         amplitude: 0.8,
         seriesOffset: index * 0.4,
       });
-      const samples: LineSample[] = msgs.map((m) => ({ t: stampToMs(m.header), y: m.data }));
+      const samples: LineSample[] = msgs.map((m) => ({
+        t: stampToMs(m.header),
+        y: m.data,
+      }));
       handle.pushBatch(samples);
       return samples.length;
     },
@@ -87,7 +95,19 @@ function MiniChart({ index }: { index: number }) {
       >
         #{index + 1}
       </div>
-      <div ref={containerRef} style={{ width: "100%", height: "100%" }} />
+      <FluxionCanvas
+        externalAxes
+        axisLayerId="axis"
+        yAxisWidth={32}
+        xAxisHeight={16}
+        axisColor={THEME.chart.labelColor}
+        axisFont="8px sans-serif"
+        axisTickSize={3}
+        axisTickMargin={2}
+        layers={layers}
+        hostOptions={{ bgColor: THEME.chart.canvasBg }}
+        onReady={setHost}
+      />
     </div>
   );
 }
@@ -99,7 +119,9 @@ function MiniChart({ index }: { index: number }) {
  */
 export function PoolDemoPage() {
   return (
-    <div style={{ display: "flex", flexDirection: "column", width: "100%", height: "100%" }}>
+    <div
+      style={{ display: "flex", flexDirection: "column", width: "100%", height: "100%" }}
+    >
       <div
         style={{
           display: "flex",
@@ -115,8 +137,8 @@ export function PoolDemoPage() {
       >
         <strong style={{ color: THEME.page.textPrimary }}>Worker Pool Demo</strong>
         <span>
-          {CHART_COUNT} charts · 4 workers (default pool) · verify in DevTools → Performance →
-          Workers
+          {CHART_COUNT} charts · 4 workers (default pool) · verify in DevTools →
+          Performance → Workers
         </span>
       </div>
       <div

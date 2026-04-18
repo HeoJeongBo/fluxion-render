@@ -71,6 +71,14 @@ export interface AxisGridConfig {
    * Example: [3, 3] produces the dashed style used by recharts.
    */
   gridDashArray?: number[];
+  /**
+   * Vertical inset in CSS pixels applied to both the chart canvas (via
+   * `viewport.yPadPx`) and the external axis canvas (matched constant).
+   * Keeps grid lines and data strokes away from the top/bottom edge so
+   * external axis tick labels at fraction 0/1 have room to render without
+   * clipping. Default 0 (no padding). Set to 8 when using `externalAxes`.
+   */
+  yPadPx?: number;
 }
 
 /**
@@ -109,6 +117,7 @@ export class AxisGridLayer implements Layer {
   private showXLabels = true;
   private showYLabels = true;
   private gridDashArray: number[] = [];
+  private yPadPx = 0;
 
   constructor(id: string) {
     this.id = id;
@@ -144,6 +153,7 @@ export class AxisGridLayer implements Layer {
     if (c.showXLabels !== undefined) this.showXLabels = c.showXLabels;
     if (c.showYLabels !== undefined) this.showYLabels = c.showYLabels;
     if (c.gridDashArray !== undefined) this.gridDashArray = c.gridDashArray;
+    if (c.yPadPx !== undefined) this.yPadPx = c.yPadPx;
   }
 
   setData(_buffer: ArrayBuffer, _length: number, _viewport: Viewport): void {}
@@ -156,6 +166,7 @@ export class AxisGridLayer implements Layer {
    * line layers have published their observations.
    */
   scan(viewport: Viewport): void {
+    viewport.yPadPx = this.yPadPx;
     if (this.xMode === "time") {
       const latestT = viewport.latestT;
       this.bounds.xMin = latestT - this.timeWindowMs;

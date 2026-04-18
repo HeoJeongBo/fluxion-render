@@ -4,7 +4,15 @@ import type { LineChartConfig } from "../../../entities/line-chart-layer";
 import type { LineChartStaticConfig } from "../../../entities/line-chart-static-layer";
 import type { FluxionWorkerPool } from "../../../features/worker-pool";
 import { getDefaultPool } from "../../../features/worker-pool";
-import { Op, type DType, type HostMsg, type LayerKind } from "../../../shared/protocol";
+import {
+  Op,
+  WorkerOp,
+  type BoundsUpdateMsg,
+  type DType,
+  type HostMsg,
+  type LayerKind,
+  type WorkerMsg,
+} from "../../../shared/protocol";
 import {
   LidarLayerHandle,
   type LidarStride,
@@ -46,7 +54,6 @@ export interface FluxionHostOptions {
   pool?: FluxionWorkerPool;
 }
 
-
 function dtypeOf(arr: FluxionTypedArray): DType {
   if (arr instanceof Float32Array) return "f32";
   if (arr instanceof Uint8Array) return "u8";
@@ -66,9 +73,19 @@ function dtypeOf(arr: FluxionTypedArray): DType {
  *   host.resize(w, h, dpr);
  *   host.dispose();
  */
+/** Callback shape for `onBoundsChange`. */
+export type BoundsChangeListener = (yMin: number, yMax: number) => void;
+
 export class FluxionHost {
-  private worker: { postMessage(msg: unknown, transfer?: Transferable[]): void; terminate(): void };
+  private worker: {
+    postMessage(msg: unknown, transfer?: Transferable[]): void;
+    terminate(): void;
+    addEventListener?(type: string, listener: EventListener): void;
+    removeEventListener?(type: string, listener: EventListener): void;
+  };
   private disposed = false;
+  private boundsListeners: BoundsChangeListener[] = [];
+  private workerMsgHandler: EventListener | null = null;
 
   constructor(canvas: HTMLCanvasElement, opts: FluxionHostOptions = {}) {
     if (opts.workerFactory) {
@@ -96,6 +113,20 @@ export class FluxionHost {
       },
       [offscreen],
     );
+
+    // Listen for worker→main messages (bounds updates, etc.)
+    this.workerMsgHandler = (evt: Event) => {
+      const e = evt as MessageEvent<WorkerMsg>;
+      const msg = e.data;
+      if (!msg || typeof msg !== "object" || !("op" in msg)) return;
+      if (msg.op === WorkerOp.BOUNDS_UPDATE) {
+        const bu = msg as BoundsUpdateMsg;
+        for (const fn of this.boundsListeners) fn(bu.yMin, bu.yMax);
+      }
+    };
+    if (this.worker.addEventListener) {
+      this.worker.addEventListener("message", this.workerMsgHandler);
+    }
   }
 
   /**
@@ -104,6 +135,19 @@ export class FluxionHost {
    */
   setBgColor(color: string): void {
     this.post({ op: Op.SET_BG_COLOR, color });
+  }
+
+  /**
+   * Register a listener that fires whenever the worker reports new effective
+   * y bounds (typically once per frame when `yMode: "auto"` causes a change).
+   * Returns an unsubscribe function.
+   */
+  onBoundsChange(listener: BoundsChangeListener): () => void {
+    this.boundsListeners.push(listener);
+    return () => {
+      const idx = this.boundsListeners.indexOf(listener);
+      if (idx >= 0) this.boundsListeners.splice(idx, 1);
+    };
   }
 
   /**
@@ -239,6 +283,12 @@ export class FluxionHost {
   dispose(): void {
     if (this.disposed) return;
     this.disposed = true;
+    // Remove worker→main message listener
+    if (this.workerMsgHandler && this.worker.removeEventListener) {
+      this.worker.removeEventListener("message", this.workerMsgHandler);
+    }
+    this.workerMsgHandler = null;
+    this.boundsListeners.length = 0;
     try {
       this.post({ op: Op.DISPOSE });
     } catch {

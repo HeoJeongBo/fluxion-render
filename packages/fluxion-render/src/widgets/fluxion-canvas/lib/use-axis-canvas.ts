@@ -2,16 +2,47 @@ import { type RefObject, useEffect, useRef } from "react";
 import type { AxisTick } from "../../../shared/lib/axis-ticks";
 
 export interface AxisCanvasOptions {
+  /** Tick label + tick line color. Default "#666". */
   color?: string;
+  /** Tick label font. Default "11px sans-serif". */
   font?: string;
+  /** Length of tick marks in px. Default 6 (Recharts default). 0 to hide. */
+  tickSize?: number;
+  /** Gap between tick mark end and label text in px. Default 4. */
+  tickMargin?: number;
+}
+
+const DEFAULT_COLOR = "#666";
+const DEFAULT_FONT = "11px sans-serif";
+const DEFAULT_TICK_SIZE = 6;
+const DEFAULT_TICK_MARGIN = 4;
+
+interface ResolvedOpts {
+  color: string;
+  font: string;
+  tickSize: number;
+  tickMargin: number;
+}
+
+function resolve(o: AxisCanvasOptions = {}): ResolvedOpts {
+  return {
+    color: o.color ?? DEFAULT_COLOR,
+    font: o.font ?? DEFAULT_FONT,
+    tickSize: o.tickSize ?? DEFAULT_TICK_SIZE,
+    tickMargin: o.tickMargin ?? DEFAULT_TICK_MARGIN,
+  };
 }
 
 function redraw(
   canvas: HTMLCanvasElement,
-  ticksRef: RefObject<AxisTick[]>,
-  colorRef: RefObject<string>,
-  fontRef: RefObject<string>,
-  drawFn: (ctx: CanvasRenderingContext2D, ticks: AxisTick[], rect: DOMRect, color: string, font: string) => void,
+  ticksRef: { current: AxisTick[] },
+  optsRef: { current: ResolvedOpts },
+  drawFn: (
+    ctx: CanvasRenderingContext2D,
+    ticks: AxisTick[],
+    rect: DOMRect,
+    opts: ResolvedOpts,
+  ) => void,
 ): void {
   const dpr = window.devicePixelRatio || 1;
   const rect = canvas.getBoundingClientRect();
@@ -21,98 +52,122 @@ function redraw(
   const ctx = canvas.getContext("2d");
   if (!ctx) return;
   ctx.scale(dpr, dpr);
-  drawFn(ctx, ticksRef.current ?? [], rect, colorRef.current ?? "", fontRef.current ?? "");
+  drawFn(ctx, ticksRef.current ?? [], rect, optsRef.current);
 }
 
 /**
- * Draws y-axis tick labels on a canvas (right-aligned, vertically centered).
- * Canvas must be placed to the LEFT of the chart with matching height.
+ * Draws y-axis tick labels + tick marks on a canvas (right-aligned).
+ * Place to the LEFT of the chart with matching height.
+ *
+ * Layout within the canvas (left → right):
+ *   [label text] [tickMargin] [tick line] |rightEdge
+ *
+ * Matches Recharts' CartesianAxis (orientation="left"):
+ *   stroke #666, tickSize 6, tickMargin 4, labels right-aligned.
  */
 export function useYAxisCanvas(
   ticks: AxisTick[],
   options: AxisCanvasOptions = {},
 ): RefObject<HTMLCanvasElement> {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const color = options.color ?? "rgba(255,255,255,0.7)";
-  const font = options.font ?? "10px sans-serif";
+  const resolved = resolve(options);
 
   const ticksRef = useRef(ticks);
   ticksRef.current = ticks;
-  const colorRef = useRef(color);
-  colorRef.current = color;
-  const fontRef = useRef(font);
-  fontRef.current = font;
+  const optsRef = useRef(resolved);
+  optsRef.current = resolved;
 
-  // ResizeObserver: mounted once, always reads latest ticks/color/font via refs
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const observer = new ResizeObserver(() => redraw(canvas, ticksRef, colorRef, fontRef, drawY));
+    const observer = new ResizeObserver(() => redraw(canvas, ticksRef, optsRef, drawY));
     observer.observe(canvas);
     return () => observer.disconnect();
   }, []);
 
-  // Redraw whenever ticks or style change
   useEffect(() => {
     const canvas = canvasRef.current;
-    if (canvas) redraw(canvas, ticksRef, colorRef, fontRef, drawY);
-  }, [ticks, color, font]);
+    if (canvas) redraw(canvas, ticksRef, optsRef, drawY);
+  }, [ticks, resolved.color, resolved.font, resolved.tickSize, resolved.tickMargin]);
 
   return canvasRef;
 }
 
 /**
- * Draws x-axis tick labels on a canvas (horizontally centered).
- * Canvas must be placed BELOW the chart with matching width.
+ * Draws x-axis tick labels + tick marks on a canvas (centered).
+ * Place BELOW the chart with matching width.
+ *
+ * Layout within the canvas (top → bottom):
+ *   topEdge| [tick line] [tickMargin] [label text]
  */
 export function useXAxisCanvas(
   ticks: AxisTick[],
   options: AxisCanvasOptions = {},
 ): RefObject<HTMLCanvasElement> {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const color = options.color ?? "rgba(255,255,255,0.7)";
-  const font = options.font ?? "10px sans-serif";
+  const resolved = resolve(options);
 
   const ticksRef = useRef(ticks);
   ticksRef.current = ticks;
-  const colorRef = useRef(color);
-  colorRef.current = color;
-  const fontRef = useRef(font);
-  fontRef.current = font;
+  const optsRef = useRef(resolved);
+  optsRef.current = resolved;
 
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const observer = new ResizeObserver(() => redraw(canvas, ticksRef, colorRef, fontRef, drawX));
+    const observer = new ResizeObserver(() => redraw(canvas, ticksRef, optsRef, drawX));
     observer.observe(canvas);
     return () => observer.disconnect();
   }, []);
 
   useEffect(() => {
     const canvas = canvasRef.current;
-    if (canvas) redraw(canvas, ticksRef, colorRef, fontRef, drawX);
-  }, [ticks, color, font]);
+    if (canvas) redraw(canvas, ticksRef, optsRef, drawX);
+  }, [ticks, resolved.color, resolved.font, resolved.tickSize, resolved.tickMargin]);
 
   return canvasRef;
 }
+
+// Must match the `yPad` constant in FluxionCanvas so grid lines and
+// tick labels are pixel-aligned.
+const Y_PAD = 8;
 
 function drawY(
   ctx: CanvasRenderingContext2D,
   ticks: AxisTick[],
   rect: DOMRect,
-  color: string,
-  font: string,
+  opts: ResolvedOpts,
 ): void {
   const { width: w, height: h } = rect;
   ctx.clearRect(0, 0, w, h);
+  const { color, font, tickSize, tickMargin } = opts;
+
+  // Inset fraction mapping by Y_PAD at top and bottom — same padding the
+  // chart canvas applies via CSS so tick marks align with grid lines.
+  const usableH = h - Y_PAD * 2;
+
+  // Tick marks
+  if (tickSize > 0) {
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    for (const tick of ticks) {
+      const y = Math.round(Y_PAD + (1 - tick.fraction) * usableH) + 0.5;
+      ctx.moveTo(w - tickSize, y);
+      ctx.lineTo(w, y);
+    }
+    ctx.stroke();
+  }
+
+  // Labels
   ctx.fillStyle = color;
   ctx.font = font;
   ctx.textAlign = "right";
   ctx.textBaseline = "middle";
+  const labelX = w - tickSize - tickMargin;
   for (const tick of ticks) {
-    // fraction 0 = bottom, 1 = top; canvas y is flipped
-    const y = (1 - tick.fraction) * h;
-    ctx.fillText(tick.label, w - 4, y);
+    const y = Y_PAD + (1 - tick.fraction) * usableH;
+    ctx.fillText(tick.label, labelX, y);
   }
 }
 
@@ -120,17 +175,37 @@ function drawX(
   ctx: CanvasRenderingContext2D,
   ticks: AxisTick[],
   rect: DOMRect,
-  color: string,
-  font: string,
+  opts: ResolvedOpts,
 ): void {
   const { width: w, height: h } = rect;
   ctx.clearRect(0, 0, w, h);
+  const { color, font, tickSize, tickMargin } = opts;
+
+  // The x-axis canvas is intentionally wider than the chart canvas (via
+  // negative CSS margins set in FluxionCanvas) so that the first/last tick
+  // labels have room without clipping. Use the full canvas width directly.
+
+  // Tick marks: short vertical lines at the top edge
+  if (tickSize > 0) {
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    for (const tick of ticks) {
+      const x = Math.round(tick.fraction * w) + 0.5;
+      ctx.moveTo(x, 0);
+      ctx.lineTo(x, tickSize);
+    }
+    ctx.stroke();
+  }
+
+  // Labels: centered below tick mark
   ctx.fillStyle = color;
   ctx.font = font;
   ctx.textAlign = "center";
   ctx.textBaseline = "top";
+  const labelY = tickSize + tickMargin;
   for (const tick of ticks) {
     const x = tick.fraction * w;
-    ctx.fillText(tick.label, x, 4);
+    ctx.fillText(tick.label, x, labelY);
   }
 }

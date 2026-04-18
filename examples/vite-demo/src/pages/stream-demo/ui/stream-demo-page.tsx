@@ -1,8 +1,8 @@
-import type { LineSample } from "@heojeongbo/fluxion-render";
+import type { FluxionHost, LineSample } from "@heojeongbo/fluxion-render";
 import {
   axisGridLayer,
+  FluxionCanvas,
   lineLayer,
-  useFluxionCanvas,
   useFluxionStream,
   useLayerConfig,
 } from "@heojeongbo/fluxion-render/react";
@@ -16,13 +16,11 @@ import { THEME } from "../../../shared/ui/theme";
 import { WindowSelector } from "../../../shared/ui/window-selector";
 
 const BATCH_HZ = 60;
-const SAMPLES_PER_BATCH = 20; // 1200 samples/sec per series
+const SAMPLES_PER_BATCH = 20;
 const DT_MS = 1000 / (BATCH_HZ * SAMPLES_PER_BATCH);
 const DEFAULT_WINDOW_MS = 3000;
-const MAX_WINDOW_MS = 60_000; // longest option in the WindowSelector
-const SAMPLES_PER_SEC = BATCH_HZ * SAMPLES_PER_BATCH; // 1200/s per series
-// Ring buffer must cover the longest selectable window so the chart isn't
-// truncated when the user picks 30s/60s. Add 20% headroom for jitter.
+const MAX_WINDOW_MS = 60_000;
+const SAMPLES_PER_SEC = BATCH_HZ * SAMPLES_PER_BATCH;
 const RING_CAPACITY = Math.ceil((MAX_WINDOW_MS / 1000) * SAMPLES_PER_SEC * 1.2);
 
 const SERIES = [
@@ -31,10 +29,6 @@ const SERIES = [
   { id: "s3", color: "#ffb060", freqHz: 2.1, amplitude: 0.5, offset: 2.2 },
 ];
 
-/**
- * User-owned batch transform: ROS2 Float32Stamped[] → library `LineSample[]`.
- * Applied to every batched subscriber delivery before the handle pushes it.
- */
 const transformBatch = (msgs: Float32StampedMessage[]): LineSample[] =>
   msgs.map((m) => ({ t: stampToMs(m.header), y: m.data }));
 
@@ -52,10 +46,10 @@ export function StreamDemoPage({
   const [localWindowMs, setLocalWindowMs] = useState(DEFAULT_WINDOW_MS);
   const windowMs = windowProp ?? localWindowMs;
   const timeOrigin = useMemo(() => Date.now(), []);
+  const [host, setHost] = useState<FluxionHost | null>(null);
 
-  const { containerRef, host } = useFluxionCanvas({
-    hostOptions: { bgColor: THEME.chart.canvasBg },
-    layers: [
+  const layers = useMemo(
+    () => [
       axisGridLayer("axis", {
         xMode: "time",
         timeWindowMs: DEFAULT_WINDOW_MS,
@@ -65,7 +59,9 @@ export function StreamDemoPage({
         gridColor: THEME.chart.gridColor,
         gridDashArray: [3, 3],
         axisColor: THEME.chart.axisColor,
-        labelColor: THEME.chart.labelColor,
+        showXLabels: false,
+        showYLabels: false,
+        yPadPx: 8,
       }),
       ...SERIES.map((s) =>
         lineLayer(s.id, {
@@ -75,7 +71,8 @@ export function StreamDemoPage({
         }),
       ),
     ],
-  });
+    [timeOrigin],
+  );
 
   useLayerConfig(host, axisGridLayer("axis", { timeWindowMs: windowMs }));
 
@@ -85,7 +82,6 @@ export function StreamDemoPage({
     setup: (h) => SERIES.map((s) => ({ spec: s, handle: h.line(s.id) })),
     tick: (t, handles) => {
       for (const { spec, handle } of handles) {
-        // Mock a batched ROS2 subscriber: one message burst per series.
         const msgs = generateFloat32StampedBatch(t, SAMPLES_PER_BATCH, DT_MS, {
           freqHz: spec.freqHz,
           amplitude: spec.amplitude,
@@ -99,7 +95,14 @@ export function StreamDemoPage({
 
   return (
     <div style={{ position: "relative", width: "100%", height: "100%" }}>
-      <div ref={containerRef} style={{ width: "100%", height: "100%" }} />
+      <FluxionCanvas
+        externalAxes
+        axisLayerId="axis"
+        axisColor={THEME.chart.labelColor}
+        layers={layers}
+        hostOptions={{ bgColor: THEME.chart.canvasBg }}
+        onReady={setHost}
+      />
       <div
         style={{
           position: "absolute",

@@ -116,3 +116,26 @@ export type HostMsg =
   | SetBgColorMsg
   | PoolInitMsg
   | PoolDisposeMsg;
+
+// ────────────────────────────────────────────────────────────────────────
+// Worker → Main messages (posted via self.postMessage inside the worker)
+// ────────────────────────────────────────────────────────────────────────
+
+export const WorkerOp = {
+  BOUNDS_UPDATE: 100,
+} as const;
+export type WorkerOp = (typeof WorkerOp)[keyof typeof WorkerOp];
+
+/**
+ * Sent by the engine after each draw frame when the effective y-bounds
+ * have changed. Enables the React-side `useAxisTicks` hook to show live
+ * y-axis labels for `yMode: "auto"`.
+ */
+export interface BoundsUpdateMsg {
+  op: typeof WorkerOp.BOUNDS_UPDATE;
+  hostId?: string;
+  yMin: number;
+  yMax: number;
+}
+
+export type WorkerMsg = BoundsUpdateMsg;

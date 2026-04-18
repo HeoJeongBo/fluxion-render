@@ -1,8 +1,8 @@
-import type { LineSample } from "@heojeongbo/fluxion-render";
+import type { FluxionHost, LineSample } from "@heojeongbo/fluxion-render";
 import {
   axisGridLayer,
+  FluxionCanvas,
   lineLayer,
-  useFluxionCanvas,
   useFluxionStream,
   useLayerConfig,
 } from "@heojeongbo/fluxion-render/react";
@@ -18,25 +18,14 @@ import { WindowSelector } from "../../../shared/ui/window-selector";
 const TARGET_HZ = 120;
 const DEFAULT_WINDOW_MS = 5000;
 
-/**
- * User-owned transform: ROS2 Float32Stamped message → library `LineSample`.
- *
- * This is the "bring your own subscriber" pattern — the demo receives raw
- * message objects as if from rclnodejs / roslib and converts them inline.
- * Declared at module scope so React doesn't recreate the closure on every
- * render.
- */
 const transform = (msg: Float32StampedMessage): LineSample => ({
   t: stampToMs(msg.header),
   y: msg.data,
 });
 
 export interface LineDemoPageProps {
-  /** Controlled window width. If omitted, demo owns its own state + selector. */
   windowMs?: number;
-  /** Hide the internal window selector (combined view uses a shared one). */
   hideSelector?: boolean;
-  /** Hide the HUD line. Useful inside the combined view. */
   compactHud?: boolean;
 }
 
@@ -47,13 +36,11 @@ export function LineDemoPage({
 }: LineDemoPageProps = {}) {
   const [localWindowMs, setLocalWindowMs] = useState(DEFAULT_WINDOW_MS);
   const windowMs = windowProp ?? localWindowMs;
-
-  // Stable wall-clock origin once per mount so HH:mm:ss labels match real time.
   const timeOrigin = useMemo(() => Date.now(), []);
+  const [host, setHost] = useState<FluxionHost | null>(null);
 
-  const { containerRef, host } = useFluxionCanvas({
-    hostOptions: { bgColor: THEME.chart.canvasBg },
-    layers: [
+  const layers = useMemo(
+    () => [
       axisGridLayer("axis", {
         xMode: "time",
         timeWindowMs: DEFAULT_WINDOW_MS,
@@ -63,11 +50,14 @@ export function LineDemoPage({
         gridColor: THEME.chart.gridColor,
         gridDashArray: [3, 3],
         axisColor: THEME.chart.axisColor,
-        labelColor: THEME.chart.labelColor,
+        showXLabels: false,
+        showYLabels: false,
+        yPadPx: 8,
       }),
       lineLayer("line", { color: "#4fc3f7", lineWidth: 1.5, capacity: 8192 }),
     ],
-  });
+    [timeOrigin],
+  );
 
   useLayerConfig(host, axisGridLayer("axis", { timeWindowMs: windowMs }));
 
@@ -76,7 +66,6 @@ export function LineDemoPage({
     intervalMs: 1000 / TARGET_HZ,
     setup: (h) => h.line("line"),
     tick: (t, line) => {
-      // Simulate a ROS2 subscriber callback firing with a fresh message.
       const msg = generateFloat32StampedMessage(t);
       line.push(transform(msg));
       return 1;
@@ -85,7 +74,14 @@ export function LineDemoPage({
 
   return (
     <div style={{ position: "relative", width: "100%", height: "100%" }}>
-      <div ref={containerRef} style={{ width: "100%", height: "100%" }} />
+      <FluxionCanvas
+        externalAxes
+        axisLayerId="axis"
+        axisColor={THEME.chart.labelColor}
+        layers={layers}
+        hostOptions={{ bgColor: THEME.chart.canvasBg }}
+        onReady={setHost}
+      />
       <div
         style={{
           position: "absolute",

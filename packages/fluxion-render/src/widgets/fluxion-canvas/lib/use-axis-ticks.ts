@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { AxisGridConfig } from "../../../entities/axis-grid-layer";
+import type { FluxionHost } from "../../../features/host";
 import { type AxisTickSet, computeAxisTicks } from "../../../shared/lib/axis-ticks";
 import type { FluxionLayerSpec } from "./use-fluxion-canvas";
 
@@ -13,7 +14,12 @@ function getAxisSpec(
   );
 }
 
-function computeFromConfig(config: AxisGridConfig, now?: number): AxisTickSet {
+function computeFromConfig(
+  config: AxisGridConfig,
+  now?: number,
+  liveYMin?: number,
+  liveYMax?: number,
+): AxisTickSet {
   const xMode = config.xMode ?? "fixed";
   const timeWindowMs = config.timeWindowMs ?? 5000;
   const timeOrigin = config.timeOrigin ?? null;
@@ -30,8 +36,10 @@ function computeFromConfig(config: AxisGridConfig, now?: number): AxisTickSet {
     xMax = config.xRange?.[1] ?? 1;
   }
 
-  const yMin = config.yRange?.[0] ?? -1;
-  const yMax = config.yRange?.[1] ?? 1;
+  // When yMode:"auto" and the worker has sent live bounds, use those.
+  // Otherwise fall back to the configured yRange.
+  const yMin = liveYMin ?? config.yRange?.[0] ?? -1;
+  const yMax = liveYMax ?? config.yRange?.[1] ?? 1;
 
   return computeAxisTicks({
     xMin,
@@ -49,41 +57,72 @@ function computeFromConfig(config: AxisGridConfig, now?: number): AxisTickSet {
  * Computes axis ticks for the given axis-grid layer spec.
  *
  * - `xMode: "fixed"` — computed once via useMemo
- * - `xMode: "time"` — recomputed at `refreshMs` interval (default 100ms) using Date.now()
- * - `yMode: "auto"` — y bounds fall back to configured yRange (v1 limitation)
+ * - `xMode: "time"` — recomputed at `refreshMs` interval (default 100ms)
+ * - `yMode: "auto"` — subscribes to `host.onBoundsChange` and uses the
+ *   worker's live y bounds for tick computation. Falls back to `yRange`
+ *   until the first bounds message arrives.
  */
 export function useAxisTicks(
   layers: FluxionLayerSpec[],
   axisLayerId: string,
   refreshMs = 100,
+  host?: FluxionHost | null,
 ): AxisTickSet | null {
   const spec = getAxisSpec(layers, axisLayerId);
   const config = spec?.config;
 
   const isTimeMode = config?.xMode === "time";
+  const isAutoY = config?.yMode === "auto";
 
-  const fixedTicks = useMemo(() => {
-    if (!config || isTimeMode) return null;
-    return computeFromConfig(config);
-  }, [config, isTimeMode]);
+  // Live y bounds from the worker (yMode:"auto" only).
+  const [liveY, setLiveY] = useState<{ min: number; max: number } | null>(null);
 
-  const [timeTicks, setTimeTicks] = useState<AxisTickSet | null>(() => {
-    if (!config || !isTimeMode) return null;
-    return computeFromConfig(config, Date.now());
-  });
+  useEffect(() => {
+    if (!isAutoY || !host) {
+      setLiveY(null);
+      return;
+    }
+    return host.onBoundsChange((yMin, yMax) => {
+      setLiveY({ min: yMin, max: yMax });
+    });
+  }, [host, isAutoY]);
+
+  const liveYMin = isAutoY && liveY ? liveY.min : undefined;
+  const liveYMax = isAutoY && liveY ? liveY.max : undefined;
 
   const configRef = useRef(config);
   configRef.current = config;
+  const liveYRef = useRef<{ min?: number; max?: number }>({});
+  liveYRef.current = { min: liveYMin, max: liveYMax };
+
+  const fixedTicks = useMemo(() => {
+    if (!config || isTimeMode) return null;
+    return computeFromConfig(config, undefined, liveYMin, liveYMax);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [config, isTimeMode, liveYMin, liveYMax]);
+
+  const [timeTicks, setTimeTicks] = useState<AxisTickSet | null>(() => {
+    if (!config || !isTimeMode) return null;
+    return computeFromConfig(config, Date.now(), liveYMin, liveYMax);
+  });
 
   useEffect(() => {
     if (!isTimeMode) return;
     const id = setInterval(() => {
       const c = configRef.current;
       if (!c) return;
-      setTimeTicks(computeFromConfig(c, Date.now()));
+      const ly = liveYRef.current;
+      setTimeTicks(computeFromConfig(c, Date.now(), ly.min, ly.max));
     }, refreshMs);
     return () => clearInterval(id);
   }, [isTimeMode, refreshMs]);
+
+  // Force a timeTicks re-render when liveY changes (for time mode).
+  useEffect(() => {
+    if (!isTimeMode || !config) return;
+    setTimeTicks(computeFromConfig(config, Date.now(), liveYMin, liveYMax));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [liveYMin, liveYMax]);
 
   if (!config) return null;
   return isTimeMode ? timeTicks : fixedTicks;

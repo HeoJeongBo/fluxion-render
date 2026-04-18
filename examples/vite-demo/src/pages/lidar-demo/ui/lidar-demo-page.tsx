@@ -1,9 +1,11 @@
+import type { FluxionHost } from "@heojeongbo/fluxion-render";
 import {
   axisGridLayer,
+  FluxionCanvas,
   lidarLayer,
-  useFluxionCanvas,
   useFluxionStream,
 } from "@heojeongbo/fluxion-render/react";
+import { useMemo, useState } from "react";
 import {
   generateLaserScanMessage,
   type LaserScanMessage,
@@ -15,17 +17,6 @@ const POINTS_PER_SCAN = 30_000;
 const RANGE_MAX = 40;
 const STRIDE = 4;
 
-/**
- * User-owned transform: ROS2 `sensor_msgs/LaserScan` → stride-4 Float32Array
- * that the LiDAR layer consumes.
- *
- * Allocates a fresh buffer per call on purpose — `pushRaw` requires
- * `byteOffset === 0` (subarrays into a shared pool would be rejected by
- * `FluxionHost.pushData`). For 30k points at 120Hz this is ~57 MB/s of
- * short-lived Float32Array allocations; V8 handles that comfortably.
- *
- * Declared at module scope so React doesn't recreate the closure per render.
- */
 const transform = (msg: LaserScanMessage): Float32Array => {
   const n = msg.ranges.length;
   const out = new Float32Array(n * STRIDE);
@@ -47,38 +38,32 @@ export interface LidarDemoPageProps {
   compactHud?: boolean;
 }
 
-/**
- * Simulates a rotating 2D LiDAR publishing 30k-point `LaserScan` messages
- * at ~120Hz. Each frame the mock subscriber delivers a fresh message, the
- * user-owned `transform` converts it to a stride-4 Float32Array, and the
- * typed handle pushes it zero-copy to the worker.
- *
- * y-axis stays fixed here — LiDAR points live in a cartesian plane, not a
- * time series, so auto y-fit would warp the geometry.
- */
 export function LidarDemoPage({ compactHud = false }: LidarDemoPageProps = {}) {
-  const { containerRef, host } = useFluxionCanvas({
-    hostOptions: { bgColor: THEME.chart.canvasBg },
-    layers: [
+  const [host, setHost] = useState<FluxionHost | null>(null);
+
+  const layers = useMemo(
+    () => [
       axisGridLayer("axis", {
         xRange: [-RANGE_MAX, RANGE_MAX],
         yRange: [-RANGE_MAX, RANGE_MAX],
-        showXGrid: false,
+        gridColor: THEME.chart.gridColor,
+        gridDashArray: [3, 3],
+        axisColor: THEME.chart.axisColor,
         showXLabels: false,
-        showYGrid: false,
-        showAxes: false,
         showYLabels: false,
+        yPadPx: 8,
+        showAxes: true,
       }),
       lidarLayer("lidar", { stride: STRIDE, pointSize: 2, intensityMax: 1 }),
     ],
-  });
+    [],
+  );
 
   const { rate: hz } = useFluxionStream({
     host,
     intervalMs: 1000 / TARGET_HZ,
     setup: (h) => ({ cloud: h.lidar("lidar", STRIDE), frame: { value: 0 } }),
     tick: (_t, state) => {
-      // Mock a ROS2 LaserScan subscriber callback.
       const msg = generateLaserScanMessage(state.frame.value++, POINTS_PER_SCAN, {
         rangeMax: RANGE_MAX,
       });
@@ -89,7 +74,14 @@ export function LidarDemoPage({ compactHud = false }: LidarDemoPageProps = {}) {
 
   return (
     <div style={{ position: "relative", width: "100%", height: "100%" }}>
-      <div ref={containerRef} style={{ width: "100%", height: "100%" }} />
+      <FluxionCanvas
+        externalAxes
+        axisLayerId="axis"
+        axisColor={THEME.chart.labelColor}
+        layers={layers}
+        hostOptions={{ bgColor: THEME.chart.canvasBg }}
+        onReady={setHost}
+      />
       <div
         style={{
           position: "absolute",

@@ -15,7 +15,9 @@ import { FluxionWorkerPool } from "../../../features/worker-pool";
  * // Pass to each canvas:
  * <FluxionCanvas hostOptions={{ pool }} ... />
  */
-export function useFluxionWorkerPool(opts: FluxionWorkerPoolOptions = {}): FluxionWorkerPool {
+export function useFluxionWorkerPool(
+  opts: FluxionWorkerPoolOptions = {},
+): FluxionWorkerPool {
   const optsRef = useRef(opts);
   const poolRef = useRef<FluxionWorkerPool | null>(null);
 

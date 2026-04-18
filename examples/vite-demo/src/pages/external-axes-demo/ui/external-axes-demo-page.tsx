@@ -48,6 +48,7 @@ export function ExternalAxesDemoPage() {
         yMode: "auto",
         showXLabels: false,
         showYLabels: false,
+        yPadPx: 8,
         gridColor: THEME.chart.gridColor,
         gridDashArray: [3, 3],
         axisColor: THEME.chart.axisColor,

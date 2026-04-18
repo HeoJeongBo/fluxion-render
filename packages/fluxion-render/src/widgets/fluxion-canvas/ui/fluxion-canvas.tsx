@@ -12,21 +12,25 @@ export interface FluxionCanvasProps {
   onReady?: (host: FluxionHost) => void;
   /**
    * When true, renders y-axis labels in a separate canvas to the LEFT
-   * and x-axis labels in a separate canvas BELOW the chart.
-   * Pair with `showXLabels: false, showYLabels: false` on the axis-grid layer
-   * to avoid double-drawing inside the chart canvas.
+   * and x-axis labels in a separate canvas BELOW the chart — matching
+   * Recharts' external-axis layout. Pair with `showXLabels: false,
+   * showYLabels: false` on the axis-grid layer to avoid double-drawing.
    */
   externalAxes?: boolean;
   /** ID of the axis-grid layer used for tick computation. Required when `externalAxes` is true. */
   axisLayerId?: string;
-  /** Width of the y-axis canvas in px. Default: 48. */
+  /** Width of the y-axis canvas in px. Default: 60 (Recharts YAxis default). */
   yAxisWidth?: number;
-  /** Height of the x-axis canvas in px. Default: 20. */
+  /** Height of the x-axis canvas in px. Default: 30 (Recharts XAxis default). */
   xAxisHeight?: number;
-  /** Tick label color for external axis canvases. Default: "rgba(255,255,255,0.7)". */
+  /** Tick label + tick mark color. Default: "#666" (Recharts CartesianAxis stroke). */
   axisColor?: string;
-  /** Tick label font for external axis canvases. Default: "10px sans-serif". */
+  /** Tick label font. Default: "11px sans-serif". */
   axisFont?: string;
+  /** Length of tick marks in px. Default: 6 (Recharts tickSize). */
+  axisTickSize?: number;
+  /** Gap between tick mark and label in px. Default: 4. */
+  axisTickMargin?: number;
 }
 
 export interface FluxionCanvasHandle {
@@ -48,18 +52,25 @@ export const FluxionCanvas = forwardRef<FluxionCanvasHandle, FluxionCanvasProps>
       onReady,
       externalAxes,
       axisLayerId = "",
-      yAxisWidth = 48,
-      xAxisHeight = 20,
+      yAxisWidth = 60,
+      xAxisHeight = 30,
       axisColor,
       axisFont,
+      axisTickSize,
+      axisTickMargin,
     },
     ref,
   ) {
     const { containerRef, host } = useFluxionCanvas({ layers, hostOptions, onReady });
     useImperativeHandle(ref, () => ({ getHost: () => host }), [host]);
 
-    const tickSet = useAxisTicks(externalAxes ? layers : [], axisLayerId);
-    const axisOpts = { color: axisColor, font: axisFont };
+    const tickSet = useAxisTicks(externalAxes ? layers : [], axisLayerId, 100, host);
+    const axisOpts = {
+      color: axisColor,
+      font: axisFont,
+      tickSize: axisTickSize,
+      tickMargin: axisTickMargin,
+    };
     const yCanvasRef = useYAxisCanvas(tickSet?.yTicks ?? [], axisOpts);
     const xCanvasRef = useXAxisCanvas(tickSet?.xTicks ?? [], axisOpts);
 
@@ -68,7 +79,14 @@ export const FluxionCanvas = forwardRef<FluxionCanvasHandle, FluxionCanvasProps>
         <div
           ref={containerRef}
           className={className}
-          style={{ position: "relative", width: "100%", height: "100%", ...style }}
+          style={{
+            position: "relative",
+            width: "100%",
+            height: "100%",
+            minWidth: 0,
+            minHeight: 0,
+            ...style,
+          }}
         />
       );
     }
@@ -82,22 +100,45 @@ export const FluxionCanvas = forwardRef<FluxionCanvasHandle, FluxionCanvasProps>
           gridTemplateRows: `1fr ${xAxisHeight}px`,
           width: "100%",
           height: "100%",
+          minWidth: 0,
+          minHeight: 0,
           ...style,
         }}
       >
         {/* y-axis canvas — left column, top row */}
         <canvas
           ref={yCanvasRef}
-          style={{ display: "block", width: "100%", height: "100%" }}
+          style={{
+            display: "block",
+            width: "100%",
+            height: "100%",
+            minWidth: 0,
+            minHeight: 0,
+          }}
         />
         {/* chart canvas — right column, top row */}
-        <div ref={containerRef} style={{ position: "relative", width: "100%", height: "100%" }} />
+        <div
+          ref={containerRef}
+          style={{
+            position: "relative",
+            width: "100%",
+            height: "100%",
+            minWidth: 0,
+            minHeight: 0,
+          }}
+        />
         {/* corner — left column, bottom row */}
         <div />
         {/* x-axis canvas — right column, bottom row */}
         <canvas
           ref={xCanvasRef}
-          style={{ display: "block", width: "100%", height: "100%" }}
+          style={{
+            display: "block",
+            width: "100%",
+            height: "100%",
+            minWidth: 0,
+            minHeight: 0,
+          }}
         />
       </div>
     );
