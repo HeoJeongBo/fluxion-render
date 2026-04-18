@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.1](https://github.com/HeoJeongBo/fluxion-render/compare/v0.3.0...v0.3.1) (2026-04-18)
+
+
+### Features
+
+* recharts style ([d91b7dc](https://github.com/HeoJeongBo/fluxion-render/commit/d91b7dc93dcf54603da8728b4ddd6f0bf7a2a094))
+
 # [0.3.0](https://github-personal/HeoJeongBo/fluxion-render/compare/v0.2.4...v0.3.0) (2026-04-17)
 
 
