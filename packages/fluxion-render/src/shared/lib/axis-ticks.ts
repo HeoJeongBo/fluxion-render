@@ -21,7 +21,7 @@ export interface ComputeAxisTicksOptions {
   targetTicks?: number;
   xMode?: "fixed" | "time";
   timeOrigin?: number | null;
-  xTickFormat?: string;
+  xTickFormat?: string | ((v: number) => string);
 }
 
 export function computeAxisTicks(opts: ComputeAxisTicksOptions): AxisTickSet {
@@ -56,8 +56,9 @@ export function formatTick(
   value: number,
   mode: "fixed" | "time",
   timeOrigin: number | null,
-  pattern: string,
+  pattern: string | ((v: number) => string),
 ): string {
+  if (typeof pattern === "function") return pattern(value);
   if (mode === "time") {
     if (timeOrigin != null) {
       return formatClock(timeOrigin + value, pattern);

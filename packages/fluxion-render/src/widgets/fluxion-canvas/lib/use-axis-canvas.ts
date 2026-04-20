@@ -24,7 +24,7 @@ interface ResolvedOpts {
   tickMargin: number;
 }
 
-function resolve(o: AxisCanvasOptions = {}): ResolvedOpts {
+function resolveOpts(o: AxisCanvasOptions = {}): ResolvedOpts {
   return {
     color: o.color ?? DEFAULT_COLOR,
     font: o.font ?? DEFAULT_FONT,
@@ -47,11 +47,18 @@ function redraw(
   const dpr = window.devicePixelRatio || 1;
   const rect = canvas.getBoundingClientRect();
   if (rect.width === 0 || rect.height === 0) return;
-  canvas.width = Math.round(rect.width * dpr);
-  canvas.height = Math.round(rect.height * dpr);
+  const targetW = Math.round(rect.width * dpr);
+  const targetH = Math.round(rect.height * dpr);
+  // Only reassign canvas.width/height when the size actually changes.
+  // Reassigning always resets the context and is expensive.
+  const sizeChanged = canvas.width !== targetW || canvas.height !== targetH;
+  if (sizeChanged) {
+    canvas.width = targetW;
+    canvas.height = targetH;
+  }
   const ctx = canvas.getContext("2d");
   if (!ctx) return;
-  ctx.scale(dpr, dpr);
+  if (sizeChanged) ctx.scale(dpr, dpr);
   drawFn(ctx, ticksRef.current ?? [], rect, optsRef.current);
 }
 
@@ -70,7 +77,7 @@ export function useYAxisCanvas(
   options: AxisCanvasOptions = {},
 ): RefObject<HTMLCanvasElement> {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const resolved = resolve(options);
+  const resolved = resolveOpts(options);
 
   const ticksRef = useRef(ticks);
   ticksRef.current = ticks;
@@ -105,7 +112,7 @@ export function useXAxisCanvas(
   options: AxisCanvasOptions = {},
 ): RefObject<HTMLCanvasElement> {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const resolved = resolve(options);
+  const resolved = resolveOpts(options);
 
   const ticksRef = useRef(ticks);
   ticksRef.current = ticks;

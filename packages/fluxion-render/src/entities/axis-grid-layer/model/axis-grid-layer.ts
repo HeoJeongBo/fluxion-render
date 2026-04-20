@@ -30,14 +30,18 @@ export interface AxisGridConfig {
    */
   timeOrigin?: number;
   /**
-   * Clock-pattern string used to render x tick labels when `xMode: "time"`
-   * AND `timeOrigin` is set. Default `"HH:mm:ss"`. Supported tokens:
-   * `HH / H / mm / m / ss / s / SSS / S`. Anything else is a literal.
+   * Formatter for x tick labels.
    *
-   * Ignored when `timeOrigin` is not provided — elapsed-seconds fallback
-   * (`"X.Xs"`) is used instead.
+   * - **Function** `(value: number) => string`: called directly for every
+   *   tick value regardless of `xMode`. Useful for simple numeric labels
+   *   (`v => String(v)`), units (`v => \`${v}ms\``), etc.
+   * - **String** clock-pattern (e.g. `"HH:mm:ss"`): used when
+   *   `xMode: "time"` AND `timeOrigin` is set. Supported tokens:
+   *   `HH / H / mm / m / ss / s / SSS / S`. Default `"HH:mm:ss"`.
+   *   Ignored when `timeOrigin` is not provided — elapsed-seconds fallback
+   *   (`"X.Xs"`) is used instead.
    */
-  xTickFormat?: string;
+  xTickFormat?: string | ((v: number) => string);
 
   // ─── y scaling ────────────────────────────────────────────
   /**
@@ -106,7 +110,7 @@ export class AxisGridLayer implements Layer {
   private xMode: "fixed" | "time" = "fixed";
   private timeWindowMs = 5000;
   private timeOrigin: number | null = null;
-  private xTickFormat = "HH:mm:ss";
+  private xTickFormat: string | ((v: number) => string) = "HH:mm:ss";
   private yMode: "fixed" | "auto" = "fixed";
   private yAutoPadding = 0.1;
   private yAutoMin: number | undefined;

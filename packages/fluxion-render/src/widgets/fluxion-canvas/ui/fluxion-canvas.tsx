@@ -1,4 +1,4 @@
-import { type CSSProperties, forwardRef, useImperativeHandle } from "react";
+import { type CSSProperties, forwardRef, useImperativeHandle, useMemo } from "react";
 import type { FluxionHost, FluxionHostOptions } from "../../../features/host";
 import { useXAxisCanvas, useYAxisCanvas } from "../lib/use-axis-canvas";
 import { useAxisTicks } from "../lib/use-axis-ticks";
@@ -65,12 +65,10 @@ export const FluxionCanvas = forwardRef<FluxionCanvasHandle, FluxionCanvasProps>
     useImperativeHandle(ref, () => ({ getHost: () => host }), [host]);
 
     const tickSet = useAxisTicks(externalAxes ? layers : [], axisLayerId, 100, host);
-    const axisOpts = {
-      color: axisColor,
-      font: axisFont,
-      tickSize: axisTickSize,
-      tickMargin: axisTickMargin,
-    };
+    const axisOpts = useMemo(
+      () => ({ color: axisColor, font: axisFont, tickSize: axisTickSize, tickMargin: axisTickMargin }),
+      [axisColor, axisFont, axisTickSize, axisTickMargin],
+    );
     const yCanvasRef = useYAxisCanvas(tickSet?.yTicks ?? [], axisOpts);
     const xCanvasRef = useXAxisCanvas(tickSet?.xTicks ?? [], axisOpts);
 
