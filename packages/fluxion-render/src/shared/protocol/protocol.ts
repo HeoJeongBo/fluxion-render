@@ -130,12 +130,15 @@ export type WorkerOp = (typeof WorkerOp)[keyof typeof WorkerOp];
  * Sent by the engine after each draw frame when the effective y-bounds
  * have changed. Enables the React-side `useAxisTicks` hook to show live
  * y-axis labels for `yMode: "auto"`.
+ * `latestT` is the worker-side `viewport.latestT` so the external x-axis
+ * uses the same time origin as the canvas grid lines.
  */
 export interface BoundsUpdateMsg {
   op: typeof WorkerOp.BOUNDS_UPDATE;
   hostId?: string;
   yMin: number;
   yMax: number;
+  latestT: number;
 }
 
 export type WorkerMsg = BoundsUpdateMsg;

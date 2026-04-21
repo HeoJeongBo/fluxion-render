@@ -47,8 +47,6 @@ function computeFromConfig(
     xMax = config.xRange?.[1] ?? 1;
   }
 
-  // When yMode:"auto" and the worker has sent live bounds, use those.
-  // Otherwise fall back to the configured yRange.
   const yMin = liveYMin ?? config.yRange?.[0] ?? -1;
   const yMax = liveYMax ?? config.yRange?.[1] ?? 1;
 
@@ -61,6 +59,7 @@ function computeFromConfig(
     xMode,
     timeOrigin,
     xTickFormat: config.xTickFormat,
+    xTickIntervalMs: config.xTickIntervalMs,
   });
 }
 
@@ -68,7 +67,7 @@ function computeFromConfig(
  * Computes axis ticks for the given axis-grid layer spec.
  *
  * - `xMode: "fixed"` — computed once via useMemo
- * - `xMode: "time"` — recomputed at `refreshMs` interval (default 100ms)
+ * - `xMode: "time"` — recomputed at `refreshMs` interval (default 16ms ≈ 1 frame)
  * - `yMode: "auto"` — subscribes to `host.onBoundsChange` and uses the
  *   worker's live y bounds for tick computation. Falls back to `yRange`
  *   until the first bounds message arrives.
@@ -76,7 +75,7 @@ function computeFromConfig(
 export function useAxisTicks(
   layers: FluxionLayerSpec[],
   axisLayerId: string,
-  refreshMs = 100,
+  refreshMs = 16,
   host?: FluxionHost | null,
 ): AxisTickSet | null {
   const spec = getAxisSpec(layers, axisLayerId);
@@ -85,7 +84,6 @@ export function useAxisTicks(
   const isTimeMode = config?.xMode === "time";
   const isAutoY = config?.yMode === "auto";
 
-  // Live y bounds from the worker (yMode:"auto" only).
   const [liveY, setLiveY] = useState<{ min: number; max: number } | null>(null);
 
   useEffect(() => {

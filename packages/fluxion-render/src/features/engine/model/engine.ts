@@ -147,6 +147,7 @@ export class Engine {
           hostId: this.hostId,
           yMin,
           yMax,
+          latestT: this.viewport.latestT,
         });
       } catch {
         // Worker context may not support postMessage in tests

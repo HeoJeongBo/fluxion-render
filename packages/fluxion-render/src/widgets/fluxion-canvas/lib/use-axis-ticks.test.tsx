@@ -139,24 +139,12 @@ describe("useAxisTicks", () => {
         />,
       );
       const countBefore = received.length;
-      act(() => {
-        vi.advanceTimersByTime(250);
-      });
-      // At least 2 interval fires should have produced new renders
+      act(() => { vi.advanceTimersByTime(250); });
       expect(received.length).toBeGreaterThan(countBefore);
     });
 
-    it("skips setState when computed ticks are equal to previous", () => {
-      // Spy on React's useState setter to count how many times the tick state
-      // actually changes. With tickSetsEqual, identical results must not call
-      // the setter with a new object (the updater returns prev unchanged).
-      //
-      // We verify this indirectly: fire the interval many times with a frozen
-      // clock (same xMin/xMax → same tick values) and assert that the number
-      // of distinct AxisTickSet objects delivered via onTicks does NOT grow
-      // proportionally with the number of interval fires.
+    it("skips setState when computed ticks are identical (frozen clock)", () => {
       vi.setSystemTime(1_000_000);
-
       const received: (AxisTickSet | null)[] = [];
       render(
         <Harness
@@ -166,23 +154,15 @@ describe("useAxisTicks", () => {
           onTicks={(t) => received.push(t)}
         />,
       );
-
-      // Let the state stabilise after mount
       act(() => { vi.advanceTimersByTime(100); });
       const countAfterSettle = received.length;
-
-      // Fire 10 more intervals without moving the clock
+      // Fire 10 more intervals without moving the clock — tickSetsEqual suppresses re-renders
       act(() => { vi.advanceTimersByTime(1000); });
-
-      // At most 1 extra render is allowed (React internal batching edge case).
-      // Without tickSetsEqual this would be ~10 extra renders.
       expect(received.length - countAfterSettle).toBeLessThanOrEqual(1);
     });
 
     it("re-renders when tick labels change (time advances enough)", () => {
-      // Start at a specific time so ticks are predictable
       vi.setSystemTime(1_000_000);
-
       const received: (AxisTickSet | null)[] = [];
       render(
         <Harness
@@ -193,15 +173,13 @@ describe("useAxisTicks", () => {
         />,
       );
       const countAfterMount = received.length;
-
-      // Advance system clock by 1 full second — x tick labels will shift
       act(() => {
         vi.advanceTimersByTime(100);
         vi.setSystemTime(1_001_000);
         vi.advanceTimersByTime(100);
       });
-
       expect(received.length).toBeGreaterThan(countAfterMount);
     });
+
   });
 });

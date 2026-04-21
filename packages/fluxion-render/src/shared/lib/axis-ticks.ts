@@ -1,4 +1,4 @@
-import { niceTicks } from "./math";
+import { intervalTicks, niceTicks } from "./math";
 import { formatClock } from "./time-format";
 
 export interface AxisTick {
@@ -22,12 +22,16 @@ export interface ComputeAxisTicksOptions {
   xMode?: "fixed" | "time";
   timeOrigin?: number | null;
   xTickFormat?: string | ((v: number) => string);
+  /** Fixed x tick interval (ms). When set, overrides targetTicks. */
+  xTickIntervalMs?: number;
 }
 
 export function computeAxisTicks(opts: ComputeAxisTicksOptions): AxisTickSet {
   const { xMin, xMax, yMin, yMax, targetTicks = 6 } = opts;
 
-  const xRaw = niceTicks(xMin, xMax, targetTicks);
+  const xRaw = opts.xTickIntervalMs != null
+    ? intervalTicks(xMin, xMax, opts.xTickIntervalMs)
+    : niceTicks(xMin, xMax, targetTicks);
   const yRaw = niceTicks(yMin, yMax, targetTicks);
   const xSpan = xMax - xMin;
   const ySpan = yMax - yMin;

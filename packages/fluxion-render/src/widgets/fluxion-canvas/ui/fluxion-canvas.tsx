@@ -1,4 +1,5 @@
 import { type CSSProperties, forwardRef, useImperativeHandle, useMemo } from "react";
+import type { AxisGridConfig } from "../../../entities/axis-grid-layer";
 import type { FluxionHost, FluxionHostOptions } from "../../../features/host";
 import { useXAxisCanvas, useYAxisCanvas } from "../lib/use-axis-canvas";
 import { useAxisTicks } from "../lib/use-axis-ticks";
@@ -31,6 +32,13 @@ export interface FluxionCanvasProps {
   axisTickSize?: number;
   /** Gap between tick mark and label in px. Default: 4. */
   axisTickMargin?: number;
+  /**
+   * Live config overrides merged on top of the axis-grid layer spec for
+   * external tick computation. Use this to keep the external axis in sync
+   * with dynamic values (e.g. `timeWindowMs`) that you also send to the
+   * worker via `useLayerConfig` — since `layers` is captured on mount only.
+   */
+  axisConfig?: Partial<AxisGridConfig>;
 }
 
 export interface FluxionCanvasHandle {
@@ -58,13 +66,24 @@ export const FluxionCanvas = forwardRef<FluxionCanvasHandle, FluxionCanvasProps>
       axisFont,
       axisTickSize,
       axisTickMargin,
+      axisConfig,
     },
     ref,
   ) {
     const { containerRef, host } = useFluxionCanvas({ layers, hostOptions, onReady });
     useImperativeHandle(ref, () => ({ getHost: () => host }), [host]);
 
-    const tickSet = useAxisTicks(externalAxes ? layers : [], axisLayerId, 100, host);
+    const tickLayers = useMemo(() => {
+      const base = externalAxes ? layers : [];
+      if (!axisConfig || !axisLayerId) return base;
+      return base.map((l) =>
+        l.id === axisLayerId && l.kind === "axis-grid"
+          ? { ...l, config: { ...l.config, ...axisConfig } }
+          : l,
+      );
+    }, [externalAxes, layers, axisLayerId, axisConfig]);
+
+    const tickSet = useAxisTicks(tickLayers, axisLayerId, 16, host);
     const axisOpts = useMemo(
       () => ({ color: axisColor, font: axisFont, tickSize: axisTickSize, tickMargin: axisTickMargin }),
       [axisColor, axisFont, axisTickSize, axisTickMargin],

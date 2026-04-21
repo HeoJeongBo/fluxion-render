@@ -52,6 +52,7 @@ export function LineDemoPage({
         timeWindowMs: DEFAULT_WINDOW_MS,
         timeOrigin,
         xTickFormat: "HH:mm:ss.SSS",
+        xTickIntervalMs: 1000,
         yMode: "auto",
         gridColor: THEME.chart.gridColor,
         gridDashArray: [3, 3],
@@ -83,6 +84,7 @@ export function LineDemoPage({
       <FluxionCanvas
         externalAxes
         axisLayerId="axis"
+        axisConfig={{ timeWindowMs: windowMs }}
         axisColor={THEME.chart.labelColor}
         layers={layers}
         hostOptions={{ bgColor: THEME.chart.canvasBg }}

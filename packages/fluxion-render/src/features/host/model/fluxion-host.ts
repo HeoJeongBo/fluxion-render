@@ -74,7 +74,7 @@ function dtypeOf(arr: FluxionTypedArray): DType {
  *   host.dispose();
  */
 /** Callback shape for `onBoundsChange`. */
-export type BoundsChangeListener = (yMin: number, yMax: number) => void;
+export type BoundsChangeListener = (yMin: number, yMax: number, latestT: number) => void;
 
 export class FluxionHost {
   private worker: {
@@ -121,7 +121,7 @@ export class FluxionHost {
       if (!msg || typeof msg !== "object" || !("op" in msg)) return;
       if (msg.op === WorkerOp.BOUNDS_UPDATE) {
         const bu = msg as BoundsUpdateMsg;
-        for (const fn of this.boundsListeners) fn(bu.yMin, bu.yMax);
+        for (const fn of this.boundsListeners) fn(bu.yMin, bu.yMax, bu.latestT);
       }
     };
     if (this.worker.addEventListener) {

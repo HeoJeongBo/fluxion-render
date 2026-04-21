@@ -1,5 +1,5 @@
 import { formatTick } from "../../../shared/lib/axis-ticks";
-import { niceTicks } from "../../../shared/lib/math";
+import { intervalTicks, niceTicks } from "../../../shared/lib/math";
 import type { Layer } from "../../../shared/model/layer";
 import type { Bounds, Viewport } from "../../../shared/model/viewport";
 
@@ -76,6 +76,12 @@ export interface AxisGridConfig {
    */
   gridDashArray?: number[];
   /**
+   * Fixed x tick interval in ms. When set, overrides `targetTicks` and
+   * snaps tick positions to multiples of this value.
+   * Example: `xTickIntervalMs: 1000` produces ticks at exactly 1-second boundaries.
+   */
+  xTickIntervalMs?: number;
+  /**
    * Vertical inset in CSS pixels applied to both the chart canvas (via
    * `viewport.yPadPx`) and the external axis canvas (matched constant).
    * Keeps grid lines and data strokes away from the top/bottom edge so
@@ -122,6 +128,7 @@ export class AxisGridLayer implements Layer {
   private showYLabels = true;
   private gridDashArray: number[] = [];
   private yPadPx = 0;
+  private xTickIntervalMs: number | undefined;
 
   constructor(id: string) {
     this.id = id;
@@ -158,6 +165,7 @@ export class AxisGridLayer implements Layer {
     if (c.showYLabels !== undefined) this.showYLabels = c.showYLabels;
     if (c.gridDashArray !== undefined) this.gridDashArray = c.gridDashArray;
     if (c.yPadPx !== undefined) this.yPadPx = c.yPadPx;
+    if (c.xTickIntervalMs !== undefined) this.xTickIntervalMs = c.xTickIntervalMs;
   }
 
   setData(_buffer: ArrayBuffer, _length: number, _viewport: Viewport): void {}
@@ -213,7 +221,9 @@ export class AxisGridLayer implements Layer {
     }
 
     const { widthPx: w, heightPx: h } = viewport;
-    const xTicks = niceTicks(this.bounds.xMin, this.bounds.xMax, this.targetTicks);
+    const xTicks = this.xTickIntervalMs != null
+      ? intervalTicks(this.bounds.xMin, this.bounds.xMax, this.xTickIntervalMs)
+      : niceTicks(this.bounds.xMin, this.bounds.xMax, this.targetTicks);
     const yTicks = niceTicks(this.bounds.yMin, this.bounds.yMax, this.targetTicks);
 
     // ── Grid lines ──

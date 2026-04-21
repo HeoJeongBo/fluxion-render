@@ -14,6 +14,17 @@ export function niceStep(range: number, targetTicks: number): number {
   return nice * pow10;
 }
 
+/** Generate ticks at fixed `interval` boundaries spanning [min, max]. */
+export function intervalTicks(min: number, max: number, interval: number): number[] {
+  if (!isFinite(min) || !isFinite(max) || max <= min || interval <= 0) return [];
+  const start = Math.ceil(min / interval) * interval;
+  const out: number[] = [];
+  for (let v = start; v <= max + interval * 1e-6; v += interval) {
+    out.push(Number(v.toFixed(12)));
+  }
+  return out;
+}
+
 export function niceTicks(min: number, max: number, targetTicks = 6): number[] {
   if (!isFinite(min) || !isFinite(max) || max <= min) return [];
   const step = niceStep(max - min, targetTicks);
