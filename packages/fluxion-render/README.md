@@ -140,11 +140,31 @@ lineLayer('signal', {
   capacity?: number,     // ring buffer size in samples (explicit)
   retentionMs?: number,  // data retention window in ms
   maxHz?: number,        // expected max sample rate — auto-calculates capacity
+  visible?: boolean,     // show/hide without reinitialising the layer (default true)
 })
 ```
 
 `retentionMs` + `maxHz` auto-calculate `capacity = ceil(retentionMs/1000 * maxHz * 1.1)`.  
 Explicit `capacity` always takes priority when both are set.
+
+**Toggling series visibility** — use `visible` with `useLayerConfig` to show/hide a layer without reinitialising the host or losing buffered data:
+
+```tsx
+const [enabled, setEnabled] = useState({ s1: true, s2: true, s3: false });
+
+// layers is fixed on mount — never recreated on toggle
+const layers = useMemo(() => [
+  axisGridLayer('axis', { ... }),
+  lineLayer('s1', { color: '#4fc3f7' }),
+  lineLayer('s2', { color: '#80ffa0' }),
+  lineLayer('s3', { color: '#ffb060' }),
+], []);
+
+// only a lightweight CONFIG message is sent to the worker on each toggle
+useLayerConfig(host, lineLayer('s1', { visible: enabled.s1 }));
+useLayerConfig(host, lineLayer('s2', { visible: enabled.s2 }));
+useLayerConfig(host, lineLayer('s3', { visible: enabled.s3 }));
+```
 
 ```ts
 // Keep 10 seconds of data at up to 60Hz → capacity = 660
@@ -306,6 +326,47 @@ useFluxionHistorical({ host, layerId: 'plot', data: chartData });
 
 return <FluxionCanvas layers={layers} onReady={setHost} />;
 ```
+
+### `<FluxionLegend>`
+
+React overlay legend rendered on top of the canvas. Zero performance cost — fully independent of the OffscreenCanvas render loop.
+
+```tsx
+import { FluxionLegend } from '@heojeongbo/fluxion-render/react';
+
+// Always visible
+<div style={{ position: 'relative', width: '100%', height: '100%' }}>
+  <FluxionCanvas layers={layers} onReady={setHost} />
+  <FluxionLegend
+    items={[
+      { color: '#4fc3f7', label: 'Signal A' },
+      { color: '#80ffa0', label: 'Signal B' },
+    ]}
+    position="top-left"
+  />
+</div>
+
+// Visible only on container hover
+const containerRef = useRef<HTMLDivElement>(null);
+
+<div ref={containerRef} style={{ position: 'relative', width: '100%', height: '100%' }}>
+  <FluxionCanvas layers={layers} onReady={setHost} />
+  <FluxionLegend
+    items={legendItems}
+    visibility="hover"
+    containerRef={containerRef}
+    position="top-right"
+  />
+</div>
+```
+
+| Prop | Type | Default | Description |
+|------|------|---------|-------------|
+| `items` | `LegendItem[]` | required | `{ color: string, label: string }[]` |
+| `visibility` | `'always' \| 'hover'` | `'always'` | Always shown, or fade in on hover |
+| `position` | `'top-left' \| 'top-right' \| 'bottom-left' \| 'bottom-right'` | `'top-right'` | Corner anchor |
+| `containerRef` | `RefObject<HTMLElement>` | — | Hover target in `'hover'` mode. Falls back to the legend's parent element |
+| `style` | `CSSProperties` | — | Additional styles |
 
 ### `useLayerConfig(host, layerSpec)`
 

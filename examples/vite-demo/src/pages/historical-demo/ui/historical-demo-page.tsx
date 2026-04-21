@@ -2,10 +2,11 @@ import type { FluxionHost, XyPoint } from "@heojeongbo/fluxion-render";
 import {
   axisGridLayer,
   FluxionCanvas,
+  FluxionLegend,
   lineStaticLayer,
   useFluxionHistorical,
 } from "@heojeongbo/fluxion-render/react";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { rng } from "../../../shared/lib/test-data";
 import { THEME } from "../../../shared/ui/theme";
 
@@ -60,6 +61,7 @@ export interface HistoricalDemoPageProps {
 export function HistoricalDemoPage({ compactHud = false }: HistoricalDemoPageProps = {}) {
   const [host, setHost] = useState<FluxionHost | null>(null);
   const [activeKey, setActiveKey] = useState<DatasetKey>("sine");
+  const containerRef = useRef<HTMLDivElement>(null);
 
   const data = DATASETS[activeKey];
 
@@ -82,8 +84,13 @@ export function HistoricalDemoPage({ compactHud = false }: HistoricalDemoPagePro
 
   useFluxionHistorical({ host, layerId: "plot", data });
 
+  const legendItems = [
+    { color: "#80ffa0", label: DATASET_LABELS.find((d) => d.id === activeKey)?.label ?? activeKey },
+  ];
+
   return (
-    <div style={{ position: "relative", width: "100%", height: "100%" }}>
+    <div ref={containerRef} style={{ position: "relative", width: "100%", height: "100%" }}>
+      <FluxionLegend items={legendItems} visibility="hover" containerRef={containerRef} position="top-left" />
       <FluxionCanvas
         externalAxes
         axisLayerId="axis"

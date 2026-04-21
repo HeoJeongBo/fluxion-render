@@ -25,3 +25,5 @@ export { useXAxisCanvas, useYAxisCanvas } from "./lib/use-axis-canvas";
 export { useAxisTicks } from "./lib/use-axis-ticks";
 export type { FluxionCanvasHandle, FluxionCanvasProps } from "./ui/fluxion-canvas";
 export { FluxionCanvas } from "./ui/fluxion-canvas";
+export type { FluxionLegendProps, LegendItem } from "./ui/fluxion-legend";
+export { FluxionLegend } from "./ui/fluxion-legend";

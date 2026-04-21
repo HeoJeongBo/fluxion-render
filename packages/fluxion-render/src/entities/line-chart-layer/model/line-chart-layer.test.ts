@@ -220,6 +220,41 @@ describe("LineChartLayer (streaming)", () => {
     });
   });
 
+  describe("visible flag", () => {
+    it("visible: false skips draw", () => {
+      const layer = new LineChartLayer("l");
+      layer.setConfig({ visible: false });
+      const vp = makeViewport();
+      layer.setData(new Float32Array([0, 0, 100, 1]).buffer, 4, vp);
+      const ctx = createFakeCtx();
+      layer.draw(ctx as unknown as OffscreenCanvasRenderingContext2D, vp);
+      expect(ctx.calls.some((c) => c.name === "stroke")).toBe(false);
+    });
+
+    it("visible: false skips scan (y extents untouched)", () => {
+      const layer = new LineChartLayer("l");
+      layer.setConfig({ visible: false });
+      const vp = makeViewport();
+      vp.setBounds({ xMin: 0, xMax: 1000, yMin: -100, yMax: 100 });
+      layer.setData(new Float32Array([0, 99, 100, -99]).buffer, 4, vp);
+      vp.beginScan();
+      layer.scan?.(vp);
+      expect(vp.observedYMin).toBe(Number.POSITIVE_INFINITY);
+      expect(vp.observedYMax).toBe(Number.NEGATIVE_INFINITY);
+    });
+
+    it("toggling visible back to true resumes draw", () => {
+      const layer = new LineChartLayer("l");
+      const vp = makeViewport();
+      layer.setData(new Float32Array([0, 0, 100, 1]).buffer, 4, vp);
+      layer.setConfig({ visible: false });
+      layer.setConfig({ visible: true });
+      const ctx = createFakeCtx();
+      layer.draw(ctx as unknown as OffscreenCanvasRenderingContext2D, vp);
+      expect(ctx.calls.some((c) => c.name === "stroke")).toBe(true);
+    });
+  });
+
   it("dispose clears the ring buffer", () => {
     const layer = new LineChartLayer("l");
     const vp = makeViewport();

@@ -9,6 +9,7 @@ export type { LayerKind } from "./shared/protocol";
 export {
   axisGridLayer,
   FluxionCanvas,
+  FluxionLegend,
   lidarLayer,
   lineLayer,
   lineStaticLayer,
@@ -24,6 +25,8 @@ export {
   type FluxionCanvasHandle,
   type FluxionCanvasProps,
   type FluxionLayerSpec,
+  type FluxionLegendProps,
+  type LegendItem,
   type ResizeInfo,
   type UseFluxionCanvasOptions,
   type UseFluxionCanvasResult,

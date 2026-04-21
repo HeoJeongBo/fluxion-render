@@ -11,6 +11,8 @@ export interface LineChartConfig {
   retentionMs?: number;
   /** Expected max sample rate in Hz. Combined with retentionMs to auto-calculate capacity. */
   maxHz?: number;
+  /** When false, skip draw and scan. Default true. */
+  visible?: boolean;
 }
 
 /**
@@ -26,6 +28,7 @@ export class LineChartLayer implements Layer {
   readonly id: string;
   private color = "#4fc3f7";
   private lineWidth = 1;
+  private visible = true;
   private ring: RingBuffer;
 
   constructor(id: string) {
@@ -37,6 +40,7 @@ export class LineChartLayer implements Layer {
     const c = config as LineChartConfig;
     if (c.color !== undefined) this.color = c.color;
     if (c.lineWidth !== undefined) this.lineWidth = c.lineWidth;
+    if (c.visible !== undefined) this.visible = c.visible;
     let newCapacity: number | undefined = c.capacity;
     if (newCapacity === undefined && c.retentionMs !== undefined && c.maxHz !== undefined) {
       newCapacity = Math.ceil((c.retentionMs / 1000) * c.maxHz * 1.1);
@@ -67,7 +71,7 @@ export class LineChartLayer implements Layer {
    * runs earlier in insertion order), so we can filter stale samples here.
    */
   scan(viewport: Viewport): void {
-    if (this.ring.length === 0) return;
+    if (!this.visible || this.ring.length === 0) return;
     const xMin = viewport.bounds.xMin;
     let localMin = viewport.observedYMin;
     let localMax = viewport.observedYMax;
@@ -83,7 +87,7 @@ export class LineChartLayer implements Layer {
   }
 
   draw(ctx: OffscreenCanvasRenderingContext2D, viewport: Viewport): void {
-    if (this.ring.length < 2) return;
+    if (!this.visible || this.ring.length < 2) return;
 
     ctx.strokeStyle = this.color;
     ctx.lineWidth = this.lineWidth;

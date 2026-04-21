@@ -47,6 +47,9 @@ export function StreamDemoPage({
   const windowMs = windowProp ?? localWindowMs;
   const timeOrigin = useMemo(() => Date.now(), []);
   const [host, setHost] = useState<FluxionHost | null>(null);
+  const [enabled, setEnabled] = useState<Record<string, boolean>>(
+    () => Object.fromEntries(SERIES.map((s) => [s.id, true])),
+  );
 
   const layers = useMemo(
     () => [
@@ -75,6 +78,9 @@ export function StreamDemoPage({
   );
 
   useLayerConfig(host, axisGridLayer("axis", { timeWindowMs: windowMs }));
+  useLayerConfig(host, lineLayer("s1", { visible: enabled["s1"] }));
+  useLayerConfig(host, lineLayer("s2", { visible: enabled["s2"] }));
+  useLayerConfig(host, lineLayer("s3", { visible: enabled["s3"] }));
 
   const { rate } = useFluxionStream({
     host,
@@ -103,6 +109,49 @@ export function StreamDemoPage({
         hostOptions={{ bgColor: THEME.chart.canvasBg }}
         onReady={setHost}
       />
+      <div
+        style={{
+          position: "absolute",
+          top: 8,
+          left: 8,
+          display: "flex",
+          flexDirection: "column",
+          gap: 4,
+          padding: "6px 10px",
+          background: "rgba(255,255,255,0.88)",
+          backdropFilter: "blur(4px)",
+          borderRadius: 6,
+          border: "1px solid rgba(0,0,0,0.08)",
+          fontSize: 11,
+        }}
+      >
+        {SERIES.map((s) => (
+          <label
+            key={s.id}
+            style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer", userSelect: "none" }}
+          >
+            <input
+              type="checkbox"
+              checked={enabled[s.id]}
+              onChange={(e) => setEnabled((prev) => ({ ...prev, [s.id]: e.target.checked }))}
+              style={{ accentColor: s.color, width: 12, height: 12, cursor: "pointer" }}
+            />
+            <span
+              style={{
+                display: "inline-block",
+                width: 10,
+                height: 10,
+                borderRadius: "50%",
+                background: s.color,
+                opacity: enabled[s.id] ? 1 : 0.3,
+              }}
+            />
+            <span style={{ color: enabled[s.id] ? THEME.page.textPrimary : THEME.page.textMuted }}>
+              {s.id}
+            </span>
+          </label>
+        ))}
+      </div>
       <div
         style={{
           position: "absolute",
