@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.6](https://github-personal/HeoJeongBo/fluxion-render/compare/v0.3.5...v0.3.6) (2026-04-21)
+
+
+### Features
+
+* minor updates ([ae039ba](https://github-personal/HeoJeongBo/fluxion-render/commit/ae039ba69b67903758626a16c8760c80f48ce163))
+
 ## [0.3.5](https://github-personal/HeoJeongBo/fluxion-render/compare/v0.3.4...v0.3.5) (2026-04-21)
 
 
