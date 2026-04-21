@@ -1,5 +1,17 @@
 # Changelog
 
+# [0.4.0](https://github-personal/HeoJeongBo/fluxion-render/compare/v0.3.6...v0.4.0) (2026-04-21)
+
+
+### Bug Fixes
+
+* type issue ([61ad0db](https://github-personal/HeoJeongBo/fluxion-render/commit/61ad0dbc5dba7af6dc05e0d13b6c2a041d98f822))
+
+
+### Features
+
+* add fluxion table ([93d94be](https://github-personal/HeoJeongBo/fluxion-render/commit/93d94be093b20b2f415f5cabb6bde2c54b9f88b1))
+
 ## [0.3.6](https://github-personal/HeoJeongBo/fluxion-render/compare/v0.3.5...v0.3.6) (2026-04-21)
 
 
