@@ -33,4 +33,11 @@ export {
   type UseFluxionHistoricalOptions,
   type UseFluxionStreamOptions,
   type UseFluxionStreamResult,
+  FluxionTable,
+  useFluxionTable,
+  type FluxionTableClassNames,
+  type FluxionTableColumn,
+  type FluxionTableProps,
+  type UseFluxionTableOptions,
+  type UseFluxionTableResult,
 } from "./widgets/fluxion-canvas";

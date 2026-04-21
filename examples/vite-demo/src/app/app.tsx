@@ -7,9 +7,10 @@ import { LineDemoPage } from "../pages/line-demo";
 import { PoolDemoPage } from "../pages/pool-demo";
 import { StaticXyDemoPage } from "../pages/static-xy-demo";
 import { StreamDemoPage } from "../pages/stream-demo";
+import { TableDemoPage } from "../pages/table-demo";
 import { TabBar, type TabBarItem } from "../widgets/tab-bar";
 
-type Tab = "all" | "line" | "stream" | "static" | "historical" | "lidar" | "pool" | "external-axes";
+type Tab = "all" | "line" | "stream" | "static" | "historical" | "lidar" | "pool" | "external-axes" | "table";
 
 const tabs: readonly TabBarItem<Tab>[] = [
   { id: "all", label: "All" },
@@ -20,6 +21,7 @@ const tabs: readonly TabBarItem<Tab>[] = [
   { id: "lidar", label: "LiDAR 30k" },
   { id: "pool", label: "Pool (40 charts)" },
   { id: "external-axes", label: "External axes" },
+  { id: "table", label: "Table" },
 ];
 
 export function App() {
@@ -44,6 +46,7 @@ export function App() {
         {tab === "lidar" && <LidarDemoPage />}
         {tab === "pool" && <PoolDemoPage />}
         {tab === "external-axes" && <ExternalAxesDemoPage />}
+        {tab === "table" && <TableDemoPage />}
       </main>
     </div>
   );

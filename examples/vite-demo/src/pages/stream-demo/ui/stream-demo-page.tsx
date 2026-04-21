@@ -2,8 +2,10 @@ import type { FluxionHost, LineSample } from "@heojeongbo/fluxion-render";
 import {
   axisGridLayer,
   FluxionCanvas,
+  FluxionTable,
   lineLayer,
   useFluxionStream,
+  useFluxionTable,
   useLayerConfig,
 } from "@heojeongbo/fluxion-render/react";
 import { useMemo, useState } from "react";
@@ -31,6 +33,24 @@ const SERIES = [
 
 const transformBatch = (msgs: Float32StampedMessage[]): LineSample[] =>
   msgs.map((m) => ({ t: stampToMs(m.header), y: m.data }));
+
+type SeriesHandle = { spec: (typeof SERIES)[number]; handle: ReturnType<FluxionHost["line"]> };
+type SeriesRow = { id: string; color: string; value: string; time: string };
+
+const TABLE_COLUMNS: import("@heojeongbo/fluxion-render/react").FluxionTableColumn<SeriesRow>[] = [
+  {
+    key: "id",
+    header: "Series",
+    render: (v, row) => (
+      <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+        <span style={{ width: 8, height: 8, borderRadius: "50%", background: row.color, display: "inline-block" }} />
+        {String(v)}
+      </span>
+    ),
+  },
+  { key: "value", header: "Latest Value" },
+  { key: "time", header: "Time" },
+];
 
 export interface StreamDemoPageProps {
   windowMs?: number;
@@ -97,6 +117,29 @@ export function StreamDemoPage({
         handle.pushBatch(transformBatch(msgs));
       }
       return SAMPLES_PER_BATCH * SERIES.length;
+    },
+  });
+
+  // Table: latest value per series, updated at 2 Hz
+  const { rows: tableRows } = useFluxionTable<SeriesHandle[], SeriesRow>({
+    host,
+    intervalMs: 1000 / BATCH_HZ,
+    updateHz: 2,
+    maxRows: SERIES.length,
+    setup: (h) => SERIES.map((s) => ({ spec: s, handle: h.line(s.id) })),
+    tick: (t, handles) => {
+      const { spec } = handles[handles.length - 1];
+      const [msg] = generateFloat32StampedBatch(t, 1, DT_MS, {
+        freqHz: spec.freqHz,
+        amplitude: spec.amplitude,
+        seriesOffset: spec.offset,
+      });
+      return {
+        id: spec.id,
+        color: spec.color,
+        value: msg.data.toFixed(4),
+        time: new Date(stampToMs(msg.header) + timeOrigin).toISOString().slice(11, 23),
+      };
     },
   });
 
@@ -177,6 +220,26 @@ export function StreamDemoPage({
           {rate} samples/s · {SERIES.length} series · {windowMs / 1000}s
         </span>
       </div>
+      <FluxionTable
+        columns={TABLE_COLUMNS}
+        rows={tableRows}
+        style={{
+          position: "absolute",
+          bottom: 8,
+          left: 8,
+          background: "rgba(255,255,255,0.88)",
+          backdropFilter: "blur(4px)",
+          borderRadius: 6,
+          border: "1px solid rgba(0,0,0,0.08)",
+          fontSize: 11,
+          overflow: "hidden",
+        }}
+        classNames={{
+          table: "fluxion-demo-table",
+          th: "fluxion-demo-th",
+          td: "fluxion-demo-td",
+        }}
+      />
     </div>
   );
 }

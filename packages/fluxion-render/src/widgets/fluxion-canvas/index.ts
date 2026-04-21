@@ -27,3 +27,14 @@ export type { FluxionCanvasHandle, FluxionCanvasProps } from "./ui/fluxion-canva
 export { FluxionCanvas } from "./ui/fluxion-canvas";
 export type { FluxionLegendProps, LegendItem } from "./ui/fluxion-legend";
 export { FluxionLegend } from "./ui/fluxion-legend";
+export type {
+  FluxionTableClassNames,
+  FluxionTableColumn,
+  FluxionTableProps,
+} from "./ui/fluxion-table";
+export { FluxionTable } from "./ui/fluxion-table";
+export type {
+  UseFluxionTableOptions,
+  UseFluxionTableResult,
+} from "./lib/use-fluxion-table";
+export { useFluxionTable } from "./lib/use-fluxion-table";

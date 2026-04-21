@@ -368,6 +368,85 @@ const containerRef = useRef<HTMLDivElement>(null);
 | `containerRef` | `RefObject<HTMLElement>` | — | Hover target in `'hover'` mode. Falls back to the legend's parent element |
 | `style` | `CSSProperties` | — | Additional styles |
 
+### `useFluxionTable(options)`
+
+Drives a high-frequency data pump (same pattern as `useFluxionStream`) and throttles React state updates to a configurable low frequency via `updateHz`. The data tick runs at `intervalMs` — only the flush into React state triggers a re-render.
+
+```ts
+const { rows, rate } = useFluxionTable({
+  host,                        // FluxionHost | null
+  intervalMs: 1000 / 120,      // data tick rate (120 Hz)
+  updateHz: 1,                 // React re-render rate (default 1 Hz). 0 = rAF
+  maxRows: 20,                 // max rows kept (default 50, oldest trimmed)
+  setup: (host) => T,          // called once — resolve handles or per-stream state
+  tick: (tMs, state) => R | null, // return a row object to append, or null to skip
+});
+```
+
+`tick` can push to chart handles **and** return a row in the same call — chart and table share one data pump without doubling work:
+
+```tsx
+const { rows, rate } = useFluxionTable({
+  host,
+  intervalMs: 1000 / 120,
+  updateHz: 2,
+  maxRows: 20,
+  setup: (h) => ({ line: h.line('signal') }),
+  tick: (tMs, { line }) => {
+    const y = Math.sin(tMs / 500);
+    line.push({ t: tMs, y });          // → chart
+    return { t: tMs.toFixed(0), y: y.toFixed(4) }; // → table row
+  },
+});
+```
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `host` | `FluxionHost \| null` | required | No-op while null |
+| `intervalMs` | `number` | required | Data tick interval |
+| `updateHz` | `number` | `1` | React re-render frequency. `0` uses `requestAnimationFrame` |
+| `maxRows` | `number` | `50` | Max rows; oldest are dropped when exceeded |
+| `setup` | `(host) => T` | required | One-shot initializer |
+| `tick` | `(tMs, state) => R \| null` | required | Called every interval; `null` skips the row |
+
+Returns `{ rows: R[], rate: number }`.
+
+### `<FluxionTable>`
+
+Unstyled table renderer. Pair with `useFluxionTable` for throttled rendering.
+
+```tsx
+import { FluxionTable } from '@heojeongbo/fluxion-render/react';
+
+<FluxionTable
+  columns={[
+    { key: 'id',    header: 'ID' },
+    { key: 'value', header: 'Value', render: (v) => <strong>{v}</strong> },
+    { key: 'time',  header: 'Time' },
+  ]}
+  rows={rows}
+  classNames={{
+    root:  'my-table-wrap',
+    table: 'my-table',
+    thead: 'my-thead',
+    tbody: 'my-tbody',
+    tr:    'my-tr',
+    th:    'my-th',
+    td:    'my-td',
+  }}
+  style={{ fontSize: 12 }}
+/>
+```
+
+| Prop | Type | Description |
+|------|------|-------------|
+| `columns` | `FluxionTableColumn<R>[]` | `{ key, header, render? }` — `render` receives `(value, row)` |
+| `rows` | `R[]` | Row data objects |
+| `classNames` | `FluxionTableClassNames` | Per-element CSS class names. All optional |
+| `style` | `CSSProperties` | Applied to the root wrapper `<div>` |
+
+No default styles are applied — layout and appearance are fully controlled via `classNames`.
+
 ### `useLayerConfig(host, layerSpec)`
 
 Reactively updates a layer's config when the spec changes.
