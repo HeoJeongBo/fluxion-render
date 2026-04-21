@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.3](https://github-personal/HeoJeongBo/fluxion-render/compare/v0.3.2...v0.3.3) (2026-04-21)
+
+
+### Bug Fixes
+
+* xAxis performance issue ([8a1af5a](https://github-personal/HeoJeongBo/fluxion-render/commit/8a1af5ab93439af7f84d2a458f1c0a5b77ea57bd))
+
 ## [0.3.2](https://github-personal/HeoJeongBo/fluxion-render/compare/v0.3.1...v0.3.2) (2026-04-20)
 
 
