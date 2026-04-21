@@ -99,7 +99,7 @@ function MiniChart({ index }: { index: number }) {
         externalAxes
         axisLayerId="axis"
         yAxisWidth={32}
-        xAxisHeight={16}
+        xAxisHeight={0}
         axisColor={THEME.chart.labelColor}
         axisFont="8px sans-serif"
         axisTickSize={3}

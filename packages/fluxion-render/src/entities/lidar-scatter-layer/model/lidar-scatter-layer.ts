@@ -176,7 +176,17 @@ export class LidarScatterLayer implements Layer {
   }
 
   private ensureScratch(count: number): void {
-    if (count <= this.scratchCapacity) return;
+    if (count <= this.scratchCapacity) {
+      // Shrink when count drops below 25% of capacity, down to a 1024 floor.
+      const shrinkThreshold = this.scratchCapacity >> 2;
+      if (count < shrinkThreshold && this.scratchCapacity > 1024) {
+        const next = Math.max(count * 2, 1024);
+        this.sortedX = new Float32Array(next);
+        this.sortedY = new Float32Array(next);
+        this.scratchCapacity = next;
+      }
+      return;
+    }
     const next = Math.max(count, Math.ceil(this.scratchCapacity * 1.25), 1024);
     this.sortedX = new Float32Array(next);
     this.sortedY = new Float32Array(next);

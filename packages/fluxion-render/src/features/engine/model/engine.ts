@@ -36,6 +36,9 @@ export class Engine {
   private hostId: string | undefined;
   private lastSentYMin = Number.NaN;
   private lastSentYMax = Number.NaN;
+  // Skip BOUNDS_UPDATE when change is smaller than this fraction of the range.
+  // Prevents flooding the main thread for sub-pixel y-range drift.
+  private static readonly BOUNDS_EPS = 1e-4;
 
   constructor() {
     this.scheduler = new Scheduler(() => this.render());
@@ -128,9 +131,14 @@ export class Engine {
     this.stack.drawAll(ctx, this.viewport);
 
     // Notify main thread when effective y bounds change (yMode:"auto").
-    // Only posts when the values actually differ to avoid flooding.
+    // Uses an epsilon gate so sub-pixel drift doesn't flood the main thread.
     const { yMin, yMax } = this.viewport.bounds;
-    if (yMin !== this.lastSentYMin || yMax !== this.lastSentYMax) {
+    const range = yMax - yMin || 1;
+    const eps = range * Engine.BOUNDS_EPS;
+    if (
+      Math.abs(yMin - this.lastSentYMin) > eps ||
+      Math.abs(yMax - this.lastSentYMax) > eps
+    ) {
       this.lastSentYMin = yMin;
       this.lastSentYMax = yMax;
       try {

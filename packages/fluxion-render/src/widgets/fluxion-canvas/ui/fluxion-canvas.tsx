@@ -70,7 +70,7 @@ export const FluxionCanvas = forwardRef<FluxionCanvasHandle, FluxionCanvasProps>
       [axisColor, axisFont, axisTickSize, axisTickMargin],
     );
     const yCanvasRef = useYAxisCanvas(tickSet?.yTicks ?? [], axisOpts);
-    const xCanvasRef = useXAxisCanvas(tickSet?.xTicks ?? [], axisOpts);
+    const xCanvasRef = useXAxisCanvas(xAxisHeight > 0 ? (tickSet?.xTicks ?? []) : [], axisOpts);
 
     if (!externalAxes) {
       return (
@@ -95,7 +95,7 @@ export const FluxionCanvas = forwardRef<FluxionCanvasHandle, FluxionCanvasProps>
         style={{
           display: "grid",
           gridTemplateColumns: `${yAxisWidth}px 1fr`,
-          gridTemplateRows: `1fr ${xAxisHeight}px`,
+          gridTemplateRows: xAxisHeight > 0 ? `1fr ${xAxisHeight}px` : "1fr",
           width: "100%",
           height: "100%",
           minWidth: 0,
@@ -125,19 +125,23 @@ export const FluxionCanvas = forwardRef<FluxionCanvasHandle, FluxionCanvasProps>
             minHeight: 0,
           }}
         />
-        {/* corner — left column, bottom row */}
-        <div />
-        {/* x-axis canvas — right column, bottom row */}
-        <canvas
-          ref={xCanvasRef}
-          style={{
-            display: "block",
-            width: "100%",
-            height: "100%",
-            minWidth: 0,
-            minHeight: 0,
-          }}
-        />
+        {xAxisHeight > 0 && (
+          <>
+            {/* corner — left column, bottom row */}
+            <div />
+            {/* x-axis canvas — right column, bottom row */}
+            <canvas
+              ref={xCanvasRef}
+              style={{
+                display: "block",
+                width: "100%",
+                height: "100%",
+                minWidth: 0,
+                minHeight: 0,
+              }}
+            />
+          </>
+        )}
       </div>
     );
   },

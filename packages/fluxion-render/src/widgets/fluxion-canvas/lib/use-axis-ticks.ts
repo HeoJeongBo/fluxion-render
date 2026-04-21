@@ -4,6 +4,17 @@ import type { FluxionHost } from "../../../features/host";
 import { type AxisTickSet, computeAxisTicks } from "../../../shared/lib/axis-ticks";
 import type { FluxionLayerSpec } from "./use-fluxion-canvas";
 
+function tickSetsEqual(a: AxisTickSet, b: AxisTickSet): boolean {
+  if (a.xTicks.length !== b.xTicks.length || a.yTicks.length !== b.yTicks.length) return false;
+  for (let i = 0; i < a.xTicks.length; i++) {
+    if (a.xTicks[i].label !== b.xTicks[i].label || a.xTicks[i].fraction !== b.xTicks[i].fraction) return false;
+  }
+  for (let i = 0; i < a.yTicks.length; i++) {
+    if (a.yTicks[i].label !== b.yTicks[i].label || a.yTicks[i].fraction !== b.yTicks[i].fraction) return false;
+  }
+  return true;
+}
+
 function getAxisSpec(
   layers: FluxionLayerSpec[],
   axisLayerId: string,
@@ -112,7 +123,11 @@ export function useAxisTicks(
       const c = configRef.current;
       if (!c) return;
       const ly = liveYRef.current;
-      setTimeTicks(computeFromConfig(c, Date.now(), ly.min, ly.max));
+      const next = computeFromConfig(c, Date.now(), ly.min, ly.max);
+      setTimeTicks((prev) => {
+        if (prev && tickSetsEqual(prev, next)) return prev;
+        return next;
+      });
     }, refreshMs);
     return () => clearInterval(id);
   }, [isTimeMode, refreshMs]);
