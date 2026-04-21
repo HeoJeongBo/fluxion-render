@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.4](https://github-personal/HeoJeongBo/fluxion-render/compare/v0.3.3...v0.3.4) (2026-04-21)
+
+
+### Features
+
+* add retention ms & historical ([2017777](https://github-personal/HeoJeongBo/fluxion-render/commit/2017777342e0a561f810878b1f0898d3037fcc03))
+
 ## [0.3.3](https://github-personal/HeoJeongBo/fluxion-render/compare/v0.3.2...v0.3.3) (2026-04-21)
 
 
