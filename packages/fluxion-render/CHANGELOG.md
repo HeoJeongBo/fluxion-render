@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.5](https://github-personal/HeoJeongBo/fluxion-render/compare/v0.3.4...v0.3.5) (2026-04-21)
+
+
+### Features
+
+* add line filter ([93fe677](https://github-personal/HeoJeongBo/fluxion-render/commit/93fe677a8fb670097088df902f39c01f887f94a7))
+
 ## [0.3.4](https://github-personal/HeoJeongBo/fluxion-render/compare/v0.3.3...v0.3.4) (2026-04-21)
 
 
