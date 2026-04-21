@@ -1,6 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import { FluxionTable } from "./fluxion-table";
+import { FluxionTable, type FluxionTableColumn } from "./fluxion-table";
 
 type Row = { id: string; value: number; label: string };
 
@@ -63,11 +63,11 @@ describe("FluxionTable", () => {
   });
 
   it("uses render function when provided", () => {
-    const columns = [
+    const columns: FluxionTableColumn<Row>[] = [
       {
-        key: "value" as const,
+        key: "value",
         header: "Value",
-        render: (v: Row["value"]) => <span data-testid="custom">{(v * 2).toFixed(2)}</span>,
+        render: (v) => <span data-testid="custom">{(Number(v) * 2).toFixed(2)}</span>,
       },
     ];
     render(<FluxionTable columns={columns} rows={[{ id: "x", value: 3, label: "x" }]} />);
