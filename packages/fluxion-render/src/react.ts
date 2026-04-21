@@ -14,6 +14,7 @@ export {
   lineStaticLayer,
   useAxisTicks,
   useFluxionCanvas,
+  useFluxionHistorical,
   useFluxionStream,
   useFluxionWorkerPool,
   useLayerConfig,
@@ -26,6 +27,7 @@ export {
   type ResizeInfo,
   type UseFluxionCanvasOptions,
   type UseFluxionCanvasResult,
+  type UseFluxionHistoricalOptions,
   type UseFluxionStreamOptions,
   type UseFluxionStreamResult,
 } from "./widgets/fluxion-canvas";

@@ -135,10 +135,20 @@ Appends `{ t, y }` samples to a ring buffer. Ideal for sensor data at 30–120Hz
 
 ```ts
 lineLayer('signal', {
-  color?: string,      // e.g. '#4fc3f7'
-  lineWidth?: number,  // default 1
-  capacity?: number,   // ring buffer size, default 2048
+  color?: string,        // e.g. '#4fc3f7'
+  lineWidth?: number,    // default 1
+  capacity?: number,     // ring buffer size in samples (explicit)
+  retentionMs?: number,  // data retention window in ms
+  maxHz?: number,        // expected max sample rate — auto-calculates capacity
 })
+```
+
+`retentionMs` + `maxHz` auto-calculate `capacity = ceil(retentionMs/1000 * maxHz * 1.1)`.  
+Explicit `capacity` always takes priority when both are set.
+
+```ts
+// Keep 10 seconds of data at up to 60Hz → capacity = 660
+lineLayer('signal', { retentionMs: 10_000, maxHz: 60 })
 ```
 
 Push data via `LineLayerHandle`:
@@ -209,7 +219,7 @@ axisGridLayer('axis', {
   xRange?: [min, max],        // xMode: 'fixed' only
   timeWindowMs?: number,      // xMode: 'time' only
   timeOrigin?: number,        // Date.now() at stream start (for clock labels)
-  xTickFormat?: string,       // 'HH:mm:ss' for wall-clock labels
+  xTickFormat?: string | ((v: number) => string), // format string or custom formatter
 
   // Y axis
   yMode?: 'fixed' | 'auto',   // 'auto': fits to visible data
@@ -269,6 +279,32 @@ const pool = useFluxionWorkerPool({
   size?: number,                // default 4
   workerFactory?: () => Worker,
 });
+```
+
+### `useFluxionHistorical(options)`
+
+Pushes a full dataset into a `line-static` layer whenever `data` changes. Handles are memoized — re-renders that don't change `data` are free.
+
+```ts
+useFluxionHistorical({
+  host,                // FluxionHost | null — no-op while null
+  layerId: string,     // must match a lineStaticLayer id
+  data: readonly XyPoint[] | readonly number[] | null | undefined,
+  layout?: 'xy' | 'y', // must match layout on lineStaticLayer config (default 'xy')
+});
+```
+
+```tsx
+const layers = useMemo(() => [
+  axisGridLayer('axis', { xMode: 'fixed', xRange: [0, 100], yMode: 'auto' }),
+  lineStaticLayer('plot', { color: '#4fc3f7', layout: 'xy' }),
+], []);
+
+const [host, setHost] = useState<FluxionHost | null>(null);
+
+useFluxionHistorical({ host, layerId: 'plot', data: chartData });
+
+return <FluxionCanvas layers={layers} onReady={setHost} />;
 ```
 
 ### `useLayerConfig(host, layerSpec)`

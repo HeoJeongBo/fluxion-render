@@ -18,6 +18,12 @@ import { WindowSelector } from "../../../shared/ui/window-selector";
 const TARGET_HZ = 120;
 const DEFAULT_WINDOW_MS = 5000;
 
+const WINDOW_OPTIONS = [
+  { label: "3s", ms: 3000 },
+  { label: "5s", ms: 5000 },
+  { label: "10s", ms: 10_000 },
+] as const;
+
 const transform = (msg: Float32StampedMessage): LineSample => ({
   t: stampToMs(msg.header),
   y: msg.data,
@@ -54,7 +60,7 @@ export function LineDemoPage({
         showYLabels: false,
         yPadPx: 8,
       }),
-      lineLayer("line", { color: "#4fc3f7", lineWidth: 1.5, capacity: 8192 }),
+      lineLayer("line", { color: "#4fc3f7", lineWidth: 1.5, retentionMs: 10_000, maxHz: TARGET_HZ }),
     ],
     [timeOrigin],
   );
@@ -98,6 +104,7 @@ export function LineDemoPage({
           <WindowSelector
             value={windowMs}
             onChange={setLocalWindowMs}
+            options={WINDOW_OPTIONS}
             compact={compactHud}
           />
         )}

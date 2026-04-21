@@ -7,6 +7,10 @@ export interface LineChartConfig {
   lineWidth?: number;
   /** Ring buffer capacity (number of [t,y] samples retained). Default 2048. */
   capacity?: number;
+  /** Data retention window in ms. Combined with maxHz to auto-calculate capacity. */
+  retentionMs?: number;
+  /** Expected max sample rate in Hz. Combined with retentionMs to auto-calculate capacity. */
+  maxHz?: number;
 }
 
 /**
@@ -33,8 +37,12 @@ export class LineChartLayer implements Layer {
     const c = config as LineChartConfig;
     if (c.color !== undefined) this.color = c.color;
     if (c.lineWidth !== undefined) this.lineWidth = c.lineWidth;
-    if (c.capacity !== undefined && c.capacity !== this.ring.capacity) {
-      this.ring = new RingBuffer(c.capacity, 2);
+    let newCapacity: number | undefined = c.capacity;
+    if (newCapacity === undefined && c.retentionMs !== undefined && c.maxHz !== undefined) {
+      newCapacity = Math.ceil((c.retentionMs / 1000) * c.maxHz * 1.1);
+    }
+    if (newCapacity !== undefined && newCapacity !== this.ring.capacity) {
+      this.ring = new RingBuffer(newCapacity, 2);
     }
   }
 

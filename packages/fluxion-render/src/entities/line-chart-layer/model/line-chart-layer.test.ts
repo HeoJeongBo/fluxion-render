@@ -168,6 +168,58 @@ describe("LineChartLayer (streaming)", () => {
     });
   });
 
+  describe("capacity via retentionMs + maxHz", () => {
+    it("auto-calculates capacity from retentionMs and maxHz", () => {
+      const layer = new LineChartLayer("l");
+      // ceil(10 * 60 * 1.1) = 660
+      layer.setConfig({ retentionMs: 10_000, maxHz: 60 });
+      const vp = makeViewport();
+      // Fill 660 samples then push 1 more — oldest should be dropped (ring wraps)
+      const buf = new Float32Array(660 * 2);
+      for (let i = 0; i < 660; i++) { buf[i * 2] = i; buf[i * 2 + 1] = 0; }
+      layer.setData(buf.buffer, buf.length, vp);
+      const extra = new Float32Array([700, 9]);
+      layer.setData(extra.buffer, 2, vp);
+      vp.setBounds({ xMin: 0, xMax: 10000, yMin: -1, yMax: 10 });
+      vp.beginScan();
+      layer.scan?.(vp);
+      // y=9 should be visible; y=0 from very first sample is dropped
+      expect(vp.observedYMax).toBeCloseTo(9);
+    });
+
+    it("explicit capacity takes priority over retentionMs+maxHz", () => {
+      const layer = new LineChartLayer("l");
+      layer.setConfig({ capacity: 500, retentionMs: 10_000, maxHz: 60 });
+      const vp = makeViewport();
+      // Fill 500 + 1 samples — ring wraps at 500, not 660
+      const buf = new Float32Array(500 * 2);
+      for (let i = 0; i < 500; i++) { buf[i * 2] = i; buf[i * 2 + 1] = 1; }
+      layer.setData(buf.buffer, buf.length, vp);
+      layer.setData(new Float32Array([600, 5]).buffer, 2, vp);
+      vp.setBounds({ xMin: 0, xMax: 10000, yMin: -1, yMax: 10 });
+      vp.beginScan();
+      layer.scan?.(vp);
+      expect(vp.observedYMax).toBeCloseTo(5);
+    });
+
+    it("retentionMs alone without maxHz leaves capacity unchanged", () => {
+      const layer = new LineChartLayer("l");
+      layer.setConfig({ capacity: 100 });
+      layer.setConfig({ retentionMs: 10_000 }); // no maxHz → no-op
+      const vp = makeViewport();
+      // Fill 100 samples + 1 overflow — ring capacity should still be 100
+      const buf = new Float32Array(100 * 2);
+      for (let i = 0; i < 100; i++) { buf[i * 2] = i; buf[i * 2 + 1] = 0; }
+      layer.setData(buf.buffer, buf.length, vp);
+      layer.setData(new Float32Array([200, 7]).buffer, 2, vp);
+      vp.setBounds({ xMin: 0, xMax: 10000, yMin: -1, yMax: 10 });
+      vp.beginScan();
+      layer.scan?.(vp);
+      // capacity=100 so first sample was dropped and y=7 is present
+      expect(vp.observedYMax).toBeCloseTo(7);
+    });
+  });
+
   it("dispose clears the ring buffer", () => {
     const layer = new LineChartLayer("l");
     const vp = makeViewport();

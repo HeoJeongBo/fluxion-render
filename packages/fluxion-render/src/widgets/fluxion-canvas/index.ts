@@ -17,6 +17,8 @@ export type {
   UseFluxionStreamResult,
 } from "./lib/use-fluxion-stream";
 export { useFluxionStream } from "./lib/use-fluxion-stream";
+export type { UseFluxionHistoricalOptions } from "./lib/use-fluxion-historical";
+export { useFluxionHistorical } from "./lib/use-fluxion-historical";
 export { useLayerConfig } from "./lib/use-layer-config";
 export { useFluxionWorkerPool } from "./lib/use-fluxion-worker-pool";
 export { useXAxisCanvas, useYAxisCanvas } from "./lib/use-axis-canvas";
