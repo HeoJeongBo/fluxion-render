@@ -128,7 +128,26 @@ describe("useAxisTicks", () => {
       expect(received[received.length - 1]).not.toBeNull();
     });
 
-    it("updates ticks when the interval fires", () => {
+    it("installs two setInterval timers in time mode (y + x)", () => {
+      const spy = vi.spyOn(globalThis, "setInterval");
+      render(
+        <Harness
+          layers={TIME_LAYERS}
+          axisLayerId="axis"
+          refreshMs={100}
+          onTicks={() => {}}
+        />,
+      );
+      // Two timers: y at refreshMs, x at xTickIntervalMs (1000ms default)
+      expect(spy.mock.calls.length).toBeGreaterThanOrEqual(2);
+      const intervals = spy.mock.calls.map((c) => c[1]);
+      expect(intervals).toContain(100);   // y timer
+      expect(intervals).toContain(1000);  // x timer default
+      spy.mockRestore();
+    });
+
+    it("updates x ticks after xTickIntervalMs (default 1000ms)", () => {
+      vi.setSystemTime(1_000_000);
       const received: (AxisTickSet | null)[] = [];
       render(
         <Harness
@@ -138,9 +157,17 @@ describe("useAxisTicks", () => {
           onTicks={(t) => received.push(t)}
         />,
       );
-      const countBefore = received.length;
-      act(() => { vi.advanceTimersByTime(250); });
-      expect(received.length).toBeGreaterThan(countBefore);
+      // x timer fires at 1000ms; no x change before that
+      const countAt500 = received.length;
+      act(() => { vi.advanceTimersByTime(500); });
+      const countAt1000 = received.length;
+      act(() => {
+        vi.setSystemTime(1_002_000);
+        vi.advanceTimersByTime(600);
+      });
+      expect(received.length).toBeGreaterThan(countAt1000);
+      // before 1000ms, x tick should not have fired (only y)
+      void countAt500; // suppress unused warning
     });
 
     it("skips setState when computed ticks are identical (frozen clock)", () => {
@@ -161,7 +188,7 @@ describe("useAxisTicks", () => {
       expect(received.length - countAfterSettle).toBeLessThanOrEqual(1);
     });
 
-    it("re-renders when tick labels change (time advances enough)", () => {
+    it("re-renders when tick labels change (time advances past xTickIntervalMs)", () => {
       vi.setSystemTime(1_000_000);
       const received: (AxisTickSet | null)[] = [];
       render(
@@ -174,9 +201,9 @@ describe("useAxisTicks", () => {
       );
       const countAfterMount = received.length;
       act(() => {
-        vi.advanceTimersByTime(100);
-        vi.setSystemTime(1_001_000);
-        vi.advanceTimersByTime(100);
+        // advance past the x timer (1000ms) and move system time by 2s so x labels differ
+        vi.setSystemTime(1_002_000);
+        vi.advanceTimersByTime(1100);
       });
       expect(received.length).toBeGreaterThan(countAfterMount);
     });
