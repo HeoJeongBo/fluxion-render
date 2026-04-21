@@ -39,6 +39,12 @@ export interface FluxionCanvasProps {
    * worker via `useLayerConfig` — since `layers` is captured on mount only.
    */
   axisConfig?: Partial<AxisGridConfig>;
+  /**
+   * `setInterval` period (ms) for external axis tick recomputation. Default 16 (≈ 60 fps).
+   * For dense dashboards (20+ charts) set to 250–500 to reduce main-thread load —
+   * axis labels will update less frequently but rendering stays at full fps in the worker.
+   */
+  axisRefreshMs?: number;
 }
 
 export interface FluxionCanvasHandle {
@@ -67,6 +73,7 @@ export const FluxionCanvas = forwardRef<FluxionCanvasHandle, FluxionCanvasProps>
       axisTickSize,
       axisTickMargin,
       axisConfig,
+      axisRefreshMs,
     },
     ref,
   ) {
@@ -83,7 +90,7 @@ export const FluxionCanvas = forwardRef<FluxionCanvasHandle, FluxionCanvasProps>
       );
     }, [externalAxes, layers, axisLayerId, axisConfig]);
 
-    const tickSet = useAxisTicks(tickLayers, axisLayerId, 16, host);
+    const tickSet = useAxisTicks(tickLayers, axisLayerId, axisRefreshMs ?? 16, host);
     const axisOpts = useMemo(
       () => ({ color: axisColor, font: axisFont, tickSize: axisTickSize, tickMargin: axisTickMargin }),
       [axisColor, axisFont, axisTickSize, axisTickMargin],
