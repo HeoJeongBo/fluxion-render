@@ -1,4 +1,4 @@
-import { useEffect, type RefObject } from "react";
+import { type RefObject, useEffect, useRef } from "react";
 
 export interface ResizeInfo {
   width: number;
@@ -19,6 +19,9 @@ export function useResizeObserver(
   onResize: (info: ResizeInfo) => void,
   opts?: { debounceMs?: number },
 ): void {
+  const onResizeRef = useRef(onResize);
+  onResizeRef.current = onResize;
+
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
@@ -32,7 +35,7 @@ export function useResizeObserver(
     const fire = () => {
       if (cancelled) return;
       const rect = el.getBoundingClientRect();
-      onResize({
+      onResizeRef.current({
         width: rect.width,
         height: rect.height,
         dpr: window.devicePixelRatio || 1,
@@ -68,5 +71,5 @@ export function useResizeObserver(
       ro.disconnect();
       if (mql) mql.removeEventListener("change", handleDpr);
     };
-  }, [ref, onResize]);
+  }, [ref]);
 }

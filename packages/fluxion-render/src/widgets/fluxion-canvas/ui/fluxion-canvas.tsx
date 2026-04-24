@@ -113,13 +113,11 @@ export const FluxionCanvas = forwardRef<FluxionCanvasHandle, FluxionCanvasProps>
       );
     }, [externalAxes, layers, axisLayerId, axisConfig]);
 
-    const axisOpts = useMemo(
-      () => ({ color: axisColor, font: axisFont, tickSize: axisTickSize, tickMargin: axisTickMargin }),
-      [axisColor, axisFont, axisTickSize, axisTickMargin],
-    );
-    const tickSet = useAxisTicks(tickLayers, axisLayerId, 16, host);
-    const legacyYCanvasRef = useYAxisCanvas(tickSet?.yTicks ?? [], axisOpts);
-    const legacyXCanvasRef = useXAxisCanvas(xAxisHeight > 0 ? (tickSet?.xTicks ?? []) : [], axisOpts);
+    // When externalAxes=true the Worker draws axes — pass null host so
+    // useAxisTicks skips the onTickUpdate subscription entirely.
+    const tickSet = useAxisTicks(tickLayers, axisLayerId, 16, externalAxes ? null : host);
+    const legacyYCanvasRef = useYAxisCanvas(tickSet?.yTicks ?? [], axisStyle);
+    const legacyXCanvasRef = useXAxisCanvas(xAxisHeight > 0 ? (tickSet?.xTicks ?? []) : [], axisStyle);
 
     if (!externalAxes) {
       return (
