@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { AxisGridConfig } from "../../../entities/axis-grid-layer";
 import type { FluxionHost } from "../../../features/host";
 import { type AxisTick, type AxisTickSet, computeAxisTicks } from "../../../shared/lib/axis-ticks";
+import type { SerializedTick } from "../../../shared/protocol";
 import type { FluxionLayerSpec } from "./use-fluxion-canvas";
 
 function xTicksEqual(a: AxisTick[], b: AxisTick[]): boolean {
@@ -30,12 +31,7 @@ function getAxisSpec(
   );
 }
 
-function computeFromConfig(
-  config: AxisGridConfig,
-  now?: number,
-  liveYMin?: number,
-  liveYMax?: number,
-): AxisTickSet {
+function computeFromConfig(config: AxisGridConfig, now = Date.now()): AxisTickSet {
   const xMode = config.xMode ?? "fixed";
   const timeWindowMs = config.timeWindowMs ?? 5000;
   const timeOrigin = config.timeOrigin ?? null;
@@ -44,7 +40,7 @@ function computeFromConfig(
   let xMax: number;
 
   if (xMode === "time") {
-    const latestT = now != null ? now - (timeOrigin ?? 0) : 0;
+    const latestT = now - (timeOrigin ?? 0);
     xMax = latestT;
     xMin = latestT - timeWindowMs;
   } else {
@@ -52,8 +48,8 @@ function computeFromConfig(
     xMax = config.xRange?.[1] ?? 1;
   }
 
-  const yMin = liveYMin ?? config.yRange?.[0] ?? -1;
-  const yMax = liveYMax ?? config.yRange?.[1] ?? 1;
+  const yMin = config.yRange?.[0] ?? -1;
+  const yMax = config.yRange?.[1] ?? 1;
 
   return computeAxisTicks({
     xMin,
@@ -71,100 +67,74 @@ function computeFromConfig(
 /**
  * Computes axis ticks for the given axis-grid layer spec.
  *
- * - `xMode: "fixed"` — computed once via useMemo
- * - `xMode: "time"` — x ticks recomputed at `xTickIntervalMs ?? 1000` ms interval
- *   (default 1 s); y ticks recomputed at `refreshMs` interval (default 16ms ≈ 1 frame).
- * - `yMode: "auto"` — subscribes to `host.onBoundsChange` and uses the
- *   worker's live y bounds for tick computation. Falls back to `yRange`
- *   until the first bounds message arrives.
+ * - `xMode: "fixed"` — computed once via useMemo.
+ * - `xMode: "time"` — subscribes to `host.onTickUpdate` so tick computation
+ *   runs in the worker (no main-thread setInterval). Falls back to an
+ *   initial `computeAxisTicks` snapshot until the first worker message arrives.
+ *   When `xTickFormat` is a function the worker sends raw x values and the
+ *   main thread applies the function before updating state.
+ *
+ * @param _refreshMs - Deprecated. Ignored. Kept for API compatibility.
  */
 export function useAxisTicks(
   layers: FluxionLayerSpec[],
   axisLayerId: string,
-  refreshMs = 16,
+  _refreshMs = 16,
   host?: FluxionHost | null,
 ): AxisTickSet | null {
   const spec = getAxisSpec(layers, axisLayerId);
   const config = spec?.config;
-
   const isTimeMode = config?.xMode === "time";
-  const isAutoY = config?.yMode === "auto";
 
-  const [liveY, setLiveY] = useState<{ min: number; max: number } | null>(null);
+  // Keep the xTickFormat function in a ref so the subscription closure always
+  // sees the latest value without needing to re-subscribe.
+  const xTickFormatFnRef = useRef<((v: number) => string) | null>(null);
+  xTickFormatFnRef.current =
+    typeof config?.xTickFormat === "function" ? config.xTickFormat : null;
+
+  // Worker-driven ticks (time mode only).
+  const [workerTicks, setWorkerTicks] = useState<AxisTickSet | null>(null);
 
   useEffect(() => {
-    if (!isAutoY || !host) {
-      setLiveY(null);
+    if (!host || !isTimeMode) {
+      setWorkerTicks(null);
       return;
     }
-    return host.onBoundsChange((yMin, yMax) => {
-      setLiveY({ min: yMin, max: yMax });
+    let active = true;
+    const unsub = host.onTickUpdate((rawX: SerializedTick[], rawY: SerializedTick[]) => {
+      if (!active) return;
+      const fn = xTickFormatFnRef.current;
+      const xTicks: AxisTick[] = fn
+        ? rawX.map((t) => ({ value: t.value, label: fn(t.value), fraction: t.fraction }))
+        : (rawX as AxisTick[]);
+      const yTicks = rawY as AxisTick[];
+      setWorkerTicks((prev) => {
+        if (prev && xTicksEqual(prev.xTicks, xTicks) && yTicksEqual(prev.yTicks, yTicks))
+          return prev;
+        return { xTicks, yTicks };
+      });
     });
-  }, [host, isAutoY]);
+    return () => {
+      active = false;
+      unsub();
+    };
+  }, [host, isTimeMode]);
 
-  const liveYMin = isAutoY && liveY ? liveY.min : undefined;
-  const liveYMax = isAutoY && liveY ? liveY.max : undefined;
-
-  const configRef = useRef(config);
-  configRef.current = config;
-  const liveYRef = useRef<{ min?: number; max?: number }>({});
-  liveYRef.current = { min: liveYMin, max: liveYMax };
-
+  // Fixed mode: memoised, recomputed only when config or range changes.
   const fixedTicks = useMemo(() => {
     if (!config || isTimeMode) return null;
-    return computeFromConfig(config, undefined, liveYMin, liveYMax);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [config, isTimeMode, liveYMin, liveYMax]);
+    return computeFromConfig(config);
+  }, [config, isTimeMode]);
 
+  // Time mode fallback: a snapshot computed once on mount, shown until the
+  // first TICK_UPDATE arrives from the worker.
   const initialTicks = useMemo(() => {
     if (!config || !isTimeMode) return null;
-    return computeFromConfig(config, Date.now(), liveYMin, liveYMax);
+    return computeFromConfig(config, Date.now());
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const [xTimeTicks, setXTimeTicks] = useState<AxisTick[]>(() => initialTicks?.xTicks ?? []);
-  const [yTimeTicks, setYTimeTicks] = useState<AxisTick[]>(() => initialTicks?.yTicks ?? []);
-
-  // y ticks — refreshMs interval (must react to live bounds changes quickly)
-  useEffect(() => {
-    if (!isTimeMode) return;
-    const id = setInterval(() => {
-      const c = configRef.current;
-      if (!c) return;
-      const ly = liveYRef.current;
-      const next = computeFromConfig(c, Date.now(), ly.min, ly.max);
-      setYTimeTicks((prev) => (yTicksEqual(prev, next.yTicks) ? prev : next.yTicks));
-    }, refreshMs);
-    return () => clearInterval(id);
-  }, [isTimeMode, refreshMs]);
-
-  // x ticks — xTickIntervalMs interval (auto-optimised: no user config needed)
-  useEffect(() => {
-    if (!isTimeMode) return;
-    const xRefreshMs = configRef.current?.xTickIntervalMs ?? 1000;
-    const id = setInterval(() => {
-      const c = configRef.current;
-      if (!c) return;
-      const ly = liveYRef.current;
-      const next = computeFromConfig(c, Date.now(), ly.min, ly.max);
-      setXTimeTicks((prev) => (xTicksEqual(prev, next.xTicks) ? prev : next.xTicks));
-    }, xRefreshMs);
-    return () => clearInterval(id);
-  }, [isTimeMode, refreshMs]);
-
-  // Force y re-render immediately when liveY changes (time mode).
-  useEffect(() => {
-    if (!isTimeMode || !config) return;
-    const next = computeFromConfig(config, Date.now(), liveYMin, liveYMax);
-    setYTimeTicks((prev) => (yTicksEqual(prev, next.yTicks) ? prev : next.yTicks));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [liveYMin, liveYMax]);
-
-  const timeTicks = useMemo<AxisTickSet>(
-    () => ({ xTicks: xTimeTicks, yTicks: yTimeTicks }),
-    [xTimeTicks, yTimeTicks],
-  );
-
   if (!config) return null;
-  return isTimeMode ? timeTicks : fixedTicks;
+  if (!isTimeMode) return fixedTicks;
+  return workerTicks ?? initialTicks;
 }

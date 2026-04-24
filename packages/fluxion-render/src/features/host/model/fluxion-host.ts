@@ -7,10 +7,13 @@ import { getDefaultPool } from "../../../features/worker-pool";
 import {
   Op,
   WorkerOp,
+  type AxisStyle,
   type BoundsUpdateMsg,
   type DType,
   type HostMsg,
   type LayerKind,
+  type SerializedTick,
+  type TickUpdateMsg,
   type WorkerMsg,
 } from "../../../shared/protocol";
 import {
@@ -52,6 +55,22 @@ export interface FluxionHostOptions {
    * Use `configureDefaultPool` to change the default pool size.
    */
   pool?: FluxionWorkerPool;
+  /**
+   * x-axis HTML canvas element. When provided, the Worker renders tick marks
+   * and labels directly onto it in the same rAF cycle as the main canvas —
+   * eliminating the Main-thread React tick-update lag.
+   */
+  xAxisElement?: HTMLCanvasElement;
+  /**
+   * y-axis HTML canvas element. Rendered by the Worker in the same rAF cycle.
+   */
+  yAxisElement?: HTMLCanvasElement;
+  /** Height of the x-axis canvas in CSS px. Default 30. */
+  xAxisHeight?: number;
+  /** Width of the y-axis canvas in CSS px. Default 60. */
+  yAxisWidth?: number;
+  /** Axis tick/label style. Defaults: color "#666", font "11px sans-serif", tickSize 6, tickMargin 4. */
+  axisStyle?: AxisStyle;
 }
 
 function dtypeOf(arr: FluxionTypedArray): DType {
@@ -76,6 +95,9 @@ function dtypeOf(arr: FluxionTypedArray): DType {
 /** Callback shape for `onBoundsChange`. */
 export type BoundsChangeListener = (yMin: number, yMax: number, latestT: number) => void;
 
+/** Callback shape for `onTickUpdate`. Receives serialized tick arrays from the worker. */
+export type TickUpdateListener = (xTicks: SerializedTick[], yTicks: SerializedTick[]) => void;
+
 export class FluxionHost {
   private worker: {
     postMessage(msg: unknown, transfer?: Transferable[]): void;
@@ -85,6 +107,7 @@ export class FluxionHost {
   };
   private disposed = false;
   private boundsListeners: BoundsChangeListener[] = [];
+  private tickListeners: TickUpdateListener[] = [];
   private workerMsgHandler: EventListener | null = null;
 
   constructor(canvas: HTMLCanvasElement, opts: FluxionHostOptions = {}) {
@@ -114,6 +137,28 @@ export class FluxionHost {
       [offscreen],
     );
 
+    // Transfer axis canvases to the Worker so they render in the same rAF cycle.
+    if (opts.xAxisElement || opts.yAxisElement) {
+      const xAxisCanvas = opts.xAxisElement?.transferControlToOffscreen();
+      const yAxisCanvas = opts.yAxisElement?.transferControlToOffscreen();
+      const transfer: Transferable[] = [];
+      if (xAxisCanvas) transfer.push(xAxisCanvas);
+      if (yAxisCanvas) transfer.push(yAxisCanvas);
+      this.post(
+        {
+          op: Op.SET_AXIS_CANVAS,
+          xAxisCanvas,
+          yAxisCanvas,
+          xAxisHeight: opts.xAxisHeight ?? 30,
+          yAxisWidth: opts.yAxisWidth ?? 60,
+        },
+        transfer,
+      );
+    }
+    if (opts.axisStyle) {
+      this.post({ op: Op.SET_AXIS_STYLE, ...opts.axisStyle });
+    }
+
     // Listen for worker→main messages (bounds updates, etc.)
     this.workerMsgHandler = (evt: Event) => {
       const e = evt as MessageEvent<WorkerMsg>;
@@ -122,6 +167,10 @@ export class FluxionHost {
       if (msg.op === WorkerOp.BOUNDS_UPDATE) {
         const bu = msg as BoundsUpdateMsg;
         for (const fn of this.boundsListeners) fn(bu.yMin, bu.yMax, bu.latestT);
+      }
+      if (msg.op === WorkerOp.TICK_UPDATE) {
+        const tu = msg as TickUpdateMsg;
+        for (const fn of this.tickListeners) fn(tu.xTicks, tu.yTicks);
       }
     };
     if (this.worker.addEventListener) {
@@ -147,6 +196,20 @@ export class FluxionHost {
     return () => {
       const idx = this.boundsListeners.indexOf(listener);
       if (idx >= 0) this.boundsListeners.splice(idx, 1);
+    };
+  }
+
+  /**
+   * Register a listener that fires whenever the worker sends updated tick data.
+   * Replaces the main-thread setInterval in `useAxisTicks` — tick computation
+   * now runs in the worker and is pushed here after each rendered frame.
+   * Returns an unsubscribe function.
+   */
+  onTickUpdate(listener: TickUpdateListener): () => void {
+    this.tickListeners.push(listener);
+    return () => {
+      const idx = this.tickListeners.indexOf(listener);
+      if (idx >= 0) this.tickListeners.splice(idx, 1);
     };
   }
 
@@ -289,6 +352,7 @@ export class FluxionHost {
     }
     this.workerMsgHandler = null;
     this.boundsListeners.length = 0;
+    this.tickListeners.length = 0;
     try {
       this.post({ op: Op.DISPOSE });
     } catch {

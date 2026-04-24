@@ -24,6 +24,15 @@ export interface UseFluxionCanvasOptions {
   layers: FluxionLayerSpec[];
   hostOptions?: FluxionHostOptions;
   onReady?: (host: FluxionHost) => void;
+  /**
+   * Container div for the x-axis canvas. The effect creates a fresh `<canvas>`
+   * inside this div on every mount — StrictMode-safe (no reuse of a transferred element).
+   */
+  xAxisContainerRef?: RefObject<HTMLDivElement | null>;
+  /**
+   * Container div for the y-axis canvas. Same lifetime contract as xAxisContainerRef.
+   */
+  yAxisContainerRef?: RefObject<HTMLDivElement | null>;
 }
 
 export interface UseFluxionCanvasResult {
@@ -37,6 +46,17 @@ export interface UseFluxionCanvasResult {
    * Updates to a new instance if the component remounts.
    */
   host: FluxionHost | null;
+}
+
+function makeAxisCanvas(container: HTMLDivElement): HTMLCanvasElement {
+  const canvas = document.createElement("canvas");
+  canvas.style.display = "block";
+  canvas.style.width = "100%";
+  canvas.style.height = "100%";
+  canvas.style.minWidth = "0";
+  canvas.style.minHeight = "0";
+  container.appendChild(canvas);
+  return canvas;
 }
 
 /**
@@ -71,6 +91,7 @@ export function useFluxionCanvas(
     const container = containerRef.current;
     if (!container) return;
 
+    // Main chart canvas — created fresh each mount.
     const canvas = document.createElement("canvas");
     canvas.style.display = "block";
     canvas.style.width = "100%";
@@ -79,8 +100,19 @@ export function useFluxionCanvas(
     canvas.style.minHeight = "0";
     container.appendChild(canvas);
 
+    // Axis canvases — also created fresh each mount so transferControlToOffscreen
+    // is always called on a brand-new element (StrictMode double-invoke safe).
     const current = optionsRef.current;
-    const instance = new FluxionHost(canvas, current.hostOptions);
+    const xAxisContainer = current.xAxisContainerRef?.current ?? null;
+    const yAxisContainer = current.yAxisContainerRef?.current ?? null;
+    const xAxisCanvas = xAxisContainer ? makeAxisCanvas(xAxisContainer) : undefined;
+    const yAxisCanvas = yAxisContainer ? makeAxisCanvas(yAxisContainer) : undefined;
+
+    const instance = new FluxionHost(canvas, {
+      ...current.hostOptions,
+      xAxisElement: xAxisCanvas,
+      yAxisElement: yAxisCanvas,
+    });
     hostRef.current = instance;
     for (const l of current.layers) instance.addLayer(l.id, l.kind, l.config);
     setHost(instance);
@@ -91,6 +123,12 @@ export function useFluxionCanvas(
       hostRef.current = null;
       setHost(null);
       if (canvas.parentNode === container) container.removeChild(canvas);
+      if (xAxisCanvas && xAxisCanvas.parentNode === xAxisContainer) {
+        xAxisContainer!.removeChild(xAxisCanvas);
+      }
+      if (yAxisCanvas && yAxisCanvas.parentNode === yAxisContainer) {
+        yAxisContainer!.removeChild(yAxisCanvas);
+      }
     };
   }, []);
 

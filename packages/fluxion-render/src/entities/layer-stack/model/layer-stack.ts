@@ -23,6 +23,13 @@ export class LayerStack {
     return this.byId.get(id);
   }
 
+  findFirst<T extends Layer>(predicate: (l: Layer) => l is T): T | undefined {
+    for (const l of this.layers) {
+      if (predicate(l)) return l;
+    }
+    return undefined;
+  }
+
   resizeAll(viewport: Viewport): void {
     for (let i = 0; i < this.layers.length; i++) {
       this.layers[i].resize(viewport);

@@ -14,6 +14,8 @@ export const Op = {
   SET_BG_COLOR: 8,
   POOL_INIT: 9,
   POOL_DISPOSE: 10,
+  SET_AXIS_CANVAS: 11,
+  SET_AXIS_STYLE: 12,
 } as const;
 export type Op = (typeof Op)[keyof typeof Op];
 
@@ -105,6 +107,39 @@ export interface PoolDisposeMsg {
   hostId: string;
 }
 
+/** Axis canvas style configuration. */
+export interface AxisStyle {
+  color?: string;
+  font?: string;
+  tickSize?: number;
+  tickMargin?: number;
+  bgColor?: string;
+}
+
+/**
+ * Transfer axis OffscreenCanvas(es) to the worker engine.
+ * Sent after INIT/POOL_INIT so the canvases can be in separate Transferable arrays.
+ */
+export interface SetAxisCanvasMsg {
+  op: typeof Op.SET_AXIS_CANVAS;
+  hostId?: string;
+  xAxisCanvas?: OffscreenCanvas;
+  yAxisCanvas?: OffscreenCanvas;
+  xAxisHeight: number;
+  yAxisWidth: number;
+}
+
+/** Update axis rendering style (color, font, tick size, etc.). */
+export interface SetAxisStyleMsg {
+  op: typeof Op.SET_AXIS_STYLE;
+  hostId?: string;
+  color?: string;
+  font?: string;
+  tickSize?: number;
+  tickMargin?: number;
+  bgColor?: string;
+}
+
 export type HostMsg =
   | InitMsg
   | ResizeMsg
@@ -115,7 +150,9 @@ export type HostMsg =
   | DisposeMsg
   | SetBgColorMsg
   | PoolInitMsg
-  | PoolDisposeMsg;
+  | PoolDisposeMsg
+  | SetAxisCanvasMsg
+  | SetAxisStyleMsg;
 
 // ────────────────────────────────────────────────────────────────────────
 // Worker → Main messages (posted via self.postMessage inside the worker)
@@ -123,6 +160,7 @@ export type HostMsg =
 
 export const WorkerOp = {
   BOUNDS_UPDATE: 100,
+  TICK_UPDATE: 101,
 } as const;
 export type WorkerOp = (typeof WorkerOp)[keyof typeof WorkerOp];
 
@@ -141,4 +179,26 @@ export interface BoundsUpdateMsg {
   latestT: number;
 }
 
-export type WorkerMsg = BoundsUpdateMsg;
+/** Serialized form of a single axis tick. structuredClone-safe. */
+export interface SerializedTick {
+  value: number;
+  label: string;
+  fraction: number;
+}
+
+/**
+ * Sent by the engine after each draw frame when ticks need updating.
+ * Replaces the main-thread setInterval-based tick computation in
+ * `useAxisTicks`. `xRawValues` is populated only when `xTickFormat` is a
+ * function — the main thread applies the function and fills in the labels.
+ */
+export interface TickUpdateMsg {
+  op: typeof WorkerOp.TICK_UPDATE;
+  hostId?: string;
+  xTicks: SerializedTick[];
+  yTicks: SerializedTick[];
+  /** Raw x tick values when xTickFormat is a function (main-thread post-processing). */
+  xRawValues: number[];
+}
+
+export type WorkerMsg = BoundsUpdateMsg | TickUpdateMsg;

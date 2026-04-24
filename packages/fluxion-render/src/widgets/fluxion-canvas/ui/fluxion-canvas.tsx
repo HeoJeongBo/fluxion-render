@@ -1,4 +1,4 @@
-import { type CSSProperties, forwardRef, useImperativeHandle, useMemo } from "react";
+import { type CSSProperties, forwardRef, useImperativeHandle, useMemo, useRef } from "react";
 import type { AxisGridConfig } from "../../../entities/axis-grid-layer";
 import type { FluxionHost, FluxionHostOptions } from "../../../features/host";
 import { useXAxisCanvas, useYAxisCanvas } from "../lib/use-axis-canvas";
@@ -16,9 +16,12 @@ export interface FluxionCanvasProps {
    * and x-axis labels in a separate canvas BELOW the chart — matching
    * Recharts' external-axis layout. Pair with `showXLabels: false,
    * showYLabels: false` on the axis-grid layer to avoid double-drawing.
+   *
+   * Axis canvases are rendered by the Worker in the same rAF cycle as the
+   * main canvas — no Main-thread tick lag.
    */
   externalAxes?: boolean;
-  /** ID of the axis-grid layer used for tick computation. Required when `externalAxes` is true. */
+  /** ID of the axis-grid layer. Required when `externalAxes` is true. */
   axisLayerId?: string;
   /** Width of the y-axis canvas in px. Default: 60 (Recharts YAxis default). */
   yAxisWidth?: number;
@@ -34,15 +37,11 @@ export interface FluxionCanvasProps {
   axisTickMargin?: number;
   /**
    * Live config overrides merged on top of the axis-grid layer spec for
-   * external tick computation. Use this to keep the external axis in sync
-   * with dynamic values (e.g. `timeWindowMs`) that you also send to the
-   * worker via `useLayerConfig` — since `layers` is captured on mount only.
+   * external tick computation. Only used when `externalAxes` is false (legacy path).
    */
   axisConfig?: Partial<AxisGridConfig>;
   /**
-   * `setInterval` period (ms) for external axis tick recomputation. Default 16 (≈ 60 fps).
-   * For dense dashboards (20+ charts) set to 250–500 to reduce main-thread load —
-   * axis labels will update less frequently but rendering stays at full fps in the worker.
+   * @deprecated No-op. Axis ticks are now computed in the Worker.
    */
   axisRefreshMs?: number;
 }
@@ -73,15 +72,39 @@ export const FluxionCanvas = forwardRef<FluxionCanvasHandle, FluxionCanvasProps>
       axisTickSize,
       axisTickMargin,
       axisConfig,
-      axisRefreshMs,
     },
     ref,
   ) {
-    const { containerRef, host } = useFluxionCanvas({ layers, hostOptions, onReady });
+    // Container divs for axis canvases — effect creates a fresh <canvas> each
+    // mount so transferControlToOffscreen() is called on a new element every
+    // time (StrictMode double-invoke safe).
+    const xAxisContainerRef = useRef<HTMLDivElement>(null);
+    const yAxisContainerRef = useRef<HTMLDivElement>(null);
+
+    const axisStyle = useMemo(
+      () => ({ color: axisColor, font: axisFont, tickSize: axisTickSize, tickMargin: axisTickMargin }),
+      [axisColor, axisFont, axisTickSize, axisTickMargin],
+    );
+
+    const { containerRef, host } = useFluxionCanvas({
+      layers,
+      hostOptions: externalAxes
+        ? { ...hostOptions, xAxisHeight, yAxisWidth, axisStyle }
+        : hostOptions,
+      onReady,
+      xAxisContainerRef: externalAxes ? xAxisContainerRef : undefined,
+      yAxisContainerRef: externalAxes ? yAxisContainerRef : undefined,
+    });
+    // Note: xAxisElement/yAxisElement are injected by useFluxionCanvas via the
+    // container refs — do not pass them through hostOptions.
+
     useImperativeHandle(ref, () => ({ getHost: () => host }), [host]);
 
+    // Legacy React-side axis rendering (externalAxes=false).
+    // Always called (Rules of Hooks); produces nothing when tickLayers is empty.
     const tickLayers = useMemo(() => {
-      const base = externalAxes ? layers : [];
+      if (externalAxes) return [];
+      const base = layers;
       if (!axisConfig || !axisLayerId) return base;
       return base.map((l) =>
         l.id === axisLayerId && l.kind === "axis-grid"
@@ -90,13 +113,13 @@ export const FluxionCanvas = forwardRef<FluxionCanvasHandle, FluxionCanvasProps>
       );
     }, [externalAxes, layers, axisLayerId, axisConfig]);
 
-    const tickSet = useAxisTicks(tickLayers, axisLayerId, axisRefreshMs ?? 16, host);
     const axisOpts = useMemo(
       () => ({ color: axisColor, font: axisFont, tickSize: axisTickSize, tickMargin: axisTickMargin }),
       [axisColor, axisFont, axisTickSize, axisTickMargin],
     );
-    const yCanvasRef = useYAxisCanvas(tickSet?.yTicks ?? [], axisOpts);
-    const xCanvasRef = useXAxisCanvas(xAxisHeight > 0 ? (tickSet?.xTicks ?? []) : [], axisOpts);
+    const tickSet = useAxisTicks(tickLayers, axisLayerId, 16, host);
+    const legacyYCanvasRef = useYAxisCanvas(tickSet?.yTicks ?? [], axisOpts);
+    const legacyXCanvasRef = useXAxisCanvas(xAxisHeight > 0 ? (tickSet?.xTicks ?? []) : [], axisOpts);
 
     if (!externalAxes) {
       return (
@@ -115,6 +138,12 @@ export const FluxionCanvas = forwardRef<FluxionCanvasHandle, FluxionCanvasProps>
       );
     }
 
+    // externalAxes=true — Worker renders both axis canvases.
+    // legacyYCanvasRef / legacyXCanvasRef are unused here but must be
+    // referenced in JSX to satisfy the linter in the branch above.
+    void legacyYCanvasRef;
+    void legacyXCanvasRef;
+
     return (
       <div
         className={className}
@@ -129,42 +158,24 @@ export const FluxionCanvas = forwardRef<FluxionCanvasHandle, FluxionCanvasProps>
           ...style,
         }}
       >
-        {/* y-axis canvas — left column, top row */}
-        <canvas
-          ref={yCanvasRef}
-          style={{
-            display: "block",
-            width: "100%",
-            height: "100%",
-            minWidth: 0,
-            minHeight: 0,
-          }}
+        {/* y-axis container — left column, top row. Effect injects a fresh canvas. */}
+        <div
+          ref={yAxisContainerRef}
+          style={{ position: "relative", width: "100%", height: "100%", minWidth: 0, minHeight: 0 }}
         />
         {/* chart canvas — right column, top row */}
         <div
           ref={containerRef}
-          style={{
-            position: "relative",
-            width: "100%",
-            height: "100%",
-            minWidth: 0,
-            minHeight: 0,
-          }}
+          style={{ position: "relative", width: "100%", height: "100%", minWidth: 0, minHeight: 0 }}
         />
         {xAxisHeight > 0 && (
           <>
-            {/* corner — left column, bottom row */}
+            {/* corner spacer — left column, bottom row */}
             <div />
-            {/* x-axis canvas — right column, bottom row */}
-            <canvas
-              ref={xCanvasRef}
-              style={{
-                display: "block",
-                width: "100%",
-                height: "100%",
-                minWidth: 0,
-                minHeight: 0,
-              }}
+            {/* x-axis container — right column, bottom row. Effect injects a fresh canvas. */}
+            <div
+              ref={xAxisContainerRef}
+              style={{ position: "relative", width: "100%", height: "100%", minWidth: 0, minHeight: 0 }}
             />
           </>
         )}

@@ -2,6 +2,7 @@ import { formatTick } from "../../../shared/lib/axis-ticks";
 import { intervalTicks, niceTicks } from "../../../shared/lib/math";
 import type { Layer } from "../../../shared/model/layer";
 import type { Bounds, Viewport } from "../../../shared/model/viewport";
+import type { AxisStyle } from "../../../shared/protocol";
 
 export interface AxisGridConfig {
   /** Fixed x-range. Used when `xMode` is "fixed" (default). */
@@ -289,6 +290,146 @@ export class AxisGridLayer implements Layer {
           ctx.fillText(String(yTicks[i]), 2, y - 6);
         }
       }
+    }
+  }
+
+  /**
+   * Computes tick data for export via TICK_UPDATE postMessage.
+   * Called by Engine after draw() so yMode:"auto" bounds are finalized.
+   * When xTickFormat is a function, xTicks labels are left empty and
+   * xRawValues is populated — the main thread applies the function.
+   */
+  computeTicksForExport(): {
+    xTicks: { value: number; label: string; fraction: number }[];
+    yTicks: { value: number; label: string; fraction: number }[];
+    xRawValues: number[];
+  } {
+    const xRaw =
+      this.xTickIntervalMs != null
+        ? intervalTicks(this.bounds.xMin, this.bounds.xMax, this.xTickIntervalMs)
+        : niceTicks(this.bounds.xMin, this.bounds.xMax, this.targetTicks);
+    const yRaw = niceTicks(this.bounds.yMin, this.bounds.yMax, this.targetTicks);
+    const xSpan = this.bounds.xMax - this.bounds.xMin;
+    const ySpan = this.bounds.yMax - this.bounds.yMin;
+    const isFnFormat = typeof this.xTickFormat === "function";
+    return {
+      xTicks: xRaw.map((v) => ({
+        value: v,
+        label: isFnFormat
+          ? ""
+          : formatTick(v, this.xMode, this.timeOrigin, this.xTickFormat as string),
+        fraction: xSpan > 0 ? (v - this.bounds.xMin) / xSpan : 0,
+      })),
+      yTicks: yRaw.map((v) => ({
+        value: v,
+        label: String(v),
+        fraction: ySpan > 0 ? (v - this.bounds.yMin) / ySpan : 0,
+      })),
+      xRawValues: isFnFormat ? xRaw : [],
+    };
+  }
+
+  getXTickIntervalMs(): number | undefined {
+    return this.xTickIntervalMs;
+  }
+
+  /**
+   * Draw x-axis tick marks and labels onto a dedicated OffscreenCanvas.
+   * Must be called after `draw()` so yMode:"auto" bounds are finalized.
+   * `canvasW` / `canvasH` are CSS-pixel dimensions (before dpr scaling).
+   */
+  drawXAxis(
+    ctx: OffscreenCanvasRenderingContext2D,
+    canvasW: number,
+    canvasH: number,
+    style: AxisStyle,
+  ): void {
+    const color = style.color ?? "#666";
+    const font = style.font ?? "11px sans-serif";
+    const tickSize = style.tickSize ?? 6;
+    const tickMargin = style.tickMargin ?? 4;
+
+    ctx.clearRect(0, 0, canvasW, canvasH);
+
+    const xRaw =
+      this.xTickIntervalMs != null
+        ? intervalTicks(this.bounds.xMin, this.bounds.xMax, this.xTickIntervalMs)
+        : niceTicks(this.bounds.xMin, this.bounds.xMax, this.targetTicks);
+    const xSpan = this.bounds.xMax - this.bounds.xMin;
+
+    const fractions = xRaw.map((v) => (xSpan > 0 ? (v - this.bounds.xMin) / xSpan : 0));
+    const labels = xRaw.map((v) =>
+      formatTick(v, this.xMode, this.timeOrigin, this.xTickFormat),
+    );
+
+    if (tickSize > 0) {
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      for (const frac of fractions) {
+        const x = Math.round(frac * canvasW) + 0.5;
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x, tickSize);
+      }
+      ctx.stroke();
+    }
+
+    ctx.fillStyle = color;
+    ctx.font = font;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "top";
+    const labelY = tickSize + tickMargin;
+    for (let i = 0; i < fractions.length; i++) {
+      ctx.fillText(labels[i]!, fractions[i]! * canvasW, labelY);
+    }
+  }
+
+  /**
+   * Draw y-axis tick marks and labels onto a dedicated OffscreenCanvas.
+   * Must be called after `draw()` so yMode:"auto" bounds are finalized.
+   * `canvasW` / `canvasH` are CSS-pixel dimensions (before dpr scaling).
+   */
+  drawYAxis(
+    ctx: OffscreenCanvasRenderingContext2D,
+    canvasW: number,
+    canvasH: number,
+    style: AxisStyle,
+    yPadPx = 0,
+  ): void {
+    const color = style.color ?? "#666";
+    const font = style.font ?? "11px sans-serif";
+    const tickSize = style.tickSize ?? 6;
+    const tickMargin = style.tickMargin ?? 4;
+
+    ctx.clearRect(0, 0, canvasW, canvasH);
+
+    const yRaw = niceTicks(this.bounds.yMin, this.bounds.yMax, this.targetTicks);
+    const ySpan = this.bounds.yMax - this.bounds.yMin;
+    const usableH = canvasH - yPadPx * 2;
+
+    const fractions = yRaw.map((v) => (ySpan > 0 ? (v - this.bounds.yMin) / ySpan : 0));
+    const labels = yRaw.map((v) => String(v));
+
+    if (tickSize > 0) {
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      for (const frac of fractions) {
+        const y = Math.round(yPadPx + (1 - frac) * usableH) + 0.5;
+        ctx.moveTo(canvasW - tickSize, y);
+        ctx.lineTo(canvasW, y);
+      }
+      ctx.stroke();
+    }
+
+    ctx.fillStyle = color;
+    ctx.font = font;
+    ctx.textAlign = "right";
+    ctx.textBaseline = "middle";
+    const labelX = canvasW - tickSize - tickMargin;
+    for (let i = 0; i < fractions.length; i++) {
+      const y = yPadPx + (1 - fractions[i]!) * usableH;
+      ctx.fillText(labels[i]!, labelX, y);
     }
   }
 

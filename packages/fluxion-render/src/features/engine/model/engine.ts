@@ -6,7 +6,7 @@ import { LineChartStaticLayer } from "../../../entities/line-chart-static-layer"
 import type { Layer } from "../../../shared/model/layer";
 import { Scheduler } from "../../../shared/model/scheduler";
 import { Viewport } from "../../../shared/model/viewport";
-import type { HostMsg, LayerKind } from "../../../shared/protocol";
+import type { AxisStyle, HostMsg, LayerKind, SetAxisCanvasMsg, TickUpdateMsg } from "../../../shared/protocol";
 import { Op, WorkerOp } from "../../../shared/protocol";
 
 function createLayer(id: string, kind: LayerKind): Layer {
@@ -29,6 +29,13 @@ function createLayer(id: string, kind: LayerKind): Layer {
 export class Engine {
   private canvas: OffscreenCanvas | null = null;
   private ctx: OffscreenCanvasRenderingContext2D | null = null;
+  private xAxisCanvas: OffscreenCanvas | null = null;
+  private xAxisCtx: OffscreenCanvasRenderingContext2D | null = null;
+  private xAxisHeight = 30;
+  private yAxisCanvas: OffscreenCanvas | null = null;
+  private yAxisCtx: OffscreenCanvasRenderingContext2D | null = null;
+  private yAxisWidth = 60;
+  private axisStyle: AxisStyle = {};
   private readonly viewport = new Viewport();
   private readonly stack = new LayerStack();
   private readonly scheduler: Scheduler;
@@ -36,6 +43,7 @@ export class Engine {
   private hostId: string | undefined;
   private lastSentYMin = Number.NaN;
   private lastSentYMax = Number.NaN;
+  private lastSentXTickMs = 0;
   // Skip BOUNDS_UPDATE when change is smaller than this fraction of the range.
   // Prevents flooding the main thread for sub-pixel y-range drift.
   private static readonly BOUNDS_EPS = 1e-4;
@@ -88,7 +96,36 @@ export class Engine {
       case Op.DISPOSE:
         this.dispose();
         break;
+      case Op.SET_AXIS_CANVAS:
+        this.setAxisCanvas(msg as SetAxisCanvasMsg);
+        break;
+      case Op.SET_AXIS_STYLE: {
+        const { color, font, tickSize, tickMargin, bgColor } = msg as { color?: string; font?: string; tickSize?: number; tickMargin?: number; bgColor?: string };
+        if (color !== undefined) this.axisStyle.color = color;
+        if (font !== undefined) this.axisStyle.font = font;
+        if (tickSize !== undefined) this.axisStyle.tickSize = tickSize;
+        if (tickMargin !== undefined) this.axisStyle.tickMargin = tickMargin;
+        if (bgColor !== undefined) this.axisStyle.bgColor = bgColor;
+        this.scheduler.markDirty();
+        break;
+      }
     }
+  }
+
+  private setAxisCanvas(msg: SetAxisCanvasMsg): void {
+    this.xAxisHeight = msg.xAxisHeight;
+    this.yAxisWidth = msg.yAxisWidth;
+    if (msg.xAxisCanvas) {
+      this.xAxisCanvas = msg.xAxisCanvas;
+      this.xAxisCtx = msg.xAxisCanvas.getContext("2d");
+    }
+    if (msg.yAxisCanvas) {
+      this.yAxisCanvas = msg.yAxisCanvas;
+      this.yAxisCtx = msg.yAxisCanvas.getContext("2d");
+    }
+    // Size the axis canvases to match the current viewport.
+    this.resizeAxisCanvases(this.viewport.widthPx, this.viewport.heightPx, this.viewport.dpr);
+    this.scheduler.markDirty();
   }
 
   private init(
@@ -112,7 +149,19 @@ export class Engine {
     this.canvas.height = Math.max(1, Math.round(height * dpr));
     this.viewport.setSize(width, height, dpr);
     this.stack.resizeAll(this.viewport);
+    this.resizeAxisCanvases(width, height, dpr);
     this.scheduler.markDirty();
+  }
+
+  private resizeAxisCanvases(width: number, height: number, dpr: number): void {
+    if (this.xAxisCanvas) {
+      this.xAxisCanvas.width = Math.max(1, Math.round(width * dpr));
+      this.xAxisCanvas.height = Math.max(1, Math.round(this.xAxisHeight * dpr));
+    }
+    if (this.yAxisCanvas) {
+      this.yAxisCanvas.width = Math.max(1, Math.round(this.yAxisWidth * dpr));
+      this.yAxisCanvas.height = Math.max(1, Math.round(height * dpr));
+    }
   }
 
   private render() {
@@ -135,10 +184,10 @@ export class Engine {
     const { yMin, yMax } = this.viewport.bounds;
     const range = yMax - yMin || 1;
     const eps = range * Engine.BOUNDS_EPS;
-    if (
+    const boundsChanged =
       Math.abs(yMin - this.lastSentYMin) > eps ||
-      Math.abs(yMax - this.lastSentYMax) > eps
-    ) {
+      Math.abs(yMax - this.lastSentYMax) > eps;
+    if (boundsChanged) {
       this.lastSentYMin = yMin;
       this.lastSentYMax = yMax;
       try {
@@ -152,6 +201,65 @@ export class Engine {
       } catch {
         // Worker context may not support postMessage in tests
       }
+    }
+
+    // Draw axis canvases synchronously in the same rAF cycle (zero lag).
+    const axisLayer = this.stack.findFirst(
+      (l): l is AxisGridLayer => l instanceof AxisGridLayer,
+    );
+    if (axisLayer) {
+      if (this.xAxisCtx && this.xAxisCanvas) {
+        this.xAxisCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        axisLayer.drawXAxis(
+          this.xAxisCtx,
+          this.xAxisCanvas.width / dpr,
+          this.xAxisHeight,
+          this.axisStyle,
+        );
+      }
+      if (this.yAxisCtx && this.yAxisCanvas) {
+        this.yAxisCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        axisLayer.drawYAxis(
+          this.yAxisCtx,
+          this.yAxisWidth,
+          this.yAxisCanvas.height / dpr,
+          this.axisStyle,
+          this.viewport.yPadPx,
+        );
+      }
+    }
+
+    // Only send TICK_UPDATE when axis canvases are not present (React-side fallback).
+    if (!this.xAxisCanvas && !this.yAxisCanvas) {
+      this.maybeSendTickUpdate(boundsChanged);
+    }
+  }
+
+  private maybeSendTickUpdate(boundsChanged: boolean): void {
+    const axisLayer = this.stack.findFirst(
+      (l): l is AxisGridLayer => l instanceof AxisGridLayer,
+    );
+    if (!axisLayer) return;
+
+    const now = Date.now();
+    const xInterval = axisLayer.getXTickIntervalMs() ?? 1000;
+    const xChanged = now - this.lastSentXTickMs >= xInterval;
+
+    if (!xChanged && !boundsChanged) return;
+
+    if (xChanged) this.lastSentXTickMs = now;
+
+    const ticks = axisLayer.computeTicksForExport();
+    try {
+      self.postMessage({
+        op: WorkerOp.TICK_UPDATE,
+        hostId: this.hostId,
+        xTicks: ticks.xTicks,
+        yTicks: ticks.yTicks,
+        xRawValues: ticks.xRawValues,
+      } satisfies TickUpdateMsg);
+    } catch {
+      // Worker context may not support postMessage in tests
     }
   }
 
