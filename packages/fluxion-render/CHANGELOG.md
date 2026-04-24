@@ -1,5 +1,17 @@
 # Changelog
 
+# [0.5.0](https://github-personal/HeoJeongBo/fluxion-render/compare/v0.4.1...v0.5.0) (2026-04-24)
+
+
+### Bug Fixes
+
+* minor performance issue ([5af3285](https://github-personal/HeoJeongBo/fluxion-render/commit/5af3285fbe89514ca0699e4094dc942b8cf21577))
+
+
+### Features
+
+* axis to worker ([b3abe11](https://github-personal/HeoJeongBo/fluxion-render/commit/b3abe11e4c6f4b2bc4ac46f4f2f775ab6e56f395))
+
 ## [0.4.1](https://github-personal/HeoJeongBo/fluxion-render/compare/v0.4.0...v0.4.1) (2026-04-21)
 
 
