@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.2](https://github-personal/HeoJeongBo/fluxion-render/compare/fluxion-worker-v0.1.1...fluxion-worker-v0.1.2) (2026-05-04)
+
+
+### Features
+
+* update md ([d7e49db](https://github-personal/HeoJeongBo/fluxion-render/commit/d7e49dbd217c44e3e7dfa9f405aad5538436eb39))
+
 ## [0.1.1](https://github.com/HeoJeongBo/fluxion-render/compare/fluxion-worker-v0.1.0...fluxion-worker-v0.1.1) (2026-05-04)
 
 ### Features
