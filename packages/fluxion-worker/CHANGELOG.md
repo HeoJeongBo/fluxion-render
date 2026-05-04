@@ -1,5 +1,7 @@
 # Changelog
 
+## [0.1.7](https://github-personal/HeoJeongBo/fluxion-render/compare/fluxion-worker-v0.1.6...fluxion-worker-v0.1.7) (2026-05-04)
+
 ## [0.1.6](https://github-personal/HeoJeongBo/fluxion-render/compare/fluxion-worker-v0.1.5...fluxion-worker-v0.1.6) (2026-05-04)
 
 

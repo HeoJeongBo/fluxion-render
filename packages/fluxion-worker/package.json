@@ -1,6 +1,6 @@
 {
   "name": "@heojeongbo/fluxion-worker",
-  "version": "0.1.6",
+  "version": "0.1.7",
   "description": "Worker pool infrastructure and message protocol for OffscreenCanvas rendering.",
   "type": "module",
   "sideEffects": false,
