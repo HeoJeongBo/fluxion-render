@@ -13,8 +13,7 @@
     "releaseNotes": null
   },
   "npm": {
-    "publish": true,
-    "publishPath": "."
+    "publish": false
   },
   "hooks": {
     "before:init": [
@@ -22,9 +21,9 @@
       "pnpm --filter @heojeongbo/fluxion-render test",
       "pnpm --filter @heojeongbo/fluxion-render build"
     ],
-    "before:release": [],
     "after:bump": ["echo 'Version bumped to ${version}'"],
     "after:release": [
+      "pnpm publish --no-git-checks",
       "echo 'Successfully released ${name} v${version} to ${repo.repository}.'"
     ]
   },

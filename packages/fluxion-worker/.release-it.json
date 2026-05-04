@@ -13,8 +13,7 @@
     "releaseNotes": null
   },
   "npm": {
-    "publish": true,
-    "publishPath": "."
+    "publish": false
   },
   "hooks": {
     "before:init": [
@@ -24,6 +23,7 @@
     ],
     "after:bump": ["echo 'Version bumped to ${version}'"],
     "after:release": [
+      "pnpm publish --no-git-checks",
       "echo 'Successfully released ${name} v${version} to ${repo.repository}.'"
     ]
   },
