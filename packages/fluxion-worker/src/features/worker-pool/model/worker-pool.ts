@@ -93,6 +93,37 @@ export class WorkerHandle<TMsg extends object> implements WorkerLike {
     this._worker.addEventListener(type, wrapper);
   }
 
+  /**
+   * Subscribe to worker→main messages with a typed callback.
+   * Returns an `off` function — call it to unsubscribe.
+   *
+   * @example — fire-once (request/response)
+   * ```ts
+   * const off = handle.onMessage<MyResult>((msg) => {
+   *   off();
+   *   console.log(msg.result);
+   * });
+   * handle.postMessage({ op: "sum", values });
+   * ```
+   *
+   * @example — persistent subscription
+   * ```ts
+   * const off = handle.onMessage<MyResult>((msg) => {
+   *   setResult(msg.result);
+   * });
+   * // later: off();
+   * ```
+   */
+  onMessage<TResult extends object = object>(
+    callback: (msg: TResult) => void,
+  ): () => void {
+    const listener: EventListener = (evt: Event) => {
+      callback((evt as MessageEvent<TResult>).data);
+    };
+    this.addEventListener("message", listener);
+    return () => this.removeEventListener("message", listener);
+  }
+
   removeEventListener(type: string, listener: EventListener): void {
     const byType = this._listenerMap.get(type);
     const wrapper = byType?.get(listener);

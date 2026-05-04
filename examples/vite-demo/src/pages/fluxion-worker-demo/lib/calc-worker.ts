@@ -4,18 +4,16 @@ export type CalcOp = "sum" | "mean" | "max";
 
 export interface CalcMsg {
   op: CalcOp;
-  reqId: number;
   values: number[];
 }
 
 export interface CalcResultMsg {
   op: CalcOp;
-  reqId: number;
   result: number;
   durationMs: number;
 }
 
-defineWorker<CalcMsg, CalcResultMsg>(({ op, reqId, values }, reply) => {
+defineWorker<CalcMsg, CalcResultMsg>(({ op, values }, reply) => {
   const t0 = performance.now();
 
   let result: number;
@@ -27,5 +25,5 @@ defineWorker<CalcMsg, CalcResultMsg>(({ op, reqId, values }, reply) => {
     result = values.length > 0 ? Math.max(...values) : 0;
   }
 
-  reply({ op, reqId, result, durationMs: performance.now() - t0 });
+  reply({ op, result, durationMs: performance.now() - t0 });
 });

@@ -330,8 +330,7 @@ describe("WorkerHandle", () => {
     it("decrements the pool busy counter", () => {
       const { pool } = makePool(1);
       const h1 = pool.acquire();
-      const h2 = pool.acquire();
-      // Both on worker 0 — count is 2
+      pool.acquire(); // Both on worker 0 — count is 2
       h1.release();
       // Count is 1 — acquiring again still goes to worker 0 (count 2 again)
       const h3 = pool.acquire();
@@ -447,6 +446,59 @@ describe("WorkerHandle", () => {
       const b = vi.fn();
       handle.addEventListener("message", a);
       handle.addEventListener("message", b);
+      fakeWorkers[0]!._emit("message", { op: 1, hostId: handle.hostId });
+      expect(a).toHaveBeenCalledOnce();
+      expect(b).toHaveBeenCalledOnce();
+      pool.dispose();
+    });
+  });
+
+  describe("onMessage", () => {
+    it("delivers typed messages to the callback", () => {
+      const { pool, fakeWorkers } = makePool(1);
+      const handle = pool.acquire();
+      const cb = vi.fn();
+      handle.onMessage(cb);
+      fakeWorkers[0]!._emit("message", { op: 1, hostId: handle.hostId });
+      expect(cb).toHaveBeenCalledOnce();
+      expect(cb.mock.calls[0]![0]).toMatchObject({ op: 1 });
+      pool.dispose();
+    });
+
+    it("returns an off() function that stops delivery", () => {
+      const { pool, fakeWorkers } = makePool(1);
+      const handle = pool.acquire();
+      const cb = vi.fn();
+      const off = handle.onMessage(cb);
+      fakeWorkers[0]!._emit("message", { op: 1, hostId: handle.hostId });
+      expect(cb).toHaveBeenCalledOnce();
+      off();
+      fakeWorkers[0]!._emit("message", { op: 2, hostId: handle.hostId });
+      expect(cb).toHaveBeenCalledOnce();
+      pool.dispose();
+    });
+
+    it("filters messages by hostId (via addEventListener)", () => {
+      const { pool, fakeWorkers } = makePool(1);
+      const h1 = pool.acquire();
+      const h2 = pool.acquire();
+      const cb1 = vi.fn();
+      const cb2 = vi.fn();
+      h1.onMessage(cb1);
+      h2.onMessage(cb2);
+      fakeWorkers[0]!._emit("message", { op: 1, hostId: h1.hostId });
+      expect(cb1).toHaveBeenCalledOnce();
+      expect(cb2).not.toHaveBeenCalled();
+      pool.dispose();
+    });
+
+    it("supports multiple independent subscriptions", () => {
+      const { pool, fakeWorkers } = makePool(1);
+      const handle = pool.acquire();
+      const a = vi.fn();
+      const b = vi.fn();
+      handle.onMessage(a);
+      handle.onMessage(b);
       fakeWorkers[0]!._emit("message", { op: 1, hostId: handle.hostId });
       expect(a).toHaveBeenCalledOnce();
       expect(b).toHaveBeenCalledOnce();

@@ -7,7 +7,6 @@ type Mode = "pool" | "standalone";
 
 interface JobResult {
   op: CalcOp;
-  input: number[];
   result: number;
   durationMs: number;
   workerId: string;
@@ -48,7 +47,6 @@ const SECTION_LABEL: React.CSSProperties = {
 export function FluxionWorkerDemoPage() {
   const poolRef = useRef<WorkerPool<CalcMsg> | null>(null);
   const standaloneHandleRef = useRef<WorkerHandle<CalcMsg> | null>(null);
-  const reqIdRef = useRef(0);
 
   const [results, setResults] = useState<JobResult[]>([]);
   const [pending, setPending] = useState(0);
@@ -72,13 +70,23 @@ export function FluxionWorkerDemoPage() {
     };
   }, [size]);
 
-  // Standalone: WorkerHandle owns the Worker lifecycle
+  // Standalone: WorkerHandle owns the Worker lifecycle, one persistent subscription
   useEffect(() => {
-    standaloneHandleRef.current = new WorkerHandle<CalcMsg>(
+    const handle = new WorkerHandle<CalcMsg>(
       () => new Worker(new URL("../lib/calc-worker.ts", import.meta.url), { type: "module" }),
     );
+    standaloneHandleRef.current = handle;
+
+    handle.onMessage<CalcResultMsg>((msg) => {
+      setResults((prev) => [
+        { op: msg.op, result: msg.result, durationMs: msg.durationMs, workerId: handle.hostId, mode: "standalone" },
+        ...prev.slice(0, 19),
+      ]);
+      setPending((p) => Math.max(0, p - 1));
+    });
+
     return () => {
-      standaloneHandleRef.current?.terminate();
+      handle.terminate();
       standaloneHandleRef.current = null;
     };
   }, []);
@@ -88,50 +96,27 @@ export function FluxionWorkerDemoPage() {
     if (!pool) return;
 
     const handle = pool.acquire();
-    const reqId = ++reqIdRef.current;
-    const values = randomValues(count);
 
     setPending((p) => p + 1);
 
-    const listener = (evt: Event) => {
-      const msg = (evt as MessageEvent<CalcResultMsg>).data;
-      if (msg.reqId !== reqId) return;
-      handle.removeEventListener("message", listener);
+    const off = handle.onMessage<CalcResultMsg>((msg) => {
+      off();
       setResults((prev) => [
-        { op, input: values, result: msg.result, durationMs: msg.durationMs, workerId: handle.hostId, mode: "pool" },
+        { op: msg.op, result: msg.result, durationMs: msg.durationMs, workerId: handle.hostId, mode: "pool" },
         ...prev.slice(0, 19),
       ]);
       setPending((p) => Math.max(0, p - 1));
       handle.release();
-    };
+    });
 
-    handle.addEventListener("message", listener);
-    handle.postMessage({ op, reqId, values });
+    handle.postMessage({ op, values: randomValues(count) });
   }, []);
 
   const dispatchStandalone = useCallback((op: CalcOp, count: number) => {
     const handle = standaloneHandleRef.current;
     if (!handle) return;
-
-    const reqId = ++reqIdRef.current;
-    const values = randomValues(count);
-
     setPending((p) => p + 1);
-
-    const listener = (evt: Event) => {
-      const msg = (evt as MessageEvent<CalcResultMsg>).data;
-      if (msg.reqId !== reqId) return;
-      handle.removeEventListener("message", listener);
-      setResults((prev) => [
-        { op, input: values, result: msg.result, durationMs: msg.durationMs, workerId: handle.hostId, mode: "standalone" },
-        ...prev.slice(0, 19),
-      ]);
-      setPending((p) => Math.max(0, p - 1));
-      // no release() needed — standalone handle, no pool counter
-    };
-
-    handle.addEventListener("message", listener);
-    handle.postMessage({ op, reqId, values });
+    handle.postMessage({ op, values: randomValues(count) });
   }, []);
 
   const dispatch = mode === "pool" ? dispatchPool : dispatchStandalone;
@@ -139,11 +124,11 @@ export function FluxionWorkerDemoPage() {
   const workerSnippet = `// calc-worker.ts
 import { defineWorker } from "@heojeongbo/fluxion-worker";
 
-defineWorker(({ op, reqId, values }, reply) => {
+defineWorker(({ op, values }, reply) => {
   const result = op === "sum"
     ? values.reduce((a, b) => a + b, 0)
     : /* mean / max */ ...;
-  reply({ op, reqId, result });
+  reply({ op, result });
 });`;
 
   const poolSnippet = `// main thread — WorkerPool
@@ -157,22 +142,27 @@ const pool = new WorkerPool({
 });
 
 const handle = pool.acquire();
-handle.addEventListener("message", cb);
-handle.postMessage({ op: "sum", reqId, values });
-handle.release(); // return to pool`;
+const off = handle.onMessage((msg) => {
+  off();
+  console.log(msg.result);
+  handle.release();
+});
+handle.postMessage({ op: "sum", values });`;
 
   const standaloneSnippet = `// main thread — WorkerHandle (no pool)
 import { WorkerHandle } from "@heojeongbo/fluxion-worker";
 
-const worker = new Worker(
-  new URL("./calc-worker.ts", import.meta.url),
-  { type: "module" },
+const handle = new WorkerHandle(
+  () => new Worker(new URL("./calc-worker.ts",
+               import.meta.url), { type: "module" })
 );
-const handle = new WorkerHandle(worker, "my-host");
 
-handle.addEventListener("message", cb);
-handle.postMessage({ op: "sum", reqId, values });
-// release() is a no-op — call worker.terminate() when done`;
+const off = handle.onMessage((msg) => {
+  off();
+  console.log(msg.result);
+});
+handle.postMessage({ op: "sum", values });
+// handle.terminate() — stops the worker`;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", width: "100%", height: "100%", overflow: "hidden" }}>
@@ -344,7 +334,7 @@ handle.postMessage({ op: "sum", reqId, values });
                   key={i}
                   style={{
                     display: "grid",
-                    gridTemplateColumns: "56px 60px 1fr auto auto",
+                    gridTemplateColumns: "56px 60px auto auto",
                     alignItems: "center",
                     gap: 10,
                     padding: "8px 12px",
@@ -367,9 +357,6 @@ handle.postMessage({ op: "sum", reqId, values });
                   </span>
                   <span style={{ fontWeight: 700, color: THEME.button.background, fontFamily: "monospace" }}>
                     {r.op}
-                  </span>
-                  <span style={{ color: THEME.page.textSecondary, fontFamily: "monospace" }}>
-                    [{r.input.slice(0, 5).join(", ")}{r.input.length > 5 ? `, …+${r.input.length - 5}` : ""}]
                   </span>
                   <span style={{ fontWeight: 600, color: THEME.page.textPrimary, fontFamily: "monospace" }}>
                     = {r.result.toFixed(2)}
