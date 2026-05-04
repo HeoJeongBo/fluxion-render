@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.4](https://github-personal/HeoJeongBo/fluxion-render/compare/fluxion-worker-v0.1.3...fluxion-worker-v0.1.4) (2026-05-04)
+
+
+### Bug Fixes
+
+* publish setting ([89a7097](https://github-personal/HeoJeongBo/fluxion-render/commit/89a70970c049e95ffef08470e80072b9cdc80f9d))
+
 ## [0.1.3](https://github-personal/HeoJeongBo/fluxion-render/compare/fluxion-worker-v0.1.2...fluxion-worker-v0.1.3) (2026-05-04)
 
 
