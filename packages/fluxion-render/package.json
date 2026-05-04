@@ -60,6 +60,9 @@
   "publishConfig": {
     "access": "public"
   },
+  "dependencies": {
+    "@heojeongbo/fluxion-worker": "workspace:*"
+  },
   "peerDependencies": {
     "react": ">=18"
   },

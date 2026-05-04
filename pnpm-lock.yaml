@@ -20,6 +20,9 @@ importers:
       '@heojeongbo/fluxion-render':
         specifier: workspace:*
         version: link:../../packages/fluxion-render
+      '@heojeongbo/fluxion-worker':
+        specifier: workspace:*
+        version: link:../../packages/fluxion-worker
       react:
         specifier: ^18.3.1
         version: 18.3.1
@@ -44,6 +47,10 @@ importers:
         version: 5.4.21(@types/node@25.6.0)
 
   packages/fluxion-render:
+    dependencies:
+      '@heojeongbo/fluxion-worker':
+        specifier: workspace:*
+        version: link:../fluxion-worker
     devDependencies:
       '@release-it/conventional-changelog':
         specifier: ^10.0.6
@@ -78,6 +85,24 @@ importers:
       release-it:
         specifier: ^19.2.4
         version: 19.2.4(@types/node@25.6.0)(magicast@0.5.2)
+      tsup:
+        specifier: ^8.2.4
+        version: 8.5.1(jiti@2.6.1)(postcss@8.5.9)(typescript@5.9.3)
+      typescript:
+        specifier: ^5.5.4
+        version: 5.9.3
+      vitest:
+        specifier: ^4.1.4
+        version: 4.1.4(@types/node@25.6.0)(@vitest/coverage-v8@4.1.4)(happy-dom@20.8.9)(vite@7.3.2(@types/node@25.6.0)(jiti@2.6.1))
+
+  packages/fluxion-worker:
+    devDependencies:
+      '@vitest/coverage-v8':
+        specifier: ^4.1.4
+        version: 4.1.4(vitest@4.1.4)
+      happy-dom:
+        specifier: ^20.8.9
+        version: 20.8.9
       tsup:
         specifier: ^8.2.4
         version: 8.5.1(jiti@2.6.1)(postcss@8.5.9)(typescript@5.9.3)

@@ -17,6 +17,7 @@ export type {
   LineSample,
   XyPoint,
 } from "./features/host";
+export { createFluxionWorkerFactory } from "./app/worker/create-worker-factory";
 export type { DType, HostMsg, LayerKind } from "./shared/protocol";
 export type { LineChartConfig } from "./entities/line-chart-layer";
 export type { LineChartStaticConfig } from "./entities/line-chart-static-layer";

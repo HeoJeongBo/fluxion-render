@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.0.0",
   "scripts": {
-    "build": "pnpm --filter @heojeongbo/fluxion-render build",
+    "build": "pnpm --filter @heojeongbo/fluxion-worker build && pnpm --filter @heojeongbo/fluxion-render build",
     "dev": "pnpm --filter @heojeongbo/fluxion-render build && pnpm -r --parallel --filter @heojeongbo/fluxion-render --filter vite-demo run dev",
     "typecheck": "pnpm -r typecheck",
     "test": "pnpm -r run test",

@@ -11,12 +11,12 @@ import { FluxionWorkerPool } from "../../../features/worker-pool";
  * instead of the module-level default pool.
  *
  * @example
- * const pool = useFluxionWorkerPool({ size: 4 });
+ * const pool = useFluxionWorkerPool({ size: 4, workerFactory: () => new Worker(...) });
  * // Pass to each canvas:
  * <FluxionCanvas hostOptions={{ pool }} ... />
  */
 export function useFluxionWorkerPool(
-  opts: FluxionWorkerPoolOptions = {},
+  opts: FluxionWorkerPoolOptions,
 ): FluxionWorkerPool {
   const optsRef = useRef(opts);
   const poolRef = useRef<FluxionWorkerPool | null>(null);

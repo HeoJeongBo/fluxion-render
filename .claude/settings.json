@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git -C /Users/heojeongbo/Desktop/personal/fluxion-render show HEAD:packages/fluxion-render/src/widgets/fluxion-canvas/lib/use-fluxion-canvas.ts)",
+      "Bash(git -C /Users/heojeongbo/Desktop/personal/fluxion-render show v0.4.1:packages/fluxion-render/src/widgets/fluxion-canvas/lib/use-fluxion-canvas.ts)",
+      "Bash(grep -E \"\\\\.tsx?$\")",
+      "Bash(pnpm -r run typecheck)"
+    ]
+  }
+}
