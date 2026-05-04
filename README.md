@@ -12,8 +12,9 @@ Built for robotics and sensor systems: streaming line charts, LiDAR point clouds
 
 | Package | Description |
 |---------|-------------|
-| [`packages/fluxion-render`](packages/fluxion-render) | Core library — published to npm as [`@heojeongbo/fluxion-render`](https://www.npmjs.com/package/@heojeongbo/fluxion-render) |
-| [`examples/vite-demo`](examples/vite-demo) | Vite + React demo — Stream, Multi-stream, Static XY, LiDAR, Pool |
+| [`packages/fluxion-worker`](packages/fluxion-worker) | Generic worker pool infrastructure — published as [`@heojeongbo/fluxion-worker`](https://www.npmjs.com/package/@heojeongbo/fluxion-worker) |
+| [`packages/fluxion-render`](packages/fluxion-render) | Core rendering library — published as [`@heojeongbo/fluxion-render`](https://www.npmjs.com/package/@heojeongbo/fluxion-render) |
+| [`examples/vite-demo`](examples/vite-demo) | Vite + React demo — Stream, Multi-stream, Static XY, LiDAR, Pool, fluxion-worker |
 
 ---
 
@@ -46,32 +47,40 @@ FluxionHost × N                      FluxionWorkerPool (4 workers)
 ```bash
 pnpm install
 
-# Build the library
-pnpm --filter @heojeongbo/fluxion-render build
+# Build all packages (worker first, then render)
+pnpm build
 
 # Run the demo app
 pnpm --filter vite-demo dev
 
-# Typecheck + test
-pnpm --filter @heojeongbo/fluxion-render typecheck
-pnpm --filter @heojeongbo/fluxion-render test
+# Typecheck + test all packages
+pnpm typecheck
+pnpm test
 ```
 
 ---
 
 ## Release
 
+### fluxion-render
+
 ```bash
-# Patch / minor / major
 pnpm release:patch
 pnpm release:minor
 pnpm release:major
-
-# Dry-run
-pnpm --filter @heojeongbo/fluxion-render release:dry
+pnpm release:dry    # dry-run
 ```
 
-Runs typecheck → test → build → version bump → git tag → GitHub release → npm publish.
+### fluxion-worker
+
+```bash
+pnpm release:worker:patch
+pnpm release:worker:minor
+pnpm release:worker:major
+pnpm release:worker:dry     # dry-run
+```
+
+Both run: typecheck → test → build → version bump → git tag (`fluxion-render-v*` / `fluxion-worker-v*`) → GitHub release → npm publish.
 
 ---
 

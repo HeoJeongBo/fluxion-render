@@ -296,8 +296,8 @@ Creates a scoped `FluxionWorkerPool` that is disposed when the component unmount
 
 ```ts
 const pool = useFluxionWorkerPool({
-  size?: number,                // default 4
-  workerFactory?: () => Worker,
+  size?: number,              // default 4
+  workerFactory: () => Worker, // required
 });
 ```
 
@@ -503,10 +503,13 @@ host.dispose()
 ### `FluxionWorkerPool`
 
 ```ts
-const pool = new FluxionWorkerPool({ size?: number, workerFactory?: () => Worker });
+const pool = new FluxionWorkerPool({
+  size?: number,           // default 4, clamped to [1, 16]
+  workerFactory: () => Worker, // required
+});
 
 // Pass to FluxionHost — called automatically, you rarely need this directly
-pool.acquire() // → PooledWorkerHandle
+pool.acquire() // → FluxionWorkerHandle
 
 pool.dispose() // terminate all workers
 ```
