@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.5](https://github-personal/HeoJeongBo/fluxion-render/compare/fluxion-worker-v0.1.4...fluxion-worker-v0.1.5) (2026-05-04)
+
+
+### Bug Fixes
+
+* registry setting ([4e956e6](https://github-personal/HeoJeongBo/fluxion-render/commit/4e956e643024759b1565705fad545fa8aa73bd63))
+
 ## [0.1.4](https://github-personal/HeoJeongBo/fluxion-render/compare/fluxion-worker-v0.1.3...fluxion-worker-v0.1.4) (2026-05-04)
 
 
