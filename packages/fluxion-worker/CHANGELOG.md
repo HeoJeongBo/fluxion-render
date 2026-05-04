@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.1.3](https://github-personal/HeoJeongBo/fluxion-render/compare/fluxion-worker-v0.1.2...fluxion-worker-v0.1.3) (2026-05-04)
+
+
+### Bug Fixes
+
+* npm publish warn issue ([00fcd91](https://github-personal/HeoJeongBo/fluxion-render/commit/00fcd91648443d77e64cc65ff2a453ca33e004ce))
+
+
+### Features
+
+* add standalone onMessage ([c586841](https://github-personal/HeoJeongBo/fluxion-render/commit/c58684100a07006547dd48a625e949cd8f0b1bf1))
+
 ## [0.1.2](https://github-personal/HeoJeongBo/fluxion-render/compare/fluxion-worker-v0.1.1...fluxion-worker-v0.1.2) (2026-05-04)
 
 
