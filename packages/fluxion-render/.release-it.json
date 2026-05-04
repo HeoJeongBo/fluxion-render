@@ -23,7 +23,7 @@
     ],
     "after:bump": ["echo 'Version bumped to ${version}'"],
     "after:release": [
-      "pnpm publish --no-git-checks",
+      "pnpm publish --access public --no-git-checks",
       "echo 'Successfully released ${name} v${version} to ${repo.repository}.'"
     ]
   },
