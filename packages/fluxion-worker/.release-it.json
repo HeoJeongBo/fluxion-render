@@ -1,15 +1,15 @@
 {
   "$schema": "https://unpkg.com/release-it/schema/release-it.json",
   "git": {
-    "commitMessage": "chore: release @heojeongbo/fluxion-render v${version}",
-    "tagName": "fluxion-render-v${version}",
+    "commitMessage": "chore: release @heojeongbo/fluxion-worker v${version}",
+    "tagName": "fluxion-worker-v${version}",
     "requireCleanWorkingDir": true,
     "requireBranch": "main",
     "push": true
   },
   "github": {
     "release": true,
-    "releaseName": "fluxion-render v${version}",
+    "releaseName": "fluxion-worker v${version}",
     "releaseNotes": null
   },
   "npm": {
@@ -18,11 +18,10 @@
   },
   "hooks": {
     "before:init": [
-      "pnpm --filter @heojeongbo/fluxion-render typecheck",
-      "pnpm --filter @heojeongbo/fluxion-render test",
-      "pnpm --filter @heojeongbo/fluxion-render build"
+      "pnpm --filter @heojeongbo/fluxion-worker typecheck",
+      "pnpm --filter @heojeongbo/fluxion-worker test",
+      "pnpm --filter @heojeongbo/fluxion-worker build"
     ],
-    "before:release": [],
     "after:bump": ["echo 'Version bumped to ${version}'"],
     "after:release": [
       "echo 'Successfully released ${name} v${version} to ${repo.repository}.'"

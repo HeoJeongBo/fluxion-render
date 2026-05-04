@@ -97,12 +97,18 @@ importers:
 
   packages/fluxion-worker:
     devDependencies:
+      '@release-it/conventional-changelog':
+        specifier: ^10.0.6
+        version: 10.0.6(conventional-commits-filter@5.0.0)(conventional-commits-parser@6.4.0)(release-it@19.2.4(@types/node@25.6.0)(magicast@0.5.2))
       '@vitest/coverage-v8':
         specifier: ^4.1.4
         version: 4.1.4(vitest@4.1.4)
       happy-dom:
         specifier: ^20.8.9
         version: 20.8.9
+      release-it:
+        specifier: ^19.2.4
+        version: 19.2.4(@types/node@25.6.0)(magicast@0.5.2)
       tsup:
         specifier: ^8.2.4
         version: 8.5.1(jiti@2.6.1)(postcss@8.5.9)(typescript@5.9.3)

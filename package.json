@@ -13,7 +13,12 @@
     "release:dry": "pnpm --filter @heojeongbo/fluxion-render release:dry",
     "release:patch": "pnpm --filter @heojeongbo/fluxion-render release:patch",
     "release:minor": "pnpm --filter @heojeongbo/fluxion-render release:minor",
-    "release:major": "pnpm --filter @heojeongbo/fluxion-render release:major"
+    "release:major": "pnpm --filter @heojeongbo/fluxion-render release:major",
+    "release:worker": "pnpm --filter @heojeongbo/fluxion-worker release",
+    "release:worker:dry": "pnpm --filter @heojeongbo/fluxion-worker release:dry",
+    "release:worker:patch": "pnpm --filter @heojeongbo/fluxion-worker release:patch",
+    "release:worker:minor": "pnpm --filter @heojeongbo/fluxion-worker release:minor",
+    "release:worker:major": "pnpm --filter @heojeongbo/fluxion-worker release:major"
   },
   "packageManager": "pnpm@9.0.0",
   "devDependencies": {
