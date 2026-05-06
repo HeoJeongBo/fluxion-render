@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.1.9](https://github-personal/HeoJeongBo/fluxion-render/compare/fluxion-worker-v0.1.8...fluxion-worker-v0.1.9) (2026-05-06)
+
+
+### Features
+
+* **worker,examples:** add dispatch, dispose, WorkerTimeoutError.is ([4afcf1d](https://github-personal/HeoJeongBo/fluxion-render/commit/4afcf1dd45e092ec9592d88e2aaa973124586626))
+* **worker,examples:** add request, stats, onError, defineWorkerWithState ([239db37](https://github-personal/HeoJeongBo/fluxion-render/commit/239db37768d606b078878eae6c8a9305a0f00267))
+
 ## [0.1.8](https://github-personal/HeoJeongBo/fluxion-render/compare/fluxion-worker-v0.1.7...fluxion-worker-v0.1.8) (2026-05-04)
 
 ## [0.1.7](https://github-personal/HeoJeongBo/fluxion-render/compare/fluxion-worker-v0.1.6...fluxion-worker-v0.1.7) (2026-05-04)
