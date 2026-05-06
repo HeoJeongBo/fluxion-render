@@ -738,6 +738,117 @@ describe("onError cleanup via _markTerminated", () => {
   });
 });
 
+// ─── WorkerTimeoutError.is() ─────────────────────────────────────────────────
+
+describe("WorkerTimeoutError.is()", () => {
+  it("returns true for WorkerTimeoutError instances", () => {
+    expect(WorkerTimeoutError.is(new WorkerTimeoutError(100))).toBe(true);
+  });
+
+  it("returns false for generic Error", () => {
+    expect(WorkerTimeoutError.is(new Error("oops"))).toBe(false);
+  });
+
+  it("returns false for non-error values", () => {
+    expect(WorkerTimeoutError.is("string")).toBe(false);
+    expect(WorkerTimeoutError.is(null)).toBe(false);
+    expect(WorkerTimeoutError.is(undefined)).toBe(false);
+  });
+});
+
+// ─── WorkerHandle.dispose() ──────────────────────────────────────────────────
+
+describe("WorkerHandle.dispose()", () => {
+  it("standalone: terminates the worker and cleans up listeners", () => {
+    const fakeWorker = makeFakeWorker();
+    const handle = new WorkerHandle<TestMsg>(
+      () => fakeWorker as unknown as Worker,
+    );
+    const cb = vi.fn();
+    handle.onMessage(cb);
+    handle.dispose();
+    fakeWorker._emit("message", { op: 1, hostId: handle.hostId });
+    expect(cb).not.toHaveBeenCalled();
+    expect(fakeWorker.terminate).toHaveBeenCalledOnce();
+  });
+
+  it("pool-backed: releases the slot (decrements counter)", () => {
+    const { pool } = makePool(1);
+    const handle = pool.acquire();
+    expect(pool.stats().totalActive).toBe(1);
+    handle.dispose();
+    expect(pool.stats().totalActive).toBe(0);
+    pool.dispose();
+  });
+
+  it("pool-backed: does NOT terminate the underlying worker", () => {
+    const { pool, fakeWorkers } = makePool(1);
+    const handle = pool.acquire();
+    handle.dispose();
+    expect(fakeWorkers[0]!.terminate).not.toHaveBeenCalled();
+    pool.dispose();
+  });
+});
+
+// ─── WorkerPool.dispatch() ───────────────────────────────────────────────────
+
+describe("WorkerPool.dispatch()", () => {
+  it("resolves with the worker reply", async () => {
+    const { pool, fakeWorkers } = makePool(1);
+    const promise = pool.dispatch<{ result: number }>({ op: 1 });
+    fakeWorkers[0]!._emit("message", { result: 42, hostId: "host-1" });
+    await expect(promise).resolves.toMatchObject({ result: 42 });
+    pool.dispose();
+  });
+
+  it("automatically releases the slot after resolve", async () => {
+    const { pool, fakeWorkers } = makePool(1);
+    const promise = pool.dispatch<{ result: number }>({ op: 1 });
+    fakeWorkers[0]!._emit("message", { result: 1, hostId: "host-1" });
+    await promise;
+    expect(pool.stats().totalActive).toBe(0);
+    pool.dispose();
+  });
+
+  it("automatically releases the slot after reject (worker error)", async () => {
+    const { pool, fakeWorkers } = makePool(1);
+    const promise = pool.dispatch({ op: 1 });
+    fakeWorkers[0]!._emit("message", {
+      __fluxionError: true,
+      hostId: "host-1",
+      message: "boom",
+    });
+    await expect(promise).rejects.toThrow("boom");
+    expect(pool.stats().totalActive).toBe(0);
+    pool.dispose();
+  });
+
+  it("automatically releases the slot after timeout", async () => {
+    vi.useFakeTimers();
+    const { pool } = makePool(1);
+    const promise = pool.dispatch({ op: 1 }, { timeoutMs: 100 });
+    vi.advanceTimersByTime(100);
+    await expect(promise).rejects.toBeInstanceOf(WorkerTimeoutError);
+    expect(pool.stats().totalActive).toBe(0);
+    vi.useRealTimers();
+    pool.dispose();
+  });
+
+  it("rejects with WorkerTimeoutError (checkable via .is())", async () => {
+    vi.useFakeTimers();
+    const { pool } = makePool(1);
+    const promise = pool.dispatch({ op: 1 }, { timeoutMs: 50 });
+    vi.advanceTimersByTime(50);
+    try {
+      await promise;
+    } catch (e) {
+      expect(WorkerTimeoutError.is(e)).toBe(true);
+    }
+    vi.useRealTimers();
+    pool.dispose();
+  });
+});
+
 afterEach(() => {
   vi.useRealTimers();
 });

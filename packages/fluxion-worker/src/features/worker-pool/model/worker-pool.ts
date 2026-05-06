@@ -10,6 +10,11 @@ export class WorkerTimeoutError extends Error {
     this.name = "WorkerTimeoutError";
     this.timeoutMs = timeoutMs;
   }
+
+  /** Type-safe alternative to `instanceof WorkerTimeoutError`. */
+  static is(e: unknown): e is WorkerTimeoutError {
+    return e instanceof WorkerTimeoutError;
+  }
 }
 
 export interface WorkerPoolStats {
@@ -284,6 +289,23 @@ export class WorkerHandle<TMsg extends object> implements WorkerLike {
     }
   }
 
+  /**
+   * Universal cleanup — works the same regardless of mode.
+   * - Standalone: stops the worker (same as `terminate()`).
+   * - Pool-backed: releases the slot back to the pool (same as `release()`).
+   *
+   * Prefer `dispose()` over `release()`/`terminate()` when the calling code
+   * doesn't need to know which mode the handle is in.
+   */
+  dispose(): void {
+    if (this._ownsWorker) {
+      this._markTerminated();
+      this._worker.terminate();
+    } else {
+      this._onRelease?.();
+    }
+  }
+
   _markTerminated(): void {
     this._terminated = true;
     for (const abort of this._abortCallbacks) abort();
@@ -309,6 +331,31 @@ export class WorkerPool<TMsg extends object> {
     this.workers = Array.from({ length: size }, () => opts.workerFactory());
     // Int32Array for cache-friendly integer counters
     this.hostCounts = new Int32Array(size);
+  }
+
+  /**
+   * Convenience method: acquire a handle, send one request, release, and return the result.
+   * Equivalent to `acquire() → request() → release()` in a try/finally block.
+   *
+   * @example
+   * ```ts
+   * const result = await pool.dispatch<CalcResultMsg>(
+   *   { op: "sum", values },
+   *   { timeoutMs: 5000 },
+   * );
+   * ```
+   */
+  async dispatch<TResult extends object = object>(
+    msg: TMsg,
+    opts?: RequestOptions,
+    transfer?: Transferable[],
+  ): Promise<TResult> {
+    const handle = this.acquire();
+    try {
+      return await handle.request<TResult>(msg, opts, transfer);
+    } finally {
+      handle.release();
+    }
   }
 
   acquire(): WorkerHandle<TMsg> {

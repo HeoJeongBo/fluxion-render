@@ -1,5 +1,5 @@
 import type { WorkerPoolStats } from "@heojeongbo/fluxion-worker";
-import { WorkerHandle, WorkerPool } from "@heojeongbo/fluxion-worker";
+import { WorkerHandle, WorkerPool, WorkerTimeoutError } from "@heojeongbo/fluxion-worker";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { THEME } from "../../../shared/ui/theme";
 import type { CalcMsg, CalcOp, CalcResultMsg } from "../lib/calc-worker";
@@ -76,7 +76,7 @@ export function FluxionWorkerDemoPage() {
     );
     standaloneHandleRef.current = handle;
     return () => {
-      handle.terminate();
+      handle.dispose(); // same as terminate() in standalone mode
       standaloneHandleRef.current = null;
     };
   }, []);
@@ -89,26 +89,28 @@ export function FluxionWorkerDemoPage() {
     const pool = poolRef.current;
     if (!pool) return;
 
-    const handle = pool.acquire();
-    refreshStats();
     setPending((p) => p + 1);
-
     try {
-      const msg = await handle.request<CalcResultMsg>(
+      // pool.dispatch() = acquire + request + release in one call
+      const msg = await pool.dispatch<CalcResultMsg>(
         { op, values: randomValues(count) },
         { timeoutMs: 5000 },
       );
       setResults((prev) => [
-        { op: msg.op, result: msg.result, durationMs: msg.durationMs, workerId: handle.hostId, mode: "pool" },
+        { op: msg.op, result: msg.result, durationMs: msg.durationMs, workerId: "pool", mode: "pool" },
         ...prev.slice(0, 19),
       ]);
     } catch (e) {
       setResults((prev) => [
-        { op, error: e instanceof Error ? e.message : String(e), workerId: handle.hostId, mode: "pool" },
+        {
+          op,
+          error: WorkerTimeoutError.is(e) ? `timeout (${e.timeoutMs}ms)` : e instanceof Error ? e.message : String(e),
+          workerId: "pool",
+          mode: "pool",
+        },
         ...prev.slice(0, 19),
       ]);
     } finally {
-      handle.release();
       refreshStats();
       setPending((p) => Math.max(0, p - 1));
     }
@@ -130,7 +132,12 @@ export function FluxionWorkerDemoPage() {
       ]);
     } catch (e) {
       setResults((prev) => [
-        { op, error: e instanceof Error ? e.message : String(e), workerId: handle.hostId, mode: "standalone" },
+        {
+          op,
+          error: WorkerTimeoutError.is(e) ? `timeout (${e.timeoutMs}ms)` : e instanceof Error ? e.message : String(e),
+          workerId: handle.hostId,
+          mode: "standalone",
+        },
         ...prev.slice(0, 19),
       ]);
     } finally {
@@ -151,29 +158,28 @@ defineWorker(({ op, values }, reply) => {
   reply({ op, result });
 });`;
 
-  const poolSnippet = `// WorkerPool — request() + stats()
+  const poolSnippet = `// WorkerPool — dispatch() = acquire + request + release
 const pool = new WorkerPool({
   size: ${size},
   workerFactory: () => new Worker(...),
 });
 
-const handle = pool.acquire();
 try {
-  const msg = await handle.request<CalcResultMsg>(
+  const msg = await pool.dispatch<CalcResultMsg>(
     { op: "sum", values },
-    { timeoutMs: 5000 },  // WorkerTimeoutError on timeout
+    { timeoutMs: 5000 },
   );
   console.log(msg.result);
 } catch (e) {
-  // worker throw OR timeout
-} finally {
-  handle.release();
+  if (WorkerTimeoutError.is(e)) {
+    console.error(\`timed out after \${e.timeoutMs}ms\`);
+  }
 }
 
 pool.stats();
 // { size: ${size}, hostCounts: [...], totalActive: 0 }`;
 
-  const standaloneSnippet = `// WorkerHandle (standalone) — request()
+  const standaloneSnippet = `// WorkerHandle (standalone) — dispose() works in both modes
 const handle = new WorkerHandle(
   () => new Worker(new URL("./calc-worker.ts",
                import.meta.url), { type: "module" })
@@ -186,9 +192,9 @@ try {
   );
   console.log(msg.result);
 } catch (e) {
-  // WorkerTimeoutError or worker error
+  if (WorkerTimeoutError.is(e)) { /* timeout */ }
 } finally {
-  handle.terminate();
+  handle.dispose(); // terminate() in standalone, release() in pool
 }`;
 
   return (
@@ -208,7 +214,7 @@ try {
         }}
       >
         <strong style={{ color: THEME.page.textPrimary }}>@heojeongbo/fluxion-worker</strong>
-        <span style={{ color: THEME.page.textMuted }}>request() · stats() · onError()</span>
+        <span style={{ color: THEME.page.textMuted }}>dispatch() · request() · stats() · dispose()</span>
         {pending > 0 && (
           <span style={{ marginLeft: "auto", color: THEME.button.background, fontWeight: 600 }}>
             {pending} pending…
