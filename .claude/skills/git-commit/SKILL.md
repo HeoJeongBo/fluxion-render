@@ -73,8 +73,6 @@ Use a HEREDOC to avoid quoting issues:
 ```bash
 git commit -m "$(cat <<'EOF'
 type(scope): subject
-
-Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
 EOF
 )"
 ```
