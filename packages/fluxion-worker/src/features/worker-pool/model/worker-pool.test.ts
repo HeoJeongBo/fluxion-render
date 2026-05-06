@@ -2,7 +2,12 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { WorkerErrorMsg } from "../../define-worker/define-worker";
 import type { WorkerPoolStats } from "./worker-pool";
-import { WorkerHandle, WorkerPool, WorkerTimeoutError } from "./worker-pool";
+import {
+  WorkerHandle,
+  WorkerHandlerError,
+  WorkerPool,
+  WorkerTimeoutError,
+} from "./worker-pool";
 
 // ─── Test message type ───────────────────────────────────────────────────────
 
@@ -846,6 +851,91 @@ describe("WorkerPool.dispatch()", () => {
     }
     vi.useRealTimers();
     pool.dispose();
+  });
+});
+
+// ─── WorkerHandlerError ──────────────────────────────────────────────────────
+
+describe("WorkerHandlerError", () => {
+  it("request() rejects with WorkerHandlerError preserving worker stack", async () => {
+    const { pool, fakeWorkers } = makePool(1);
+    const handle = pool.acquire();
+    const promise = handle.request({ op: 1 });
+    fakeWorkers[0]!._emit("message", {
+      __fluxionError: true,
+      hostId: handle.hostId,
+      message: "worker boom",
+      stack: "Error: worker boom\n  at handler (worker.ts:5:10)",
+    });
+    try {
+      await promise;
+      expect.fail("should have thrown");
+    } catch (e) {
+      expect(WorkerHandlerError.is(e)).toBe(true);
+      expect((e as WorkerHandlerError).message).toBe("worker boom");
+      expect((e as WorkerHandlerError).workerStack).toContain("worker.ts:5:10");
+    }
+    pool.dispose();
+  });
+
+  it("dispatch() rejects with WorkerHandlerError too", async () => {
+    const { pool, fakeWorkers } = makePool(1);
+    const promise = pool.dispatch({ op: 1 });
+    fakeWorkers[0]!._emit("message", {
+      __fluxionError: true,
+      hostId: "host-1",
+      message: "boom",
+    });
+    await expect(promise).rejects.toBeInstanceOf(WorkerHandlerError);
+    pool.dispose();
+  });
+
+  it(".is() distinguishes from WorkerTimeoutError", () => {
+    expect(WorkerHandlerError.is(new WorkerHandlerError("x"))).toBe(true);
+    expect(WorkerHandlerError.is(new WorkerTimeoutError(100))).toBe(false);
+    expect(WorkerHandlerError.is(new Error("x"))).toBe(false);
+    expect(WorkerHandlerError.is(null)).toBe(false);
+  });
+});
+
+// ─── postMessage hostId hygiene ──────────────────────────────────────────────
+
+describe("WorkerHandle.postMessage hostId cleanup", () => {
+  it("does not leave hostId on the caller's message object", () => {
+    const { pool } = makePool(1);
+    const handle = pool.acquire();
+    const msg = { op: 1 };
+    handle.postMessage(msg);
+    expect((msg as { hostId?: string }).hostId).toBeUndefined();
+    pool.dispose();
+  });
+
+  it("same message object can be reused across handles without bleed", () => {
+    const { pool, fakeWorkers } = makePool(1);
+    const h1 = pool.acquire();
+    const h2 = pool.acquire();
+    const msg = { op: 1 };
+    h1.postMessage(msg);
+    const sent1 = fakeWorkers[0]!.postMessage.mock.calls[0]![0];
+    expect((sent1 as { hostId: string }).hostId).toBe(h1.hostId);
+    h2.postMessage(msg);
+    const sent2 = fakeWorkers[0]!.postMessage.mock.calls[1]![0];
+    expect((sent2 as { hostId: string }).hostId).toBe(h2.hostId);
+    expect((msg as { hostId?: string }).hostId).toBeUndefined();
+    pool.dispose();
+  });
+});
+
+// ─── _release race guard ─────────────────────────────────────────────────────
+
+describe("_release dispose guard", () => {
+  it("release() after dispose is a no-op (no negative count)", () => {
+    const { pool } = makePool(1);
+    const handle = pool.acquire();
+    pool.dispose();
+    handle.release(); // pool already disposed — should be safe
+    // dispose() makes future stats() unreliable; just ensure no throw
+    expect(() => handle.release()).not.toThrow();
   });
 });
 

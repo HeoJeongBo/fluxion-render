@@ -17,6 +17,25 @@ export class WorkerTimeoutError extends Error {
   }
 }
 
+/**
+ * Error thrown by `request()` / `dispatch()` when the worker handler throws.
+ * Preserves the worker-side stack trace as `workerStack` so callers can
+ * see where the error originated inside the worker.
+ */
+export class WorkerHandlerError extends Error {
+  readonly workerStack?: string;
+  constructor(message: string, workerStack?: string) {
+    super(message);
+    this.name = "WorkerHandlerError";
+    this.workerStack = workerStack;
+  }
+
+  /** Type-safe alternative to `instanceof WorkerHandlerError`. */
+  static is(e: unknown): e is WorkerHandlerError {
+    return e instanceof WorkerHandlerError;
+  }
+}
+
 export interface WorkerPoolStats {
   readonly size: number;
   readonly hostCounts: readonly number[];
@@ -191,7 +210,7 @@ export class WorkerHandle<TMsg extends object> implements WorkerLike {
 
       const offErr = this.onError((err) => {
         cleanup();
-        reject(new Error(err.message));
+        reject(new WorkerHandlerError(err.message, err.stack));
       });
 
       if (opts?.timeoutMs !== undefined) {
@@ -255,16 +274,17 @@ export class WorkerHandle<TMsg extends object> implements WorkerLike {
 
   /**
    * Stamp `hostId` onto the message and forward to the worker.
-   * Avoids object spread allocation on the hot path by mutating the message
-   * in-place — safe because `postMessage` serializes synchronously.
+   * Sends a shallow-copied object so the caller's input is never mutated
+   * — this also makes the same message object safely reusable across handles.
+   * The shallow-copy cost is negligible compared to structured clone serialization.
    */
   postMessage(msg: TMsg, transfer?: Transferable[]): void {
     if (this._terminated) return;
-    (msg as TMsg & { hostId: string }).hostId = this.hostId;
+    const stamped = { ...msg, hostId: this.hostId };
     if (transfer && transfer.length > 0) {
-      this._worker.postMessage(msg, transfer);
+      this._worker.postMessage(stamped, transfer);
     } else {
-      this._worker.postMessage(msg);
+      this._worker.postMessage(stamped);
     }
   }
 
@@ -380,6 +400,7 @@ export class WorkerPool<TMsg extends object> {
   }
 
   _release(workerIndex: number): void {
+    if (this._disposed) return;
     const current = this.hostCounts[workerIndex];
     if (current !== undefined && current > 0) this.hostCounts[workerIndex]--;
   }

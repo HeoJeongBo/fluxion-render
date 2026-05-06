@@ -16,6 +16,7 @@ export type {
 } from "./features/worker-pool/model/worker-pool";
 export {
   WorkerHandle,
+  WorkerHandlerError,
   WorkerPool,
   WorkerTimeoutError,
 } from "./features/worker-pool/model/worker-pool";
