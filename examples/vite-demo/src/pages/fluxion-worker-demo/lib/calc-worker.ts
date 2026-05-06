@@ -1,6 +1,6 @@
 import { defineWorker } from "@heojeongbo/fluxion-worker";
 
-export type CalcOp = "sum" | "mean" | "max";
+export type CalcOp = "sum" | "mean" | "max" | "error";
 
 export interface CalcMsg {
   op: CalcOp;
@@ -15,6 +15,10 @@ export interface CalcResultMsg {
 
 defineWorker<CalcMsg, CalcResultMsg>(({ op, values }, reply) => {
   const t0 = performance.now();
+
+  if (op === "error") {
+    throw new Error("intentional worker error (demo)");
+  }
 
   let result: number;
   if (op === "sum") {

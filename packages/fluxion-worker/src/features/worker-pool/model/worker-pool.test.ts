@@ -1,6 +1,8 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { WorkerHandle, WorkerPool } from "./worker-pool";
+import type { WorkerErrorMsg } from "../../define-worker/define-worker";
+import type { WorkerPoolStats } from "./worker-pool";
+import { WorkerHandle, WorkerPool, WorkerTimeoutError } from "./worker-pool";
 
 // ─── Test message type ───────────────────────────────────────────────────────
 
@@ -505,4 +507,237 @@ describe("WorkerHandle", () => {
       pool.dispose();
     });
   });
+});
+
+// ─── WorkerPool.stats() ──────────────────────────────────────────────────────
+
+describe("WorkerPool.stats()", () => {
+  it("returns correct counts after acquire", () => {
+    const { pool } = makePool(2);
+    const s0 = pool.stats();
+    expect(s0.size).toBe(2);
+    expect(s0.hostCounts).toEqual([0, 0]);
+    expect(s0.totalActive).toBe(0);
+
+    pool.acquire(); // worker 0
+    pool.acquire(); // worker 1
+    pool.acquire(); // worker 0 (least busy again)
+
+    const s1 = pool.stats();
+    expect(s1.hostCounts[0]).toBe(2);
+    expect(s1.hostCounts[1]).toBe(1);
+    expect(s1.totalActive).toBe(3);
+    expect(s1.leastBusyIndex).toBe(1);
+    pool.dispose();
+  });
+
+  it("updates after release", () => {
+    const { pool } = makePool(2);
+    const h = pool.acquire(); // worker 0
+    expect(pool.stats().hostCounts[0]).toBe(1);
+    h.release();
+    expect(pool.stats().hostCounts[0]).toBe(0);
+    pool.dispose();
+  });
+
+  it("returns a snapshot (not a live reference)", () => {
+    const { pool } = makePool(2);
+    const snap = pool.stats();
+    pool.acquire();
+    expect(snap.hostCounts[0]).toBe(0); // snapshot unchanged
+    pool.dispose();
+  });
+
+  it("satisfies WorkerPoolStats type", () => {
+    const { pool } = makePool(3);
+    const s: WorkerPoolStats = pool.stats();
+    expect(s.size).toBe(3);
+    pool.dispose();
+  });
+});
+
+// ─── WorkerHandle.onError() ──────────────────────────────────────────────────
+
+describe("WorkerHandle.onError()", () => {
+  function makeErrorMsg(hostId: string): WorkerErrorMsg {
+    return { __fluxionError: true, hostId, message: "boom", stack: "stack" };
+  }
+
+  it("calls callback when error message arrives with matching hostId", () => {
+    const { pool, fakeWorkers } = makePool(1);
+    const handle = pool.acquire();
+    const cb = vi.fn();
+    handle.onError(cb);
+    fakeWorkers[0]!._emit("message", makeErrorMsg(handle.hostId));
+    expect(cb).toHaveBeenCalledOnce();
+    expect((cb.mock.calls[0]![0] as WorkerErrorMsg).message).toBe("boom");
+    pool.dispose();
+  });
+
+  it("does not call callback for a different hostId", () => {
+    const { pool, fakeWorkers } = makePool(1);
+    const h1 = pool.acquire();
+    const h2 = pool.acquire();
+    const cb1 = vi.fn();
+    const cb2 = vi.fn();
+    h1.onError(cb1);
+    h2.onError(cb2);
+    fakeWorkers[0]!._emit("message", makeErrorMsg(h1.hostId));
+    expect(cb1).toHaveBeenCalledOnce();
+    expect(cb2).not.toHaveBeenCalled();
+    pool.dispose();
+  });
+
+  it("does not call callback for normal (non-error) messages", () => {
+    const { pool, fakeWorkers } = makePool(1);
+    const handle = pool.acquire();
+    const errCb = vi.fn();
+    handle.onError(errCb);
+    fakeWorkers[0]!._emit("message", { op: 1, hostId: handle.hostId });
+    expect(errCb).not.toHaveBeenCalled();
+    pool.dispose();
+  });
+
+  it("off() stops error delivery", () => {
+    const { pool, fakeWorkers } = makePool(1);
+    const handle = pool.acquire();
+    const cb = vi.fn();
+    const off = handle.onError(cb);
+    off();
+    fakeWorkers[0]!._emit("message", makeErrorMsg(handle.hostId));
+    expect(cb).not.toHaveBeenCalled();
+    pool.dispose();
+  });
+});
+
+// ─── WorkerHandle.request() ──────────────────────────────────────────────────
+
+describe("WorkerHandle.request()", () => {
+  it("resolves with the first reply", async () => {
+    const { pool, fakeWorkers } = makePool(1);
+    const handle = pool.acquire();
+    const promise = handle.request<{ result: number }>({ op: 1 });
+    fakeWorkers[0]!._emit("message", { result: 42, hostId: handle.hostId });
+    await expect(promise).resolves.toMatchObject({ result: 42 });
+    pool.dispose();
+  });
+
+  it("rejects when worker sends WorkerErrorMsg", async () => {
+    const { pool, fakeWorkers } = makePool(1);
+    const handle = pool.acquire();
+    const promise = handle.request({ op: 1 });
+    fakeWorkers[0]!._emit("message", {
+      __fluxionError: true,
+      hostId: handle.hostId,
+      message: "worker boom",
+    });
+    await expect(promise).rejects.toThrow("worker boom");
+    pool.dispose();
+  });
+
+  it("rejects with WorkerTimeoutError after timeoutMs", async () => {
+    vi.useFakeTimers();
+    const { pool } = makePool(1);
+    const handle = pool.acquire();
+    const promise = handle.request({ op: 1 }, { timeoutMs: 100 });
+    vi.advanceTimersByTime(100);
+    await expect(promise).rejects.toBeInstanceOf(WorkerTimeoutError);
+    vi.useRealTimers();
+    pool.dispose();
+  });
+
+  it("does not reject after timeout if reply already resolved", async () => {
+    vi.useFakeTimers();
+    const { pool, fakeWorkers } = makePool(1);
+    const handle = pool.acquire();
+    const promise = handle.request<{ v: number }>({ op: 1 }, { timeoutMs: 200 });
+    fakeWorkers[0]!._emit("message", { v: 1, hostId: handle.hostId });
+    vi.advanceTimersByTime(200);
+    await expect(promise).resolves.toMatchObject({ v: 1 });
+    vi.useRealTimers();
+    pool.dispose();
+  });
+
+  it("cleans up listeners after resolve (no leak)", async () => {
+    const { pool, fakeWorkers } = makePool(1);
+    const handle = pool.acquire();
+    const promise = handle.request({ op: 1 });
+    fakeWorkers[0]!._emit("message", { result: 1, hostId: handle.hostId });
+    await promise;
+    const listenerCountBefore = fakeWorkers[0]!._listeners.get("message")?.size ?? 0;
+    // emitting again should not call any stale listener
+    const extra = vi.fn();
+    handle.onMessage(extra);
+    fakeWorkers[0]!._emit("message", { result: 2, hostId: handle.hostId });
+    expect(extra).toHaveBeenCalledOnce();
+    expect(fakeWorkers[0]!._listeners.get("message")?.size).toBe(listenerCountBefore + 1);
+    pool.dispose();
+  });
+
+  it("does not call release() automatically", async () => {
+    const { pool, fakeWorkers } = makePool(1);
+    const handle = pool.acquire();
+    expect(pool.stats().totalActive).toBe(1);
+    const promise = handle.request({ op: 1 });
+    fakeWorkers[0]!._emit("message", { result: 1, hostId: handle.hostId });
+    await promise;
+    expect(pool.stats().totalActive).toBe(1); // still active — caller must release
+    handle.release();
+    expect(pool.stats().totalActive).toBe(0);
+    pool.dispose();
+  });
+
+  it("rejects with 'Worker was terminated' when pool is disposed while pending", async () => {
+    const { pool } = makePool(1);
+    const handle = pool.acquire();
+    const promise = handle.request({ op: 1 });
+    pool.dispose();
+    await expect(promise).rejects.toThrow("Worker was terminated");
+  });
+
+  it("no listener leak after dispose of pending request", async () => {
+    const { pool, fakeWorkers } = makePool(1);
+    const handle = pool.acquire();
+    handle.request({ op: 1 }).catch(() => {});
+    const countBefore = fakeWorkers[0]!._listeners.get("message")?.size ?? 0;
+    pool.dispose();
+    // After dispose, _listenerMap is cleared → all wrappers removed from fake worker
+    const countAfter = fakeWorkers[0]!._listeners.get("message")?.size ?? 0;
+    expect(countAfter).toBe(0);
+    expect(countBefore).toBeGreaterThan(0);
+  });
+});
+
+// ─── onError _listenerMap coverage ──────────────────────────────────────────
+
+describe("onError cleanup via _markTerminated", () => {
+  function makeErrorMsg(hostId: string): WorkerErrorMsg {
+    return { __fluxionError: true, hostId, message: "boom", stack: "stack" };
+  }
+
+  it("onError listener is removed when pool is disposed", () => {
+    const { pool, fakeWorkers } = makePool(1);
+    const handle = pool.acquire();
+    const cb = vi.fn();
+    handle.onError(cb);
+    pool.dispose();
+    fakeWorkers[0]!._emit("message", makeErrorMsg(handle.hostId));
+    expect(cb).not.toHaveBeenCalled();
+  });
+
+  it("onError off() removes from _listenerMap cleanly", () => {
+    const { pool, fakeWorkers } = makePool(1);
+    const handle = pool.acquire();
+    const cb = vi.fn();
+    const off = handle.onError(cb);
+    const countBefore = fakeWorkers[0]!._listeners.get("message")?.size ?? 0;
+    off();
+    const countAfter = fakeWorkers[0]!._listeners.get("message")?.size ?? 0;
+    expect(countAfter).toBe(countBefore - 1);
+    pool.dispose();
+  });
+});
+
+afterEach(() => {
+  vi.useRealTimers();
 });

@@ -4,6 +4,14 @@
  */
 export type WorkerMsg<T extends object = object> = T & { hostId?: string };
 
+/** Sent automatically by defineWorker when the handler throws or rejects. */
+export interface WorkerErrorMsg {
+  readonly __fluxionError: true;
+  readonly hostId?: string;
+  readonly message: string;
+  readonly stack?: string;
+}
+
 /**
  * `reply` function passed to the handler.
  * Call it once or many times — each call posts a message back to the main thread
@@ -58,6 +66,97 @@ export type ReplyFn<TResult extends object> = (
  * );
  * ```
  */
+/** Per-host context passed to the defineWorkerWithState handler. */
+export interface HostContext<TState> {
+  /** The hostId for this message (or "__solo__" in standalone mode). */
+  readonly hostId: string;
+  /** Current state for this host. Undefined on the first message. */
+  readonly state: TState | undefined;
+}
+
+const _SOLO_KEY = "__solo__";
+
+function _postError(hostId: string | undefined, e: unknown): void {
+  const err: WorkerErrorMsg = {
+    __fluxionError: true,
+    hostId,
+    message: e instanceof Error ? e.message : String(e),
+    stack: e instanceof Error ? e.stack : undefined,
+  };
+  (self as unknown as Worker).postMessage(err);
+}
+
+/**
+ * Like `defineWorker`, but manages per-host state automatically.
+ *
+ * - Return a new state value to update it for this host.
+ * - Return `null` to delete the state for this host.
+ * - Return `undefined` (or void) to leave state unchanged.
+ * - Works in standalone mode: messages without a `hostId` share a single `"__solo__"` slot.
+ *
+ * @example
+ * ```ts
+ * defineWorkerWithState<Msg, Result, MyState>(
+ *   (msg, reply, { state }) => {
+ *     const s = state ?? { count: 0 };
+ *     reply({ count: s.count + 1 });
+ *     return { count: s.count + 1 };
+ *   },
+ * );
+ * ```
+ */
+export function defineWorkerWithState<
+  TMsg extends object,
+  TResult extends object = object,
+  TState = unknown,
+>(
+  handler: (
+    msg: WorkerMsg<TMsg>,
+    reply: ReplyFn<TResult>,
+    ctx: HostContext<TState>,
+  ) => TState | null | void | Promise<TState | null | void>,
+): void {
+  const stateMap = new Map<string, TState>();
+
+  (self as unknown as Worker).onmessage = (
+    evt: MessageEvent<WorkerMsg<TMsg>>,
+  ) => {
+    const msg = evt.data;
+    const hostId = msg.hostId;
+    const key = hostId ?? _SOLO_KEY;
+
+    const reply: ReplyFn<TResult> = (result, transfer) => {
+      const out = hostId !== undefined ? { ...result, hostId } : result;
+      if (transfer && transfer.length > 0) {
+        (self as unknown as Worker).postMessage(out, transfer);
+      } else {
+        (self as unknown as Worker).postMessage(out);
+      }
+    };
+
+    const ctx: HostContext<TState> = { hostId: key, state: stateMap.get(key) };
+
+    const applyState = (newState: TState | null | void): void => {
+      if (newState === null) {
+        stateMap.delete(key);
+      } else if (newState !== undefined) {
+        stateMap.set(key, newState);
+      }
+    };
+
+    try {
+      const result = handler(msg, reply, ctx);
+      if (result instanceof Promise) {
+        result.then(applyState).catch((e) => _postError(hostId, e));
+      } else {
+        applyState(result);
+      }
+    } catch (e) {
+      _postError(hostId, e);
+    }
+  };
+}
+
 export function defineWorker<
   TMsg extends object,
   TResult extends object = object,
@@ -82,6 +181,13 @@ export function defineWorker<
       }
     };
 
-    handler(msg, reply);
+    try {
+      const result = handler(msg, reply);
+      if (result instanceof Promise) {
+        result.catch((e) => _postError(hostId, e));
+      }
+    } catch (e) {
+      _postError(hostId, e);
+    }
   };
 }

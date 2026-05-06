@@ -1,3 +1,26 @@
+export interface RequestOptions {
+  /** Milliseconds before the Promise rejects with WorkerTimeoutError. */
+  timeoutMs?: number;
+}
+
+export class WorkerTimeoutError extends Error {
+  readonly timeoutMs: number;
+  constructor(timeoutMs: number) {
+    super(`Worker request timed out after ${timeoutMs}ms`);
+    this.name = "WorkerTimeoutError";
+    this.timeoutMs = timeoutMs;
+  }
+}
+
+export interface WorkerPoolStats {
+  readonly size: number;
+  readonly hostCounts: readonly number[];
+  readonly leastBusyIndex: number;
+  readonly totalActive: number;
+}
+
+import type { WorkerErrorMsg } from "../../define-worker/define-worker";
+
 export interface WorkerLike {
   postMessage(msg: unknown, transfer?: Transferable[]): void;
   terminate(): void;
@@ -28,6 +51,8 @@ export class WorkerHandle<TMsg extends object> implements WorkerLike {
     string,
     Map<EventListener, EventListener>
   >();
+  // Abort callbacks registered by pending request() calls
+  private readonly _abortCallbacks = new Set<() => void>();
 
   protected readonly _worker: Worker;
   readonly hostId: string;
@@ -79,8 +104,13 @@ export class WorkerHandle<TMsg extends object> implements WorkerLike {
   addEventListener(type: string, listener: EventListener): void {
     const id = this.hostId;
     const wrapper: EventListener = (evt: Event) => {
-      const msg = (evt as MessageEvent<{ hostId?: string }>).data;
-      if (msg !== null && typeof msg === "object" && msg.hostId === id) {
+      const msg = (evt as MessageEvent<{ hostId?: string; __fluxionError?: true }>).data;
+      if (
+        msg !== null &&
+        typeof msg === "object" &&
+        msg.hostId === id &&
+        !msg.__fluxionError
+      ) {
         listener(evt);
       }
     };
@@ -122,6 +152,90 @@ export class WorkerHandle<TMsg extends object> implements WorkerLike {
     };
     this.addEventListener("message", listener);
     return () => this.removeEventListener("message", listener);
+  }
+
+  /**
+   * Send a message and await a single response. Automatically unsubscribes
+   * after the first reply or error. `release()` is still the caller's responsibility.
+   */
+  request<TResult extends object = object>(
+    msg: TMsg,
+    opts?: RequestOptions,
+    transfer?: Transferable[],
+  ): Promise<TResult> {
+    return new Promise<TResult>((resolve, reject) => {
+      let timerId: ReturnType<typeof setTimeout> | undefined;
+
+      const cleanup = () => {
+        if (timerId !== undefined) clearTimeout(timerId);
+        offMsg();
+        offErr();
+        this._abortCallbacks.delete(abort);
+      };
+
+      const abort = () => {
+        cleanup();
+        reject(new Error("Worker was terminated"));
+      };
+      this._abortCallbacks.add(abort);
+
+      const offMsg = this.onMessage<TResult>((result) => {
+        cleanup();
+        resolve(result);
+      });
+
+      const offErr = this.onError((err) => {
+        cleanup();
+        reject(new Error(err.message));
+      });
+
+      if (opts?.timeoutMs !== undefined) {
+        const ms = opts.timeoutMs;
+        timerId = setTimeout(() => {
+          cleanup();
+          reject(new WorkerTimeoutError(ms));
+        }, ms);
+      }
+
+      this.postMessage(msg, transfer);
+    });
+  }
+
+  /**
+   * Subscribe to errors reported by the worker handler via defineWorker.
+   * Registered under the internal "__fluxion:error" key so _markTerminated()
+   * cleans it up alongside normal message listeners.
+   * Returns an `off` unsubscribe function.
+   */
+  onError(callback: (err: WorkerErrorMsg) => void): () => void {
+    const id = this.hostId;
+    const raw: EventListener = (evt: Event) => {
+      const data = (evt as MessageEvent).data;
+      if (
+        data !== null &&
+        typeof data === "object" &&
+        (data as WorkerErrorMsg).__fluxionError === true &&
+        (data as WorkerErrorMsg).hostId === id
+      ) {
+        callback(data as WorkerErrorMsg);
+      }
+    };
+    // Store under "message" key (same event type) so _markTerminated() removes it correctly
+    let byType = this._listenerMap.get("message");
+    if (!byType) {
+      byType = new Map();
+      this._listenerMap.set("message", byType);
+    }
+    byType.set(raw, raw);
+    this._worker.addEventListener("message", raw);
+    return () => {
+      this._worker.removeEventListener("message", raw);
+      const map = this._listenerMap.get("message");
+      if (map) {
+        map.delete(raw);
+        if (map.size === 0) this._listenerMap.delete("message");
+      }
+    };
   }
 
   removeEventListener(type: string, listener: EventListener): void {
@@ -172,6 +286,8 @@ export class WorkerHandle<TMsg extends object> implements WorkerLike {
 
   _markTerminated(): void {
     this._terminated = true;
+    for (const abort of this._abortCallbacks) abort();
+    this._abortCallbacks.clear();
     for (const [type, byType] of this._listenerMap) {
       for (const wrapper of byType.values()) {
         this._worker.removeEventListener(type, wrapper);
@@ -231,6 +347,24 @@ export class WorkerPool<TMsg extends object> {
     for (const worker of this.workers) {
       worker.terminate();
     }
+  }
+
+  stats(): WorkerPoolStats {
+    const size = this.hostCounts.length;
+    let leastBusyIndex = 0;
+    let minCount = this.hostCounts[0]!;
+    let totalActive = 0;
+    const hostCounts: number[] = new Array(size);
+    for (let i = 0; i < size; i++) {
+      const c = this.hostCounts[i]!;
+      hostCounts[i] = c;
+      totalActive += c;
+      if (c < minCount) {
+        minCount = c;
+        leastBusyIndex = i;
+      }
+    }
+    return { size, hostCounts, leastBusyIndex, totalActive };
   }
 
   private _leastBusyIndex(): number {

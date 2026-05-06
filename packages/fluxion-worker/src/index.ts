@@ -1,7 +1,21 @@
-export type { ReplyFn, WorkerMsg } from "./features/define-worker/define-worker";
-export { defineWorker } from "./features/define-worker/define-worker";
 export type {
+  HostContext,
+  ReplyFn,
+  WorkerErrorMsg,
+  WorkerMsg,
+} from "./features/define-worker/define-worker";
+export {
+  defineWorker,
+  defineWorkerWithState,
+} from "./features/define-worker/define-worker";
+export type {
+  RequestOptions,
   WorkerLike,
   WorkerPoolOptions,
+  WorkerPoolStats,
 } from "./features/worker-pool/model/worker-pool";
-export { WorkerHandle, WorkerPool } from "./features/worker-pool/model/worker-pool";
+export {
+  WorkerHandle,
+  WorkerPool,
+  WorkerTimeoutError,
+} from "./features/worker-pool/model/worker-pool";
