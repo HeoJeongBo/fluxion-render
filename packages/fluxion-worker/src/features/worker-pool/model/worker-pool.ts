@@ -1,3 +1,5 @@
+import type { WorkerErrorMsg } from "../../define-worker/define-worker";
+
 export interface RequestOptions {
   /** Milliseconds before the Promise rejects with WorkerTimeoutError. */
   timeoutMs?: number;
@@ -42,8 +44,6 @@ export interface WorkerPoolStats {
   readonly leastBusyIndex: number;
   readonly totalActive: number;
 }
-
-import type { WorkerErrorMsg } from "../../define-worker/define-worker";
 
 export interface WorkerLike {
   postMessage(msg: unknown, transfer?: Transferable[]): void;
@@ -322,6 +322,7 @@ export class WorkerHandle<TMsg extends object> implements WorkerLike {
       this._markTerminated();
       this._worker.terminate();
     } else {
+      this._markTerminated();
       this._onRelease?.();
     }
   }
@@ -396,7 +397,11 @@ export class WorkerPool<TMsg extends object> {
     index: number,
     hostId: string,
   ): WorkerHandle<TMsg> {
-    return new WorkerHandle<TMsg>(worker, hostId, () => this._release(index));
+    const handle = new WorkerHandle<TMsg>(worker, hostId, () => {
+      this.handles.delete(handle);
+      this._release(index);
+    });
+    return handle;
   }
 
   _release(workerIndex: number): void {

@@ -793,6 +793,26 @@ describe("WorkerHandle.dispose()", () => {
     expect(fakeWorkers[0]!.terminate).not.toHaveBeenCalled();
     pool.dispose();
   });
+
+  it("pool-backed: aborts pending request() with 'Worker was terminated'", async () => {
+    const { pool } = makePool(1);
+    const handle = pool.acquire();
+    const promise = handle.request({ op: 1 });
+    handle.dispose();
+    await expect(promise).rejects.toThrow("Worker was terminated");
+    pool.dispose();
+  });
+
+  it("pool-backed: cleans up listeners after dispose()", () => {
+    const { pool, fakeWorkers } = makePool(1);
+    const handle = pool.acquire();
+    const cb = vi.fn();
+    handle.onMessage(cb);
+    handle.dispose();
+    fakeWorkers[0]!._emit("message", { op: 1, hostId: handle.hostId });
+    expect(cb).not.toHaveBeenCalled();
+    pool.dispose();
+  });
 });
 
 // ─── WorkerPool.dispatch() ───────────────────────────────────────────────────
@@ -936,6 +956,42 @@ describe("_release dispose guard", () => {
     handle.release(); // pool already disposed — should be safe
     // dispose() makes future stats() unreliable; just ensure no throw
     expect(() => handle.release()).not.toThrow();
+  });
+});
+
+// ─── WorkerPool handles Set lifecycle ────────────────────────────────────────
+
+describe("WorkerPool handles Set lifecycle", () => {
+  it("removes handle from internal set after release", () => {
+    const { pool } = makePool(1);
+    const handle = pool.acquire();
+    // Access the private handles set via cast to verify cleanup
+    const handles = (pool as unknown as { handles: Set<WorkerHandle<TestMsg>> }).handles;
+    expect(handles.size).toBe(1);
+    handle.release();
+    expect(handles.size).toBe(0);
+    pool.dispose();
+  });
+
+  it("set stays empty after many acquire/release cycles (no leak)", () => {
+    const { pool } = makePool(2);
+    const handles = (pool as unknown as { handles: Set<WorkerHandle<TestMsg>> }).handles;
+    for (let i = 0; i < 10; i++) {
+      const h = pool.acquire();
+      h.release();
+    }
+    expect(handles.size).toBe(0);
+    pool.dispose();
+  });
+
+  it("removes handle from set after dispose() in pool-backed mode", () => {
+    const { pool } = makePool(1);
+    const handle = pool.acquire();
+    const handles = (pool as unknown as { handles: Set<WorkerHandle<TestMsg>> }).handles;
+    expect(handles.size).toBe(1);
+    handle.dispose();
+    expect(handles.size).toBe(0);
+    pool.dispose();
   });
 });
 
