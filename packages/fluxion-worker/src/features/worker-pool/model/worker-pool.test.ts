@@ -5,6 +5,7 @@ import type { WorkerPoolStats } from "./worker-pool";
 import {
   WorkerHandle,
   WorkerHandlerError,
+  WorkerLike,
   WorkerPool,
   WorkerTimeoutError,
 } from "./worker-pool";
@@ -157,10 +158,11 @@ describe("WorkerPool", () => {
       class CustomPool extends WorkerPool<TestMsg> {
         protected override _createHandle(
           worker: Worker,
-          index: number,
+          _index: number,
           hostId: string,
+          onRelease: () => void,
         ): CustomHandle {
-          return new CustomHandle(worker, hostId, () => this._release(index));
+          return new CustomHandle(worker, hostId, onRelease);
         }
         override acquire(): CustomHandle {
           return super.acquire() as CustomHandle;
@@ -740,6 +742,76 @@ describe("onError cleanup via _markTerminated", () => {
     const countAfter = fakeWorkers[0]!._listeners.get("message")?.size ?? 0;
     expect(countAfter).toBe(countBefore - 1);
     pool.dispose();
+  });
+});
+
+// ─── WorkerHandle.isTerminated ───────────────────────────────────────────────
+
+describe("WorkerHandle.isTerminated", () => {
+  it("is false on a fresh handle", () => {
+    const { pool } = makePool(1);
+    const handle = pool.acquire();
+    expect(handle.isTerminated).toBe(false);
+    pool.dispose();
+  });
+
+  it("is true after standalone terminate()", () => {
+    const w = makeFakeWorker();
+    const handle = new WorkerHandle<TestMsg>(() => w as unknown as Worker);
+    handle.terminate();
+    expect(handle.isTerminated).toBe(true);
+  });
+
+  it("is true after standalone dispose()", () => {
+    const w = makeFakeWorker();
+    const handle = new WorkerHandle<TestMsg>(() => w as unknown as Worker);
+    handle.dispose();
+    expect(handle.isTerminated).toBe(true);
+  });
+
+  it("is true after pool-backed dispose()", () => {
+    const { pool } = makePool(1);
+    const handle = pool.acquire();
+    handle.dispose();
+    expect(handle.isTerminated).toBe(true);
+    pool.dispose();
+  });
+
+  it("is true after pool.dispose()", () => {
+    const { pool } = makePool(1);
+    const handle = pool.acquire();
+    pool.dispose();
+    expect(handle.isTerminated).toBe(true);
+  });
+});
+
+// ─── WorkerHandle.onMessage strips hostId ────────────────────────────────────
+
+describe("WorkerHandle.onMessage strips hostId", () => {
+  it("callback does not receive hostId field", () => {
+    const { pool, fakeWorkers } = makePool(1);
+    const handle = pool.acquire();
+    let received: Record<string, unknown> | undefined;
+    handle.onMessage((msg) => { received = msg as Record<string, unknown>; });
+    fakeWorkers[0]!._emit("message", { op: 1, result: 42, hostId: handle.hostId });
+    expect(received).toBeDefined();
+    expect(received!["hostId"]).toBeUndefined();
+    expect(received!["op"]).toBe(1);
+    expect(received!["result"]).toBe(42);
+    pool.dispose();
+  });
+});
+
+// ─── WorkerLike interface ─────────────────────────────────────────────────────
+
+describe("WorkerLike interface", () => {
+  it("WorkerHandle satisfies WorkerLike", () => {
+    const w = makeFakeWorker();
+    const handle: WorkerLike = new WorkerHandle<TestMsg>(w as unknown as Worker, "h1");
+    expect(typeof handle.postMessage).toBe("function");
+    expect(typeof handle.addEventListener).toBe("function");
+    expect(typeof handle.removeEventListener).toBe("function");
+    expect(typeof handle.terminate).toBe("function");
   });
 });
 

@@ -47,6 +47,8 @@ export interface WorkerPoolStats {
 
 export interface WorkerLike {
   postMessage(msg: unknown, transfer?: Transferable[]): void;
+  addEventListener(type: string, listener: EventListener): void;
+  removeEventListener(type: string, listener: EventListener): void;
   terminate(): void;
 }
 
@@ -81,6 +83,11 @@ export class WorkerHandle<TMsg extends object> implements WorkerLike {
   protected readonly _worker: Worker;
   readonly hostId: string;
   private readonly _onRelease?: () => void;
+
+  /** Returns true if this handle has been terminated or disposed. */
+  get isTerminated(): boolean {
+    return this._terminated;
+  }
 
   /**
    * Standalone usage — the handle owns the Worker lifecycle.
@@ -149,6 +156,8 @@ export class WorkerHandle<TMsg extends object> implements WorkerLike {
 
   /**
    * Subscribe to worker→main messages with a typed callback.
+   * The `hostId` routing field is stripped before delivery — callbacks receive
+   * only the application-level fields.
    * Returns an `off` function — call it to unsubscribe.
    *
    * @example — fire-once (request/response)
@@ -169,10 +178,12 @@ export class WorkerHandle<TMsg extends object> implements WorkerLike {
    * ```
    */
   onMessage<TResult extends object = object>(
-    callback: (msg: TResult) => void,
+    callback: (msg: Omit<TResult, "hostId">) => void,
   ): () => void {
     const listener: EventListener = (evt: Event) => {
-      callback((evt as MessageEvent<TResult>).data);
+      const raw = (evt as MessageEvent<TResult & { hostId?: string }>).data;
+      const { hostId: _stripped, ...msg } = raw;
+      callback(msg as Omit<TResult, "hostId">);
     };
     this.addEventListener("message", listener);
     return () => this.removeEventListener("message", listener);
@@ -186,8 +197,8 @@ export class WorkerHandle<TMsg extends object> implements WorkerLike {
     msg: TMsg,
     opts?: RequestOptions,
     transfer?: Transferable[],
-  ): Promise<TResult> {
-    return new Promise<TResult>((resolve, reject) => {
+  ): Promise<Omit<TResult, "hostId">> {
+    return new Promise<Omit<TResult, "hostId">>((resolve, reject) => {
       let timerId: ReturnType<typeof setTimeout> | undefined;
 
       const cleanup = () => {
@@ -370,7 +381,7 @@ export class WorkerPool<TMsg extends object> {
     msg: TMsg,
     opts?: RequestOptions,
     transfer?: Transferable[],
-  ): Promise<TResult> {
+  ): Promise<Omit<TResult, "hostId">> {
     const handle = this.acquire();
     try {
       return await handle.request<TResult>(msg, opts, transfer);
@@ -386,22 +397,30 @@ export class WorkerPool<TMsg extends object> {
     const index = this._leastBusyIndex();
     this.hostCounts[index]++;
     const hostId = `host-${++this._seq}`;
-    const handle = this._createHandle(this.workers[index]!, index, hostId);
+    // onRelease wraps _release so that the handles Set is cleaned up regardless
+    // of whether the subclass overrides _createHandle.
+    const onRelease = () => {
+      this.handles.delete(handle);
+      this._release(index);
+    };
+    const handle = this._createHandle(this.workers[index]!, index, hostId, onRelease);
     this.handles.add(handle);
     return handle;
   }
 
-  /** Override in subclasses to return a custom handle type. */
+  /**
+   * Override in subclasses to return a custom handle type.
+   * Pass `onRelease` to the handle constructor so that `release()` / `dispose()`
+   * correctly decrements the pool busy counter and removes the handle from the
+   * internal tracking Set.
+   */
   protected _createHandle(
     worker: Worker,
-    index: number,
+    _index: number,
     hostId: string,
+    onRelease: () => void,
   ): WorkerHandle<TMsg> {
-    const handle = new WorkerHandle<TMsg>(worker, hostId, () => {
-      this.handles.delete(handle);
-      this._release(index);
-    });
-    return handle;
+    return new WorkerHandle<TMsg>(worker, hostId, onRelease);
   }
 
   _release(workerIndex: number): void {
