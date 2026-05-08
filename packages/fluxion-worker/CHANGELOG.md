@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.1.10](https://github-personal/HeoJeongBo/fluxion-render/compare/fluxion-worker-v0.1.9...fluxion-worker-v0.1.10) (2026-05-08)
+
+
+### Bug Fixes
+
+* **worker:** abort pending requests on pool-backed dispose, remove handle from set on release ([e3576a6](https://github-personal/HeoJeongBo/fluxion-render/commit/e3576a63942b52d3fac869eaaedc89527cc534bb))
+
+
+### Features
+
+* **worker:** add isTerminated getter, strip hostId from onMessage, fix WorkerLike, safe subclass override ([e8508c4](https://github-personal/HeoJeongBo/fluxion-render/commit/e8508c4fb18f0fa5e0aab9a2925ffbb52668c85e))
+* **worker:** preserve worker stack, harden dispose race, immutable postMessage ([c547afe](https://github-personal/HeoJeongBo/fluxion-render/commit/c547afec63be6ce0c359c2452480bb5f4569c0e0))
+
 ## [0.1.9](https://github-personal/HeoJeongBo/fluxion-render/compare/fluxion-worker-v0.1.8...fluxion-worker-v0.1.9) (2026-05-06)
 
 
