@@ -13,6 +13,7 @@ export {
   lidarLayer,
   lineLayer,
   lineStaticLayer,
+  scatterLayer,
   useAxisTicks,
   useFluxionCanvas,
   useFluxionHistorical,

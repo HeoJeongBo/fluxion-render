@@ -3,6 +3,7 @@ import type { AxisGridConfig } from "../../../entities/axis-grid-layer";
 import type { LidarScatterConfig } from "../../../entities/lidar-scatter-layer";
 import type { LineChartConfig } from "../../../entities/line-chart-layer";
 import type { LineChartStaticConfig } from "../../../entities/line-chart-static-layer";
+import type { ScatterChartConfig } from "../../../entities/scatter-chart-layer";
 import { FluxionHost, type FluxionHostOptions } from "../../../features/host";
 import { type ResizeInfo, useResizeObserver } from "./use-resize-observer";
 
@@ -18,7 +19,8 @@ export type FluxionLayerSpec =
   | { id: string; kind: "line"; config?: LineChartConfig }
   | { id: string; kind: "line-static"; config?: LineChartStaticConfig }
   | { id: string; kind: "lidar"; config?: LidarScatterConfig }
-  | { id: string; kind: "axis-grid"; config?: AxisGridConfig };
+  | { id: string; kind: "axis-grid"; config?: AxisGridConfig }
+  | { id: string; kind: "scatter"; config?: ScatterChartConfig };
 
 export interface UseFluxionCanvasOptions {
   layers: FluxionLayerSpec[];

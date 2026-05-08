@@ -3,6 +3,7 @@ import { LayerStack } from "../../../entities/layer-stack";
 import { LidarScatterLayer } from "../../../entities/lidar-scatter-layer";
 import { LineChartLayer } from "../../../entities/line-chart-layer";
 import { LineChartStaticLayer } from "../../../entities/line-chart-static-layer";
+import { ScatterChartLayer } from "../../../entities/scatter-chart-layer";
 import type { Layer } from "../../../shared/model/layer";
 import { Scheduler } from "../../../shared/model/scheduler";
 import { Viewport } from "../../../shared/model/viewport";
@@ -19,6 +20,8 @@ function createLayer(id: string, kind: LayerKind): Layer {
       return new LidarScatterLayer(id);
     case "axis-grid":
       return new AxisGridLayer(id);
+    case "scatter":
+      return new ScatterChartLayer(id);
   }
 }
 

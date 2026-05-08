@@ -158,3 +158,55 @@ export class LidarLayerHandle {
     this.sink.pushData(this.id, data);
   }
 }
+
+// ────────────────────────────────────────────────────────────────────────────
+// Scatter (streaming) — data layout: [t, y, t, y, ...] stride=2
+// Same layout as LineLayerHandle; different layer kind = different draw call.
+// ────────────────────────────────────────────────────────────────────────────
+
+/** One scatter sample. `t` is host-relative ms (same origin as `LineSample`). */
+export interface ScatterSample {
+  t: number;
+  y: number;
+}
+
+/**
+ * Handle for `kind: "scatter"` layers. Appends to the layer's ring buffer
+ * on each call — identical wire format to `LineLayerHandle` but rendered
+ * as individual points rather than a connected line.
+ */
+export class ScatterLayerHandle {
+  constructor(
+    private readonly sink: FluxionDataSink,
+    readonly id: string,
+  ) {}
+
+  /** Push a single `[t, y]` sample. */
+  push(sample: ScatterSample): void {
+    const buf = new Float32Array(2);
+    buf[0] = sample.t;
+    buf[1] = sample.y;
+    this.sink.pushData(this.id, buf);
+  }
+
+  /** Push a batch of samples in one postMessage. */
+  pushBatch(samples: readonly ScatterSample[]): void {
+    const n = samples.length;
+    if (n === 0) return;
+    const buf = new Float32Array(n * 2);
+    for (let i = 0; i < n; i++) {
+      const s = samples[i]!;
+      buf[i * 2] = s.t;
+      buf[i * 2 + 1] = s.y;
+    }
+    this.sink.pushData(this.id, buf);
+  }
+
+  /**
+   * Escape hatch: push a pre-built `[t, y, t, y, ...]` Float32Array directly.
+   * The array's byteOffset must be 0.
+   */
+  pushRaw(data: Float32Array): void {
+    this.sink.pushData(this.id, data);
+  }
+}

@@ -21,6 +21,7 @@ import {
   type LidarStride,
   LineLayerHandle,
   LineStaticLayerHandle,
+  ScatterLayerHandle,
 } from "./layer-handles";
 
 /**
@@ -309,6 +310,10 @@ export class FluxionHost {
 
   lidar(id: string, stride: LidarStride = 4): LidarLayerHandle {
     return new LidarLayerHandle(this, id, stride);
+  }
+
+  scatter(id: string): ScatterLayerHandle {
+    return new ScatterLayerHandle(this, id);
   }
 
   /**

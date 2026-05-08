@@ -2,6 +2,7 @@ import type { AxisGridConfig } from "../../../entities/axis-grid-layer";
 import type { LidarScatterConfig } from "../../../entities/lidar-scatter-layer";
 import type { LineChartConfig } from "../../../entities/line-chart-layer";
 import type { LineChartStaticConfig } from "../../../entities/line-chart-static-layer";
+import type { ScatterChartConfig } from "../../../entities/scatter-chart-layer";
 import type { FluxionLayerSpec } from "./use-fluxion-canvas";
 
 /**
@@ -36,4 +37,8 @@ export function lidarLayer(id: string, config?: LidarScatterConfig): FluxionLaye
 
 export function axisGridLayer(id: string, config?: AxisGridConfig): FluxionLayerSpec {
   return { id, kind: "axis-grid", config };
+}
+
+export function scatterLayer(id: string, config?: ScatterChartConfig): FluxionLayerSpec {
+  return { id, kind: "scatter", config };
 }

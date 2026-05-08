@@ -19,7 +19,7 @@ export const Op = {
 } as const;
 export type Op = (typeof Op)[keyof typeof Op];
 
-export type LayerKind = "line" | "line-static" | "lidar" | "axis-grid";
+export type LayerKind = "line" | "line-static" | "lidar" | "axis-grid" | "scatter";
 
 export type DType = "f32" | "u8" | "i16" | "u16" | "i32";
 

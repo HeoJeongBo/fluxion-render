@@ -6,6 +6,7 @@ import { HistoricalDemoPage } from "../pages/historical-demo";
 import { LidarDemoPage } from "../pages/lidar-demo";
 import { LineDemoPage } from "../pages/line-demo";
 import { PoolDemoPage } from "../pages/pool-demo";
+import { ScatterDemoPage } from "../pages/scatter-demo";
 import { StaticXyDemoPage } from "../pages/static-xy-demo";
 import { StreamDemoPage } from "../pages/stream-demo";
 import { TableDemoPage } from "../pages/table-demo";
@@ -16,6 +17,7 @@ type Tab =
   | "line"
   | "stream"
   | "static"
+  | "scatter"
   | "historical"
   | "lidar"
   | "pool"
@@ -28,6 +30,7 @@ const tabs: readonly TabBarItem<Tab>[] = [
   { id: "line", label: "Stream" },
   { id: "stream", label: "Multi-stream" },
   { id: "static", label: "Static xy" },
+  { id: "scatter", label: "Scatter" },
   { id: "historical", label: "Historical" },
   { id: "lidar", label: "LiDAR 30k" },
   { id: "pool", label: "Pool (40 charts)" },
@@ -54,6 +57,7 @@ export function App() {
         {tab === "line" && <LineDemoPage />}
         {tab === "stream" && <StreamDemoPage />}
         {tab === "static" && <StaticXyDemoPage />}
+        {tab === "scatter" && <ScatterDemoPage />}
         {tab === "historical" && <HistoricalDemoPage />}
         {tab === "lidar" && <LidarDemoPage />}
         {tab === "pool" && <PoolDemoPage />}
