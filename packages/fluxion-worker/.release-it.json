@@ -23,7 +23,7 @@
     ],
     "after:bump": ["echo 'Version bumped to ${version}'"],
     "after:release": [
-      "npm publish --access public --registry https://registry.npmjs.org",
+      "pnpm publish --access public --registry https://registry.npmjs.org --no-git-checks",
       "echo 'Successfully released ${name} v${version} to ${repo.repository}.'"
     ]
   },
