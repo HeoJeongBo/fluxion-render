@@ -1,5 +1,12 @@
 # Changelog
 
+# [0.7.0](https://github-personal/HeoJeongBo/fluxion-render/compare/fluxion-render-v0.6.0...fluxion-render-v0.7.0) (2026-05-11)
+
+
+### Bug Fixes
+
+* monorepo publish ([18304eb](https://github-personal/HeoJeongBo/fluxion-render/commit/18304eb4adc29f2fd37e4facda51eada72ae352e))
+
 # [0.6.0](https://github-personal/HeoJeongBo/fluxion-render/compare/v0.5.0...fluxion-render-v0.6.0) (2026-05-08)
 
 
