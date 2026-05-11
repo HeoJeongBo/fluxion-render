@@ -1,5 +1,17 @@
 # Changelog
 
+# [0.2.0](https://github-personal/HeoJeongBo/fluxion-render/compare/fluxion-worker-v0.1.10...fluxion-worker-v0.2.0) (2026-05-11)
+
+
+### Bug Fixes
+
+* monorepo publish ([18304eb](https://github-personal/HeoJeongBo/fluxion-render/commit/18304eb4adc29f2fd37e4facda51eada72ae352e))
+
+
+### Features
+
+* **render,examples:** add streaming scatter chart layer ([afdab3a](https://github-personal/HeoJeongBo/fluxion-render/commit/afdab3ae89996948ce7acd3ad440e7e81abd9ab2))
+
 ## [0.1.10](https://github-personal/HeoJeongBo/fluxion-render/compare/fluxion-worker-v0.1.9...fluxion-worker-v0.1.10) (2026-05-08)
 
 
