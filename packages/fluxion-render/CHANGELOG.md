@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.7.1](https://github-personal/HeoJeongBo/fluxion-render/compare/fluxion-render-v0.7.0...fluxion-render-v0.7.1) (2026-05-13)
+
+
+### Features
+
+* **render,examples:** add area, step, bar, candlestick, heatmap chart layers ([3ec63bd](https://github-personal/HeoJeongBo/fluxion-render/commit/3ec63bd70ae625e1cbcab056fafb43c618f215c6))
+
 # [0.7.0](https://github-personal/HeoJeongBo/fluxion-render/compare/fluxion-render-v0.6.0...fluxion-render-v0.7.0) (2026-05-11)
 
 
