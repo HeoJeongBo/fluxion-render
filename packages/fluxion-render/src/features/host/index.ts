@@ -7,7 +7,13 @@ export type {
 } from "./model/fluxion-host";
 export { FluxionHost } from "./model/fluxion-host";
 export {
+  AreaLayerHandle,
+  BarLayerHandle,
+  CandlestickLayerHandle,
+  type CandlestickSample,
   type FluxionDataSink,
+  HeatmapLayerHandle,
+  type HeatmapPoint,
   LidarLayerHandle,
   type LidarPoint,
   type LidarStride,
@@ -16,5 +22,6 @@ export {
   LineStaticLayerHandle,
   ScatterLayerHandle,
   type ScatterSample,
+  StepLayerHandle,
   type XyPoint,
 } from "./model/layer-handles";

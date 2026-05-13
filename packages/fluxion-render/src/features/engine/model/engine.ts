@@ -1,9 +1,14 @@
+import { AreaChartLayer } from "../../../entities/area-chart-layer";
 import { AxisGridLayer } from "../../../entities/axis-grid-layer";
+import { BarChartLayer } from "../../../entities/bar-chart-layer";
+import { CandlestickLayer } from "../../../entities/candlestick-layer";
+import { HeatmapLayer } from "../../../entities/heatmap-layer";
 import { LayerStack } from "../../../entities/layer-stack";
 import { LidarScatterLayer } from "../../../entities/lidar-scatter-layer";
 import { LineChartLayer } from "../../../entities/line-chart-layer";
 import { LineChartStaticLayer } from "../../../entities/line-chart-static-layer";
 import { ScatterChartLayer } from "../../../entities/scatter-chart-layer";
+import { StepChartLayer } from "../../../entities/step-chart-layer";
 import type { Layer } from "../../../shared/model/layer";
 import { Scheduler } from "../../../shared/model/scheduler";
 import { Viewport } from "../../../shared/model/viewport";
@@ -22,6 +27,16 @@ function createLayer(id: string, kind: LayerKind): Layer {
       return new AxisGridLayer(id);
     case "scatter":
       return new ScatterChartLayer(id);
+    case "area":
+      return new AreaChartLayer(id);
+    case "step":
+      return new StepChartLayer(id);
+    case "bar":
+      return new BarChartLayer(id);
+    case "candlestick":
+      return new CandlestickLayer(id);
+    case "heatmap":
+      return new HeatmapLayer(id);
   }
 }
 

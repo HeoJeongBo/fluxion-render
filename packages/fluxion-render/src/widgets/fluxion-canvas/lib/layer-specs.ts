@@ -1,8 +1,13 @@
+import type { AreaChartConfig } from "../../../entities/area-chart-layer";
 import type { AxisGridConfig } from "../../../entities/axis-grid-layer";
+import type { BarChartConfig } from "../../../entities/bar-chart-layer";
+import type { CandlestickConfig } from "../../../entities/candlestick-layer";
+import type { HeatmapConfig } from "../../../entities/heatmap-layer";
 import type { LidarScatterConfig } from "../../../entities/lidar-scatter-layer";
 import type { LineChartConfig } from "../../../entities/line-chart-layer";
 import type { LineChartStaticConfig } from "../../../entities/line-chart-static-layer";
 import type { ScatterChartConfig } from "../../../entities/scatter-chart-layer";
+import type { StepChartConfig } from "../../../entities/step-chart-layer";
 import type { FluxionLayerSpec } from "./use-fluxion-canvas";
 
 /**
@@ -41,4 +46,24 @@ export function axisGridLayer(id: string, config?: AxisGridConfig): FluxionLayer
 
 export function scatterLayer(id: string, config?: ScatterChartConfig): FluxionLayerSpec {
   return { id, kind: "scatter", config };
+}
+
+export function areaLayer(id: string, config?: AreaChartConfig): FluxionLayerSpec {
+  return { id, kind: "area", config };
+}
+
+export function stepLayer(id: string, config?: StepChartConfig): FluxionLayerSpec {
+  return { id, kind: "step", config };
+}
+
+export function barLayer(id: string, config?: BarChartConfig): FluxionLayerSpec {
+  return { id, kind: "bar", config };
+}
+
+export function candlestickLayer(id: string, config?: CandlestickConfig): FluxionLayerSpec {
+  return { id, kind: "candlestick", config };
+}
+
+export function heatmapLayer(id: string, config?: HeatmapConfig): FluxionLayerSpec {
+  return { id, kind: "heatmap", config };
 }

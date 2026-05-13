@@ -1,9 +1,14 @@
 export {
+  areaLayer,
   axisGridLayer,
+  barLayer,
+  candlestickLayer,
+  heatmapLayer,
   lidarLayer,
   lineLayer,
   lineStaticLayer,
   scatterLayer,
+  stepLayer,
 } from "./lib/layer-specs";
 export { useXAxisCanvas, useYAxisCanvas } from "./lib/use-axis-canvas";
 export { useAxisTicks } from "./lib/use-axis-ticks";

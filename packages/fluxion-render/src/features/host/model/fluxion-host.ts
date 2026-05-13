@@ -17,11 +17,16 @@ import {
   type WorkerMsg,
 } from "../../../shared/protocol";
 import {
+  AreaLayerHandle,
+  BarLayerHandle,
+  CandlestickLayerHandle,
+  HeatmapLayerHandle,
   LidarLayerHandle,
   type LidarStride,
   LineLayerHandle,
   LineStaticLayerHandle,
   ScatterLayerHandle,
+  StepLayerHandle,
 } from "./layer-handles";
 
 /**
@@ -314,6 +319,26 @@ export class FluxionHost {
 
   scatter(id: string): ScatterLayerHandle {
     return new ScatterLayerHandle(this, id);
+  }
+
+  area(id: string): AreaLayerHandle {
+    return new AreaLayerHandle(this, id);
+  }
+
+  step(id: string): StepLayerHandle {
+    return new StepLayerHandle(this, id);
+  }
+
+  bar(id: string): BarLayerHandle {
+    return new BarLayerHandle(this, id);
+  }
+
+  candlestick(id: string): CandlestickLayerHandle {
+    return new CandlestickLayerHandle(this, id);
+  }
+
+  heatmap(id: string): HeatmapLayerHandle {
+    return new HeatmapLayerHandle(this, id);
   }
 
   /**

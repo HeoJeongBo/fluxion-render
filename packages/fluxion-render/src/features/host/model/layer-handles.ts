@@ -210,3 +210,182 @@ export class ScatterLayerHandle {
     this.sink.pushData(this.id, data);
   }
 }
+
+// ────────────────────────────────────────────────────────────────────────────
+// Area (streaming) — same wire format as Line: [t, y, t, y, ...] stride=2
+// ────────────────────────────────────────────────────────────────────────────
+
+export class AreaLayerHandle {
+  constructor(
+    private readonly sink: FluxionDataSink,
+    readonly id: string,
+  ) {}
+
+  push(sample: LineSample): void {
+    const buf = new Float32Array(2);
+    buf[0] = sample.t;
+    buf[1] = sample.y;
+    this.sink.pushData(this.id, buf);
+  }
+
+  pushBatch(samples: readonly LineSample[]): void {
+    const n = samples.length;
+    if (n === 0) return;
+    const buf = new Float32Array(n * 2);
+    for (let i = 0; i < n; i++) {
+      buf[i * 2] = samples[i]!.t;
+      buf[i * 2 + 1] = samples[i]!.y;
+    }
+    this.sink.pushData(this.id, buf);
+  }
+
+  pushRaw(data: Float32Array): void {
+    this.sink.pushData(this.id, data);
+  }
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Step (streaming) — same wire format as Line: [t, y, t, y, ...] stride=2
+// ────────────────────────────────────────────────────────────────────────────
+
+export class StepLayerHandle {
+  constructor(
+    private readonly sink: FluxionDataSink,
+    readonly id: string,
+  ) {}
+
+  push(sample: LineSample): void {
+    const buf = new Float32Array(2);
+    buf[0] = sample.t;
+    buf[1] = sample.y;
+    this.sink.pushData(this.id, buf);
+  }
+
+  pushBatch(samples: readonly LineSample[]): void {
+    const n = samples.length;
+    if (n === 0) return;
+    const buf = new Float32Array(n * 2);
+    for (let i = 0; i < n; i++) {
+      buf[i * 2] = samples[i]!.t;
+      buf[i * 2 + 1] = samples[i]!.y;
+    }
+    this.sink.pushData(this.id, buf);
+  }
+
+  pushRaw(data: Float32Array): void {
+    this.sink.pushData(this.id, data);
+  }
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Bar (static) — [x, y, x, y, ...] or [y0, y1, ...] stride=1
+// ────────────────────────────────────────────────────────────────────────────
+
+export class BarLayerHandle {
+  constructor(
+    private readonly sink: FluxionDataSink,
+    readonly id: string,
+  ) {}
+
+  setXY(points: readonly XyPoint[]): void {
+    const n = points.length;
+    const buf = new Float32Array(n * 2);
+    for (let i = 0; i < n; i++) {
+      buf[i * 2] = points[i]!.x;
+      buf[i * 2 + 1] = points[i]!.y;
+    }
+    this.sink.pushData(this.id, buf);
+  }
+
+  setY(values: readonly number[]): void {
+    const buf = new Float32Array(values.length);
+    for (let i = 0; i < values.length; i++) buf[i] = values[i]!;
+    this.sink.pushData(this.id, buf);
+  }
+
+  pushRaw(data: Float32Array): void {
+    this.sink.pushData(this.id, data);
+  }
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Candlestick (streaming) — [t, open, high, low, close, ...] stride=5
+// ────────────────────────────────────────────────────────────────────────────
+
+export interface CandlestickSample {
+  t: number;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+}
+
+export class CandlestickLayerHandle {
+  constructor(
+    private readonly sink: FluxionDataSink,
+    readonly id: string,
+  ) {}
+
+  push(s: CandlestickSample): void {
+    const buf = new Float32Array(5);
+    buf[0] = s.t;
+    buf[1] = s.open;
+    buf[2] = s.high;
+    buf[3] = s.low;
+    buf[4] = s.close;
+    this.sink.pushData(this.id, buf);
+  }
+
+  pushBatch(samples: readonly CandlestickSample[]): void {
+    const n = samples.length;
+    if (n === 0) return;
+    const buf = new Float32Array(n * 5);
+    for (let i = 0; i < n; i++) {
+      const s = samples[i]!;
+      const o = i * 5;
+      buf[o] = s.t;
+      buf[o + 1] = s.open;
+      buf[o + 2] = s.high;
+      buf[o + 3] = s.low;
+      buf[o + 4] = s.close;
+    }
+    this.sink.pushData(this.id, buf);
+  }
+
+  pushRaw(data: Float32Array): void {
+    this.sink.pushData(this.id, data);
+  }
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Heatmap (static) — [x, y, value, x, y, value, ...] stride=3
+// ────────────────────────────────────────────────────────────────────────────
+
+export interface HeatmapPoint {
+  x: number;
+  y: number;
+  value: number;
+}
+
+export class HeatmapLayerHandle {
+  constructor(
+    private readonly sink: FluxionDataSink,
+    readonly id: string,
+  ) {}
+
+  setGrid(points: readonly HeatmapPoint[]): void {
+    const n = points.length;
+    const buf = new Float32Array(n * 3);
+    for (let i = 0; i < n; i++) {
+      const p = points[i]!;
+      buf[i * 3] = p.x;
+      buf[i * 3 + 1] = p.y;
+      buf[i * 3 + 2] = p.value;
+    }
+    this.sink.pushData(this.id, buf);
+  }
+
+  pushRaw(data: Float32Array): void {
+    this.sink.pushData(this.id, data);
+  }
+}

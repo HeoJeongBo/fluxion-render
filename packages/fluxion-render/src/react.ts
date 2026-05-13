@@ -7,13 +7,18 @@ export {
 } from "./features/host";
 export type { LayerKind } from "./shared/protocol";
 export {
+  areaLayer,
   axisGridLayer,
+  barLayer,
+  candlestickLayer,
   FluxionCanvas,
   FluxionLegend,
+  heatmapLayer,
   lidarLayer,
   lineLayer,
   lineStaticLayer,
   scatterLayer,
+  stepLayer,
   useAxisTicks,
   useFluxionCanvas,
   useFluxionHistorical,
