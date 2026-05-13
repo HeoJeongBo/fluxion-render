@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.7.2](https://github-personal/HeoJeongBo/fluxion-render/compare/fluxion-render-v0.7.1...fluxion-render-v0.7.2) (2026-05-13)
+
+
+### Features
+
+* **render,examples:** dx improvements — factory fn exports, FluxionCanvas cleanup, null-host warning ([40d7ac6](https://github-personal/HeoJeongBo/fluxion-render/commit/40d7ac6ab77fb3eb09ff42dd1f322be76e0fde67))
+
 ## [0.7.1](https://github-personal/HeoJeongBo/fluxion-render/compare/fluxion-render-v0.7.0...fluxion-render-v0.7.1) (2026-05-13)
 
 
