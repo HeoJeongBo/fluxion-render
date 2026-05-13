@@ -148,7 +148,6 @@ export function StreamDemoPage({
       <FluxionCanvas
         externalAxes
         axisLayerId="axis"
-        axisConfig={{ timeWindowMs: windowMs }}
         axisColor={THEME.chart.labelColor}
         layers={layers}
         hostOptions={{ bgColor: THEME.chart.canvasBg }}

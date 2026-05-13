@@ -56,6 +56,18 @@ export function useFluxionStream<T>(
 
   const [rate, setRate] = useState(0);
 
+  // Warn once when host stays null longer than 2s — likely a wiring bug.
+  useEffect(() => {
+    if (host) return;
+    const id = setTimeout(() => {
+      console.warn(
+        "[useFluxionStream] host is still null after 2s. " +
+          "Make sure onReady={setHost} is wired to <FluxionCanvas> and the component has mounted.",
+      );
+    }, 2000);
+    return () => clearTimeout(id);
+  }, [host]);
+
   useEffect(() => {
     if (!host) {
       setRate(0);

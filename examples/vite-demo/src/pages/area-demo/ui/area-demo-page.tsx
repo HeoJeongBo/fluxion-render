@@ -68,7 +68,6 @@ export function AreaDemoPage() {
       <FluxionCanvas
         externalAxes
         axisLayerId="axis"
-        axisConfig={{ timeWindowMs: localWindowMs }}
         axisColor={THEME.chart.labelColor}
         layers={layers}
         hostOptions={{ bgColor: THEME.chart.canvasBg }}

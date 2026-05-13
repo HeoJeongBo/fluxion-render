@@ -74,7 +74,6 @@ export function StepDemoPage() {
       <FluxionCanvas
         externalAxes
         axisLayerId="axis"
-        axisConfig={{ timeWindowMs: localWindowMs }}
         axisColor={THEME.chart.labelColor}
         layers={layers}
         hostOptions={{ bgColor: THEME.chart.canvasBg }}

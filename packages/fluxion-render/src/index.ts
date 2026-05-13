@@ -46,3 +46,16 @@ export { computeAxisTicks, formatTick } from "./shared/lib/axis-ticks";
 export type { TickFormatter } from "./shared/lib/time-format";
 export { formatClock, makeClockFormatter } from "./shared/lib/time-format";
 export type { DType, HostMsg, LayerKind } from "./shared/protocol";
+export {
+  areaLayer,
+  axisGridLayer,
+  barLayer,
+  candlestickLayer,
+  heatmapLayer,
+  lidarLayer,
+  lineLayer,
+  lineStaticLayer,
+  scatterLayer,
+  stepLayer,
+} from "./widgets/fluxion-canvas/lib/layer-specs";
+export type { FluxionLayerSpec } from "./widgets/fluxion-canvas/lib/use-fluxion-canvas";

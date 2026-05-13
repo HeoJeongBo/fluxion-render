@@ -135,7 +135,6 @@ export function TableDemoPage() {
         <FluxionCanvas
           externalAxes
           axisLayerId="axis"
-          axisConfig={{ timeWindowMs: 5000 }}
           axisColor={THEME.chart.labelColor}
           layers={layers}
           hostOptions={{ bgColor: THEME.chart.canvasBg }}
