@@ -3,6 +3,13 @@ import type { WorkerErrorMsg } from "../../define-worker/define-worker";
 export interface RequestOptions {
   /** Milliseconds before the Promise rejects with WorkerTimeoutError. */
   timeoutMs?: number;
+  /**
+   * AbortSignal to cancel the request. When aborted, the Promise rejects
+   * with `signal.reason` (or a generic `Error("Aborted")` if reason is not an Error).
+   * Useful for React `useEffect` cleanup: create an `AbortController`, pass
+   * `signal` to `request()`, and call `controller.abort()` in the cleanup function.
+   */
+  signal?: AbortSignal;
 }
 
 export class WorkerTimeoutError extends Error {
@@ -192,6 +199,13 @@ export class WorkerHandle<TMsg extends object> implements WorkerLike {
   /**
    * Send a message and await a single response. Automatically unsubscribes
    * after the first reply or error. `release()` is still the caller's responsibility.
+   *
+   * Pass `opts.signal` to support cancellation (e.g. React `useEffect` cleanup):
+   * ```ts
+   * const ctrl = new AbortController();
+   * handle.request(msg, { signal: ctrl.signal });
+   * // cancel: ctrl.abort();
+   * ```
    */
   request<TResult extends object = object>(
     msg: TMsg,
@@ -199,10 +213,22 @@ export class WorkerHandle<TMsg extends object> implements WorkerLike {
     transfer?: Transferable[],
   ): Promise<Omit<TResult, "hostId">> {
     return new Promise<Omit<TResult, "hostId">>((resolve, reject) => {
+      // Reject immediately if the signal is already aborted.
+      if (opts?.signal?.aborted) {
+        const reason = opts.signal.reason;
+        reject(reason instanceof Error ? reason : new Error("Aborted"));
+        return;
+      }
+
       let timerId: ReturnType<typeof setTimeout> | undefined;
+      let signalListener: (() => void) | undefined;
 
       const cleanup = () => {
         if (timerId !== undefined) clearTimeout(timerId);
+        if (signalListener && opts?.signal) {
+          opts.signal.removeEventListener("abort", signalListener);
+          signalListener = undefined;
+        }
         offMsg();
         offErr();
         this._abortCallbacks.delete(abort);
@@ -232,8 +258,31 @@ export class WorkerHandle<TMsg extends object> implements WorkerLike {
         }, ms);
       }
 
+      if (opts?.signal) {
+        const sig = opts.signal;
+        signalListener = () => {
+          cleanup();
+          const reason = sig.reason;
+          /* v8 ignore next */
+          reject(reason instanceof Error ? reason : new Error("Aborted"));
+        };
+        sig.addEventListener("abort", signalListener, { once: true });
+      }
+
       this.postMessage(msg, transfer);
     });
+  }
+
+  /**
+   * Alias for `request()` — matches `WorkerPool.dispatch()` naming for consistency.
+   * Use whichever name reads more clearly at the call site.
+   */
+  dispatch<TResult extends object = object>(
+    msg: TMsg,
+    opts?: RequestOptions,
+    transfer?: Transferable[],
+  ): Promise<Omit<TResult, "hostId">> {
+    return this.request<TResult>(msg, opts, transfer);
   }
 
   /**
@@ -266,6 +315,7 @@ export class WorkerHandle<TMsg extends object> implements WorkerLike {
     return () => {
       this._worker.removeEventListener("message", raw);
       const map = this._listenerMap.get("message");
+      /* v8 ignore next 4 */
       if (map) {
         map.delete(raw);
         if (map.size === 0) this._listenerMap.delete("message");
@@ -351,10 +401,27 @@ export class WorkerHandle<TMsg extends object> implements WorkerLike {
   }
 }
 
+/**
+ * Called when any worker in the pool reports an error (via `defineWorker`'s
+ * automatic error forwarding). Receives the error and the index of the worker
+ * that reported it.
+ *
+ * This fires for fire-and-forget `postMessage` calls where the error would
+ * otherwise be silently dropped. For `request()` / `dispatch()` calls the
+ * error is already propagated as a rejected Promise — but the pool-level
+ * handler fires as well, so avoid double-logging by checking context.
+ */
+export type WorkerPoolErrorCallback = (
+  err: WorkerErrorMsg,
+  workerIndex: number,
+) => void;
+
 export class WorkerPool<TMsg extends object> {
   private readonly workers: Worker[];
   private readonly hostCounts: Int32Array;
   private readonly handles: Set<WorkerHandle<TMsg>> = new Set();
+  private readonly _workerErrorListeners: EventListener[] = [];
+  private _errorCallback: WorkerPoolErrorCallback | undefined;
   private _seq = 0;
   private _disposed = false;
 
@@ -363,6 +430,45 @@ export class WorkerPool<TMsg extends object> {
     this.workers = Array.from({ length: size }, () => opts.workerFactory());
     // Int32Array for cache-friendly integer counters
     this.hostCounts = new Int32Array(size);
+
+    // Attach a pool-level error listener to each worker so fire-and-forget
+    // postMessage errors are visible via pool.onError(), not silently dropped.
+    for (let i = 0; i < this.workers.length; i++) {
+      const idx = i;
+      const listener: EventListener = (evt: Event) => {
+        const d = (evt as MessageEvent).data;
+        if (
+          d !== null &&
+          typeof d === "object" &&
+          (d as WorkerErrorMsg).__fluxionError === true &&
+          this._errorCallback
+        ) {
+          this._errorCallback(d as WorkerErrorMsg, idx);
+        }
+      };
+      this._workerErrorListeners.push(listener);
+      this.workers[i]!.addEventListener("message", listener);
+    }
+  }
+
+  /**
+   * Register a global error handler for this pool. Called whenever any worker
+   * reports an error, regardless of which handle sent the triggering message.
+   * Returns an `off` function to unregister.
+   *
+   * @example
+   * ```ts
+   * const off = pool.onError((err, workerIndex) => {
+   *   console.error(`Worker ${workerIndex} error:`, err.message);
+   * });
+   * // Later: off();
+   * ```
+   */
+  onError(callback: WorkerPoolErrorCallback): () => void {
+    this._errorCallback = callback;
+    return () => {
+      if (this._errorCallback === callback) this._errorCallback = undefined;
+    };
   }
 
   /**
@@ -436,9 +542,14 @@ export class WorkerPool<TMsg extends object> {
       handle._markTerminated();
     }
     this.handles.clear();
-    for (const worker of this.workers) {
-      worker.terminate();
+    for (let i = 0; i < this.workers.length; i++) {
+      const listener = this._workerErrorListeners[i];
+      /* v8 ignore next */
+      if (listener) this.workers[i]!.removeEventListener("message", listener);
+      this.workers[i]!.terminate();
     }
+    this._workerErrorListeners.length = 0;
+    this._errorCallback = undefined;
   }
 
   stats(): WorkerPoolStats {

@@ -424,13 +424,15 @@ describe("WorkerHandle", () => {
       pool.dispose();
     });
 
-    it("removeEventListener cleans up type entry when last listener removed", () => {
+    it("removeEventListener cleans up type entry when last handle listener removed", () => {
       const { pool, fakeWorkers } = makePool(1);
       const handle = pool.acquire();
       const listener = vi.fn();
       handle.addEventListener("message", listener);
       handle.removeEventListener("message", listener);
-      expect(fakeWorkers[0]!._listeners.get("message")?.size ?? 0).toBe(0);
+      // Pool attaches one pool-level error listener per worker (for pool.onError()).
+      // After removing the handle listener, only the pool's own listener remains.
+      expect(fakeWorkers[0]!._listeners.get("message")?.size ?? 0).toBe(1);
       pool.dispose();
     });
 
@@ -1063,6 +1065,203 @@ describe("WorkerPool handles Set lifecycle", () => {
     expect(handles.size).toBe(1);
     handle.dispose();
     expect(handles.size).toBe(0);
+    pool.dispose();
+  });
+});
+
+// ─── AbortSignal ──────────────────────────────────────────────────────────────
+
+describe("WorkerHandle.request AbortSignal", () => {
+  it("rejects immediately if signal is already aborted", async () => {
+    const { pool } = makePool(1);
+    const handle = pool.acquire();
+    const ctrl = new AbortController();
+    ctrl.abort(new Error("pre-aborted"));
+
+    await expect(
+      handle.request<{ result: number }>({ op: 1 }, { signal: ctrl.signal }),
+    ).rejects.toThrow("pre-aborted");
+
+    handle.release();
+    pool.dispose();
+  });
+
+  it("rejects with generic Error when signal.reason is not an Error", async () => {
+    const { pool } = makePool(1);
+    const handle = pool.acquire();
+    const ctrl = new AbortController();
+    ctrl.abort("string reason");
+
+    await expect(
+      handle.request<{ result: number }>({ op: 1 }, { signal: ctrl.signal }),
+    ).rejects.toThrow("Aborted");
+
+    handle.release();
+    pool.dispose();
+  });
+
+  it("rejects when signal aborts after request is sent", async () => {
+    const { pool } = makePool(1);
+    const handle = pool.acquire();
+    const ctrl = new AbortController();
+
+    const promise = handle.request<{ result: number }>(
+      { op: 1 },
+      { signal: ctrl.signal },
+    );
+
+    ctrl.abort(new Error("cancelled"));
+
+    await expect(promise).rejects.toThrow("cancelled");
+    handle.release();
+    pool.dispose();
+  });
+
+  it("removes signal listener after successful resolution", async () => {
+    const { pool, fakeWorkers } = makePool(1);
+    const handle = pool.acquire();
+    const ctrl = new AbortController();
+    const removeSpy = vi.spyOn(ctrl.signal, "removeEventListener");
+
+    const promise = handle.request<{ result: number }>(
+      { op: 1 },
+      { signal: ctrl.signal },
+    );
+
+    fakeWorkers[0]!._emit("message", { result: 42, hostId: handle.hostId });
+    await expect(promise).resolves.toEqual({ result: 42 });
+    expect(removeSpy).toHaveBeenCalled();
+
+    handle.release();
+    pool.dispose();
+  });
+});
+
+// ─── WorkerPool.onError ───────────────────────────────────────────────────────
+
+describe("WorkerPool.onError", () => {
+  it("calls callback when a worker emits an error", () => {
+    const { pool, fakeWorkers } = makePool(1);
+    const errors: Array<{ msg: WorkerErrorMsg; idx: number }> = [];
+    pool.onError((err, workerIndex) => errors.push({ msg: err, idx: workerIndex }));
+
+    const errMsg: WorkerErrorMsg = { __fluxionError: true, message: "boom", hostId: "x" };
+    fakeWorkers[0]!._emit("message", errMsg);
+
+    expect(errors).toHaveLength(1);
+    expect(errors[0]!.msg.message).toBe("boom");
+    expect(errors[0]!.idx).toBe(0);
+    pool.dispose();
+  });
+
+  it("off() unregisters the callback", () => {
+    const { pool, fakeWorkers } = makePool(1);
+    const cb = vi.fn();
+    const off = pool.onError(cb);
+    off();
+
+    fakeWorkers[0]!._emit("message", { __fluxionError: true, message: "boom" });
+    expect(cb).not.toHaveBeenCalled();
+    pool.dispose();
+  });
+
+  it("does not call callback after pool.dispose()", () => {
+    const { pool, fakeWorkers } = makePool(1);
+    const cb = vi.fn();
+    pool.onError(cb);
+    pool.dispose();
+
+    fakeWorkers[0]!._emit("message", { __fluxionError: true, message: "late" });
+    expect(cb).not.toHaveBeenCalled();
+  });
+});
+
+// ─── WorkerHandle.dispatch alias ─────────────────────────────────────────────
+
+describe("WorkerHandle.dispatch", () => {
+  it("is an alias for request — resolves with worker reply", async () => {
+    const { pool, fakeWorkers } = makePool(1);
+    const handle = pool.acquire();
+
+    const promise = handle.dispatch<{ result: number }>({ op: 1 });
+    fakeWorkers[0]!._emit("message", { result: 7, hostId: handle.hostId });
+
+    await expect(promise).resolves.toEqual({ result: 7 });
+    handle.release();
+    pool.dispose();
+  });
+});
+
+// ─── WorkerPool.onError off function ─────────────────────────────────────────
+
+describe("WorkerPool.onError off edge cases", () => {
+  it("off() is idempotent — calling twice does not throw", () => {
+    const { pool } = makePool(1);
+    const off = pool.onError(vi.fn());
+    off();
+    expect(() => off()).not.toThrow();
+    pool.dispose();
+  });
+
+  it("off() from stale registration does not clear newer callback", () => {
+    const { pool, fakeWorkers } = makePool(1);
+    const cb1 = vi.fn();
+    const cb2 = vi.fn();
+    const off1 = pool.onError(cb1);
+    pool.onError(cb2); // replaces cb1
+    off1(); // should not clear cb2
+
+    fakeWorkers[0]!._emit("message", { __fluxionError: true, message: "x" });
+    expect(cb2).toHaveBeenCalledTimes(1);
+    expect(cb1).not.toHaveBeenCalled();
+    pool.dispose();
+  });
+});
+
+// ─── WorkerPool dispose — removes pool-level error listeners ─────────────────
+
+describe("WorkerPool dispose removes pool-level listeners", () => {
+  it("removes error listeners from each worker on dispose", () => {
+    const fakes: FakeWorker[] = [];
+    const pool = new WorkerPool<TestMsg>({
+      size: 2,
+      workerFactory: () => {
+        const f = makeFakeWorker();
+        fakes.push(f);
+        return f as unknown as Worker;
+      },
+    });
+    const cb = vi.fn();
+    pool.onError(cb);
+
+    // Both workers should have removeEventListener called during dispose.
+    pool.dispose();
+
+    // After dispose, emitting an error should not call the callback.
+    fakes[0]!._emit("message", { __fluxionError: true, message: "post-dispose" });
+    expect(cb).not.toHaveBeenCalled();
+    // removeEventListener was called for each worker's pool-level listener.
+    expect(fakes[0]!.removeEventListener).toHaveBeenCalled();
+    expect(fakes[1]!.removeEventListener).toHaveBeenCalled();
+  });
+});
+
+// ─── WorkerHandle.onError off — listenerMap cleanup ──────────────────────────
+
+describe("WorkerHandle.onError off — listenerMap cleanup", () => {
+  it("removes listener and cleans up empty map entry", () => {
+    const { pool, fakeWorkers } = makePool(1);
+    const handle = pool.acquire();
+    const cb = vi.fn();
+    const off = handle.onError(cb);
+
+    // Count listeners before off().
+    const before = fakeWorkers[0]!._listeners.get("message")?.size ?? 0;
+    off();
+    const after = fakeWorkers[0]!._listeners.get("message")?.size ?? 0;
+
+    // One listener removed.
+    expect(after).toBe(before - 1);
     pool.dispose();
   });
 });

@@ -314,4 +314,14 @@ describe("defineWorkerWithState", () => {
     expect(err.__fluxionError).toBe(true);
     expect(err.message).toBe("async state boom");
   });
+
+  it("forwards transfer array in reply when provided", () => {
+    const buf = new ArrayBuffer(8);
+    defineWorkerWithState((_msg, reply) => {
+      reply({ buffer: buf }, [buf]);
+    });
+    selfMock.emit({ hostId: "host-1" });
+    const [call] = selfMock.postMessage.mock.calls;
+    expect(call![1]).toEqual([buf]);
+  });
 });

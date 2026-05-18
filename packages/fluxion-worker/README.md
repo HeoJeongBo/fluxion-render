@@ -15,6 +15,7 @@ npm install @heojeongbo/fluxion-worker
 - **`WorkerPool`** — manages N workers, routes messages via `hostId`, least-busy scheduling
 - **`WorkerHandle`** — thin wrapper over a single Worker with `hostId` filtering and optional pool integration
 - **`defineWorker`** — worker-side helper that eliminates `self.onmessage` / `self.postMessage` boilerplate and auto-echoes `hostId`
+- **`/react` subpath** — `useWorkerHandle`, `useWorkerPool`, `useWorkerRequest` hooks (React 18+, optional)
 
 ---
 
@@ -45,12 +46,12 @@ const pool = new WorkerPool({
     new Worker(new URL("./calc-worker.ts", import.meta.url), { type: "module" }),
 });
 
-const handle = pool.acquire();
-handle.addEventListener("message", (evt) => {
-  console.log(evt.data.result);
-  handle.release(); // return to pool
-});
-handle.postMessage({ op: "sum", values: [1, 2, 3] });
+// One-liner: acquire → request → release
+const result = await pool.dispatch<{ result: number }>(
+  { op: "sum", values: [1, 2, 3] },
+  { timeoutMs: 5000 },
+);
+console.log(result.result); // 6
 ```
 
 ### Standalone mode (single worker, no pool)
@@ -62,14 +63,107 @@ const handle = new WorkerHandle(
   () => new Worker(new URL("./calc-worker.ts", import.meta.url), { type: "module" }),
 );
 
-handle.addEventListener("message", (evt) => {
-  console.log(evt.data.result);
-});
-handle.postMessage({ op: "sum", values: [1, 2, 3] });
+const result = await handle.request<{ result: number }>(
+  { op: "sum", values: [1, 2, 3] },
+  { timeoutMs: 5000 },
+);
+console.log(result.result); // 6
 
-// When done:
-handle.terminate(); // stops the worker automatically
+handle.dispose(); // stops the worker
 ```
+
+---
+
+## React
+
+Import from the `/react` subpath. React 18+ is a peer dependency (optional).
+
+### `useWorkerHandle` — single worker, lifecycle managed
+
+```tsx
+import { useWorkerHandle } from "@heojeongbo/fluxion-worker/react";
+import { WorkerHandle } from "@heojeongbo/fluxion-worker";
+import { useMemo, useState } from "react";
+
+function Calc() {
+  const handle = useWorkerHandle<{ op: string; values: number[] }>(
+    () => new WorkerHandle(
+      () => new Worker(new URL("./calc-worker.ts", import.meta.url), { type: "module" })
+    )
+  );
+
+  const [result, setResult] = useState<number | null>(null);
+
+  const onClick = async () => {
+    if (!handle) return; // null on first render
+    const res = await handle.request<{ result: number }>(
+      { op: "sum", values: [1, 2, 3] },
+      { timeoutMs: 5000 },
+    );
+    setResult(res.result);
+  };
+
+  return <button onClick={onClick}>{result ?? "Calculate"}</button>;
+}
+```
+
+The handle is created inside `useEffect` (null on first render) and disposed on unmount.
+React StrictMode safe — double-invoke creates a fresh handle each time.
+
+### `useWorkerPool` — pool, lifecycle managed
+
+```tsx
+import { useWorkerPool } from "@heojeongbo/fluxion-worker/react";
+
+function Dashboard() {
+  const pool = useWorkerPool<{ op: string; values: number[] }>({
+    size: 4,
+    workerFactory: () =>
+      new Worker(new URL("./calc-worker.ts", import.meta.url), { type: "module" }),
+  });
+
+  // pool is always non-null (synchronous initialization)
+  const onClick = async () => {
+    const result = await pool.dispatch<{ result: number }>(
+      { op: "sum", values: [1, 2, 3] },
+      { timeoutMs: 5000 },
+    );
+    console.log(result.result);
+  };
+
+  return <button onClick={onClick}>Calculate</button>;
+}
+```
+
+### `useWorkerRequest` — declarative request/response
+
+```tsx
+import { useWorkerHandle, useWorkerRequest } from "@heojeongbo/fluxion-worker/react";
+import { WorkerHandle } from "@heojeongbo/fluxion-worker";
+import { useMemo } from "react";
+
+type CalcMsg = { op: "sum"; values: number[] };
+type CalcResult = { result: number };
+
+function Calc({ values }: { values: number[] }) {
+  const handle = useWorkerHandle<CalcMsg>(
+    () => new WorkerHandle(
+      () => new Worker(new URL("./calc-worker.ts", import.meta.url), { type: "module" })
+    )
+  );
+
+  // Stabilize msg with useMemo — inline objects re-trigger on every render.
+  const msg = useMemo(() => ({ op: "sum" as const, values }), [values]);
+
+  const { data, loading, error } = useWorkerRequest<CalcMsg, CalcResult>(handle, msg);
+
+  if (loading) return <span>calculating…</span>;
+  if (error) return <span>error: {error.message}</span>;
+  return <span>result: {data?.result}</span>;
+}
+```
+
+The in-flight request is automatically cancelled (via `AbortSignal`) when `handle` or `msg` changes, or when the component unmounts.
 
 ---
 
@@ -97,10 +191,10 @@ defineWorker<{ items: number[] }, { chunk: number[] }>(({ items }, reply) => {
   }
 });
 
-// With Transferable
+// With Transferable (zero-copy ArrayBuffer transfer)
 defineWorker<{ size: number }, { buffer: ArrayBuffer }>(({ size }, reply) => {
   const buffer = new ArrayBuffer(size);
-  reply({ buffer }, [buffer]);
+  reply({ buffer }, [buffer]); // ownership transferred, no copy
 });
 
 // Async
@@ -108,6 +202,50 @@ defineWorker<{ url: string }, { data: string }>(async ({ url }, reply) => {
   const res = await fetch(url);
   reply({ data: await res.text() });
 });
+```
+
+### `defineWorkerWithState(handler)`
+
+Like `defineWorker`, but manages per-host state automatically.
+
+```ts
+defineWorkerWithState<TMsg, TResult, TState>(
+  handler: (
+    msg: TMsg,
+    reply: ReplyFn<TResult>,
+    ctx: HostContext<TState>  // { hostId, state }
+  ) => TState | null | void | Promise<TState | null | void>
+): void
+```
+
+- Return a new state value to update it for this host
+- Return `null` to delete the state for this host (useful for session cleanup)
+- Return `undefined` (or void) to leave state unchanged
+- Works in standalone mode — messages without `hostId` share a `"__solo__"` slot
+
+```ts
+defineWorkerWithState<{ count: 1 }, { total: number }, { total: number }>(
+  ({ }, reply, { state }) => {
+    const s = state ?? { total: 0 };
+    const next = { total: s.total + 1 };
+    reply(next);
+    return next; // update state
+  }
+);
+
+// Reset state for a host:
+defineWorkerWithState<{ reset?: boolean }, { total: number }, { total: number }>(
+  ({ reset }, reply, { state }) => {
+    if (reset) {
+      reply({ total: 0 });
+      return null; // delete state for this host
+    }
+    const s = state ?? { total: 0 };
+    const next = { total: s.total + 1 };
+    reply(next);
+    return next;
+  }
+);
 ```
 
 ---
@@ -118,7 +256,7 @@ Manages a fixed set of workers. Distributes load via least-busy scheduling.
 
 ```ts
 const pool = new WorkerPool<TMsg>({
-  size?: number,           // default 4, clamped to [1, 16]
+  size?: number,               // default 4, clamped to [1, 16]
   workerFactory: () => Worker, // required
 });
 ```
@@ -126,14 +264,26 @@ const pool = new WorkerPool<TMsg>({
 | Method | Description |
 |--------|-------------|
 | `pool.acquire()` | Returns a `WorkerHandle` bound to the least-busy worker |
+| `pool.dispatch(msg, opts?, transfer?)` | One-liner: acquire → request → release |
+| `pool.onError(callback)` | Global error handler for fire-and-forget errors. Returns an `off` fn |
+| `pool.stats()` | `{ size, hostCounts, leastBusyIndex, totalActive }` |
 | `pool.dispose()` | Terminates all workers and cleans up listeners |
+
+**Global error handler** — catches errors from fire-and-forget `postMessage` calls that would otherwise be silently dropped:
+
+```ts
+const off = pool.onError((err, workerIndex) => {
+  console.error(`Worker ${workerIndex} error:`, err.message);
+});
+// Later: off();
+```
 
 **Subclassing** — override `_createHandle` to return a custom handle type:
 
 ```ts
 class MyPool extends WorkerPool<MyMsg> {
-  protected override _createHandle(worker, index, hostId) {
-    return new MyHandle(worker, hostId, () => this._release(index));
+  protected override _createHandle(worker, index, hostId, onRelease) {
+    return new MyHandle(worker, hostId, onRelease);
   }
   override acquire(): MyHandle {
     return super.acquire() as MyHandle;
@@ -152,45 +302,43 @@ Wraps a Worker and provides `hostId`-filtered messaging.
 const handle = new WorkerHandle<TMsg>(
   () => new Worker(new URL("./worker.ts", import.meta.url), { type: "module" })
 );
-// terminate() stops the worker
+// dispose() stops the worker
 ```
 
 **Injection constructor** (pool owns the worker):
 ```ts
 const handle = new WorkerHandle<TMsg>(worker, hostId, onRelease?);
-// terminate() is a no-op — pool manages the worker lifetime
+// dispose() releases back to pool
 ```
 
 | Method | Description |
 |--------|-------------|
 | `handle.postMessage(msg, transfer?)` | Stamps `hostId` onto the message and sends it |
-| `handle.addEventListener(type, listener)` | Subscribes — filters by `hostId` automatically |
+| `handle.request<TResult>(msg, opts?, transfer?)` | Send and await a single response |
+| `handle.dispatch<TResult>(msg, opts?, transfer?)` | Alias for `request()` — consistent naming with pool |
+| `handle.onMessage<TResult>(callback)` | Typed subscription; returns `off` fn |
+| `handle.onError(callback)` | Error subscription; returns `off` fn |
+| `handle.addEventListener(type, listener)` | Low-level; filters by `hostId` automatically |
 | `handle.removeEventListener(type, listener)` | Unsubscribes |
-| `handle.release()` | Returns the handle to the pool (no-op in standalone mode) |
+| `handle.release()` | Returns to pool (no-op in standalone mode) |
 | `handle.terminate()` | Stops the worker if the handle owns it; no-op if pool-backed |
-| `handle.hostId` | The unique identifier for this handle |
+| `handle.dispose()` | Smart cleanup — terminate in standalone, release in pool-backed |
+| `handle.isTerminated` | `true` after `dispose()` / `terminate()` |
+| `handle.hostId` | Unique identifier for this handle |
 
----
+**`request()` with AbortSignal** — clean React `useEffect` integration:
 
-## React (with `useEffect`)
-
-```tsx
-import { WorkerHandle } from "@heojeongbo/fluxion-worker";
-import { useEffect, useRef } from "react";
-
-function MyComponent() {
-  const handleRef = useRef<WorkerHandle<MyMsg> | null>(null);
-
-  useEffect(() => {
-    handleRef.current = new WorkerHandle(
-      () => new Worker(new URL("./my-worker.ts", import.meta.url), { type: "module" })
-    );
-    return () => {
-      handleRef.current?.terminate();
-      handleRef.current = null;
-    };
-  }, []);
-}
+```ts
+useEffect(() => {
+  const ctrl = new AbortController();
+  handle.request<CalcResult>(msg, { timeoutMs: 5000, signal: ctrl.signal })
+    .then(setResult)
+    .catch((err) => {
+      if (ctrl.signal.aborted) return; // ignore cleanup cancellations
+      setError(err);
+    });
+  return () => ctrl.abort(); // cancel on unmount or dep change
+}, [handle, msg]);
 ```
 
 ---

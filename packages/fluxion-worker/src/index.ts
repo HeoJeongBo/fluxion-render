@@ -11,6 +11,7 @@ export {
 export type {
   RequestOptions,
   WorkerLike,
+  WorkerPoolErrorCallback,
   WorkerPoolOptions,
   WorkerPoolStats,
 } from "./features/worker-pool/model/worker-pool";

@@ -4,7 +4,24 @@
       "Bash(git -C /Users/heojeongbo/Desktop/personal/fluxion-render show HEAD:packages/fluxion-render/src/widgets/fluxion-canvas/lib/use-fluxion-canvas.ts)",
       "Bash(git -C /Users/heojeongbo/Desktop/personal/fluxion-render show v0.4.1:packages/fluxion-render/src/widgets/fluxion-canvas/lib/use-fluxion-canvas.ts)",
       "Bash(grep -E \"\\\\.tsx?$\")",
-      "Bash(pnpm -r run typecheck)"
+      "Bash(pnpm -r run typecheck)",
+      "Bash(pnpm --filter @heojeongbo/fluxion-worker typecheck)",
+      "Bash(pnpm --filter @heojeongbo/fluxion-worker test)",
+      "Bash(pnpm --filter @heojeongbo/fluxion-worker test:coverage)",
+      "Bash(sed -n '478,492p' /Users/heojeongbo/Desktop/personal/fluxion-render/packages/fluxion-render/packages/fluxion-worker/src/features/worker-pool/model/worker-pool.ts)",
+      "Bash(sed -n '478,492p' /Users/heojeongbo/Desktop/personal/fluxion-render/packages/fluxion-worker/src/features/worker-pool/model/worker-pool.ts)",
+      "Bash(sed -n '128,135p' /Users/heojeongbo/Desktop/personal/fluxion-render/packages/fluxion-worker/src/features/define-worker/define-worker.ts)",
+      "Bash(sed -n '442,447p' /Users/heojeongbo/Desktop/personal/fluxion-render/packages/fluxion-worker/src/features/worker-pool/model/worker-pool.ts)",
+      "Bash(sed -n '464,470p' /Users/heojeongbo/Desktop/personal/fluxion-render/packages/fluxion-worker/src/features/worker-pool/model/worker-pool.ts)",
+      "Bash(sed -n '127,136p' /Users/heojeongbo/Desktop/personal/fluxion-render/packages/fluxion-worker/src/features/define-worker/define-worker.ts)",
+      "Bash(sed -n '315,322p' /Users/heojeongbo/Desktop/personal/fluxion-render/packages/fluxion-worker/src/features/worker-pool/model/worker-pool.ts)",
+      "Bash(sed -n '466,471p' /Users/heojeongbo/Desktop/personal/fluxion-render/packages/fluxion-worker/src/features/worker-pool/model/worker-pool.ts)",
+      "Bash(sed -n '543,548p' /Users/heojeongbo/Desktop/personal/fluxion-render/packages/fluxion-worker/src/features/worker-pool/model/worker-pool.ts)",
+      "Bash(sed -n '131,135p' /Users/heojeongbo/Desktop/personal/fluxion-render/packages/fluxion-worker/src/features/define-worker/define-worker.ts)",
+      "Bash(sed -n '264,268p' /Users/heojeongbo/Desktop/personal/fluxion-render/packages/fluxion-worker/src/features/worker-pool/model/worker-pool.ts)",
+      "Bash(sed -n '315,321p' /Users/heojeongbo/Desktop/personal/fluxion-render/packages/fluxion-worker/src/features/worker-pool/model/worker-pool.ts)",
+      "Bash(sed -n '543,547p' /Users/heojeongbo/Desktop/personal/fluxion-render/packages/fluxion-worker/src/features/worker-pool/model/worker-pool.ts)",
+      "Bash(pnpm --filter vite-demo typecheck)"
     ]
   }
 }

@@ -2,8 +2,15 @@ import { useState } from "react";
 import { THEME } from "../../../shared/ui/theme";
 import { WorkerHandleTab } from "./worker-handle-tab";
 import { WorkerPoolTab } from "./worker-pool-tab";
+import { ReactHooksTab } from "./react-hooks-tab";
 
-type Mode = "pool" | "standalone";
+type Mode = "pool" | "standalone" | "hooks";
+
+const TAB_LABELS: Record<Mode, string> = {
+  pool: "WorkerPool",
+  standalone: "WorkerHandle",
+  hooks: "React Hooks",
+};
 
 export function FluxionWorkerDemoPage() {
   const [mode, setMode] = useState<Mode>("pool");
@@ -27,7 +34,7 @@ export function FluxionWorkerDemoPage() {
         <strong style={{ color: THEME.page.textPrimary }}>@heojeongbo/fluxion-worker</strong>
         <span style={{ color: THEME.page.textMuted }}>dispatch() · request() · stats() · dispose()</span>
         <div style={{ marginLeft: "auto", display: "flex", gap: 6 }}>
-          {(["pool", "standalone"] as Mode[]).map((m) => (
+          {(["pool", "standalone", "hooks"] as Mode[]).map((m) => (
             <button
               key={m}
               onClick={() => setMode(m)}
@@ -41,7 +48,7 @@ export function FluxionWorkerDemoPage() {
                 cursor: "pointer",
               }}
             >
-              {m === "pool" ? "WorkerPool" : "WorkerHandle"}
+              {TAB_LABELS[m]}
             </button>
           ))}
         </div>
@@ -49,7 +56,7 @@ export function FluxionWorkerDemoPage() {
 
       {/* Tab content */}
       <div style={{ display: "flex", flex: 1, minHeight: 0 }}>
-        {mode === "pool" ? <WorkerPoolTab /> : <WorkerHandleTab />}
+        {mode === "pool" ? <WorkerPoolTab /> : mode === "standalone" ? <WorkerHandleTab /> : <ReactHooksTab />}
       </div>
     </div>
   );

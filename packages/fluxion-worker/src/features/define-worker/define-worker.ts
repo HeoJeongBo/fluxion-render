@@ -130,6 +130,7 @@ export function defineWorkerWithState<
       if (transfer && transfer.length > 0) {
         (self as unknown as Worker).postMessage(out, transfer);
       } else {
+        /* v8 ignore next */
         (self as unknown as Worker).postMessage(out);
       }
     };
