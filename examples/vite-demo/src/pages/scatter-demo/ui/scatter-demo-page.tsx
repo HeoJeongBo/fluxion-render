@@ -2,7 +2,10 @@ import type { FluxionHost, ScatterSample } from "@heojeongbo/fluxion-render";
 import {
   axisGridLayer,
   FluxionCanvas,
+  FluxionCrosshair,
+  HoverDataCache,
   scatterLayer,
+  useFluxionCrosshair,
   useFluxionStream,
   useLayerConfig,
 } from "@heojeongbo/fluxion-render/react";
@@ -17,6 +20,9 @@ import { WindowSelector } from "../../../shared/ui/window-selector";
 const TARGET_HZ = 60;
 const DEFAULT_WINDOW_MS = 5000;
 const NOISE_SCALE = 1.5;
+const Y_PAD_PX = 12;
+const Y_AXIS_WIDTH = 60;
+const X_AXIS_HEIGHT = 30;
 
 const WINDOW_OPTIONS = [
   { label: "3s", ms: 3000 },
@@ -29,6 +35,9 @@ function noisySample(tMs: number): ScatterSample {
   const noise = (Math.random() - 0.5) * 2 * NOISE_SCALE;
   return { t: stampToMs(base.header), y: base.data + noise };
 }
+
+const cache = new HoverDataCache();
+cache.registerLayer("scatter", { capacity: 4096, label: "scatter", color: "#f97316" });
 
 export function ScatterDemoPage() {
   const [localWindowMs, setLocalWindowMs] = useState(DEFAULT_WINDOW_MS);
@@ -49,7 +58,7 @@ export function ScatterDemoPage() {
         axisColor: THEME.chart.axisColor,
         showXLabels: false,
         showYLabels: false,
-        yPadPx: 12,
+        yPadPx: Y_PAD_PX,
       }),
       scatterLayer("scatter", {
         color: "#f97316",
@@ -69,9 +78,22 @@ export function ScatterDemoPage() {
     intervalMs: 1000 / TARGET_HZ,
     setup: (h) => h.scatter("scatter"),
     tick: (t, scatter) => {
-      scatter.push(noisySample(t));
+      const sample = noisySample(t);
+      cache.push("scatter", sample.t, sample.y);
+      scatter.push(sample);
       return 1;
     },
+  });
+
+  const { chartRef, state } = useFluxionCrosshair({
+    host,
+    cache,
+    xMode: "time",
+    timeWindowMs: localWindowMs,
+    timeOrigin,
+    yPadPx: Y_PAD_PX,
+    xFormat: (t) => new Date(timeOrigin + t).toISOString().slice(11, 23),
+    yFormat: (y) => y.toFixed(4),
   });
 
   return (
@@ -79,10 +101,34 @@ export function ScatterDemoPage() {
       <FluxionCanvas
         externalAxes
         axisLayerId="axis"
+        yAxisWidth={Y_AXIS_WIDTH}
+        xAxisHeight={X_AXIS_HEIGHT}
         axisColor={THEME.chart.labelColor}
         layers={layers}
         hostOptions={{ bgColor: THEME.chart.canvasBg }}
         onReady={setHost}
+      />
+      <div
+        ref={chartRef}
+        style={{
+          position: "absolute",
+          top: 0,
+          left: Y_AXIS_WIDTH,
+          right: 0,
+          bottom: X_AXIS_HEIGHT,
+          pointerEvents: "auto",
+          cursor: state.position ? "crosshair" : "default",
+        }}
+      />
+      <FluxionCrosshair
+        state={state}
+        style={{
+          position: "absolute",
+          top: 0,
+          left: Y_AXIS_WIDTH,
+          right: 0,
+          bottom: X_AXIS_HEIGHT,
+        }}
       />
       <div
         style={{
@@ -94,13 +140,16 @@ export function ScatterDemoPage() {
           gap: 8,
           fontSize: 12,
           color: THEME.page.textSecondary,
+          pointerEvents: "none",
         }}
       >
-        <WindowSelector
-          value={localWindowMs}
-          onChange={setLocalWindowMs}
-          options={WINDOW_OPTIONS}
-        />
+        <div style={{ pointerEvents: "auto" }}>
+          <WindowSelector
+            value={localWindowMs}
+            onChange={setLocalWindowMs}
+            options={WINDOW_OPTIONS}
+          />
+        </div>
         <span>
           {hz} Hz · {localWindowMs / 1000}s window · noise ±{NOISE_SCALE}
         </span>

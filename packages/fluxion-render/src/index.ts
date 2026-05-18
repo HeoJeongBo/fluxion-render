@@ -1,4 +1,6 @@
 export { createFluxionWorkerFactory } from "./app/worker/create-worker-factory";
+export { HoverDataCache } from "./features/crosshair";
+export type { CachedLayerOptions } from "./features/crosshair";
 export type { AreaChartConfig } from "./entities/area-chart-layer";
 export type { AxisGridConfig } from "./entities/axis-grid-layer";
 export type { BarChartConfig } from "./entities/bar-chart-layer";

@@ -5,6 +5,17 @@ export {
   getDefaultPool,
   type FluxionWorkerPoolOptions,
 } from "./features/host";
+export {
+  FluxionCrosshair,
+  HoverDataCache,
+  useFluxionCrosshair,
+  type CachedLayerOptions,
+  type CrosshairPoint,
+  type CrosshairState,
+  type FluxionCrosshairProps,
+  type UseFluxionCrosshairOptions,
+  type UseFluxionCrosshairResult,
+} from "./features/crosshair";
 export type { LayerKind } from "./shared/protocol";
 export {
   areaLayer,

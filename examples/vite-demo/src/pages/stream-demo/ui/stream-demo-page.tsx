@@ -2,8 +2,11 @@ import type { FluxionHost, LineSample } from "@heojeongbo/fluxion-render";
 import {
   axisGridLayer,
   FluxionCanvas,
+  FluxionCrosshair,
   FluxionTable,
+  HoverDataCache,
   lineLayer,
+  useFluxionCrosshair,
   useFluxionStream,
   useFluxionTable,
   useLayerConfig,
@@ -24,11 +27,14 @@ const DEFAULT_WINDOW_MS = 3000;
 const MAX_WINDOW_MS = 60_000;
 const SAMPLES_PER_SEC = BATCH_HZ * SAMPLES_PER_BATCH;
 const RING_CAPACITY = Math.ceil((MAX_WINDOW_MS / 1000) * SAMPLES_PER_SEC * 1.2);
+const Y_PAD_PX = 8;
+const Y_AXIS_WIDTH = 60;
+const X_AXIS_HEIGHT = 30;
 
 const SERIES = [
-  { id: "s1", color: "#4fc3f7", freqHz: 0.8, amplitude: 0.9, offset: 0 },
-  { id: "s2", color: "#80ffa0", freqHz: 1.3, amplitude: 0.7, offset: 1.1 },
-  { id: "s3", color: "#ffb060", freqHz: 2.1, amplitude: 0.5, offset: 2.2 },
+  { id: "s1", label: "s1", color: "#4fc3f7", freqHz: 0.8, amplitude: 0.9, offset: 0 },
+  { id: "s2", label: "s2", color: "#80ffa0", freqHz: 1.3, amplitude: 0.7, offset: 1.1 },
+  { id: "s3", label: "s3", color: "#ffb060", freqHz: 2.1, amplitude: 0.5, offset: 2.2 },
 ];
 
 const transformBatch = (msgs: Float32StampedMessage[]): LineSample[] =>
@@ -51,6 +57,11 @@ const TABLE_COLUMNS: import("@heojeongbo/fluxion-render/react").FluxionTableColu
   { key: "value", header: "Latest Value" },
   { key: "time", header: "Time" },
 ];
+
+const cache = new HoverDataCache();
+for (const s of SERIES) {
+  cache.registerLayer(s.id, { capacity: RING_CAPACITY, label: s.label, color: s.color });
+}
 
 export interface StreamDemoPageProps {
   windowMs?: number;
@@ -85,7 +96,7 @@ export function StreamDemoPage({
         axisColor: THEME.chart.axisColor,
         showXLabels: false,
         showYLabels: false,
-        yPadPx: 8,
+        yPadPx: Y_PAD_PX,
       }),
       ...SERIES.map((s) =>
         lineLayer(s.id, {
@@ -114,7 +125,9 @@ export function StreamDemoPage({
           amplitude: spec.amplitude,
           seriesOffset: spec.offset,
         });
-        handle.pushBatch(transformBatch(msgs));
+        const batch = transformBatch(msgs);
+        for (const s of batch) cache.push(spec.id, s.t, s.y);
+        handle.pushBatch(batch);
       }
       return SAMPLES_PER_BATCH * SERIES.length;
     },
@@ -143,21 +156,61 @@ export function StreamDemoPage({
     },
   });
 
+  const { chartRef, state: crosshairState } = useFluxionCrosshair({
+    host,
+    cache,
+    xMode: "time",
+    timeWindowMs: windowMs,
+    timeOrigin,
+    yPadPx: Y_PAD_PX,
+    xFormat: (t) => new Date(timeOrigin + t).toISOString().slice(11, 23),
+    yFormat: (y) => y.toFixed(4),
+  });
+
   return (
     <div style={{ position: "relative", width: "100%", height: "100%" }}>
       <FluxionCanvas
         externalAxes
         axisLayerId="axis"
+        yAxisWidth={Y_AXIS_WIDTH}
+        xAxisHeight={X_AXIS_HEIGHT}
         axisColor={THEME.chart.labelColor}
         layers={layers}
         hostOptions={{ bgColor: THEME.chart.canvasBg }}
         onReady={setHost}
       />
+
+      {/* Mouse capture overlay */}
+      <div
+        ref={chartRef}
+        style={{
+          position: "absolute",
+          top: 0,
+          left: Y_AXIS_WIDTH,
+          right: 0,
+          bottom: X_AXIS_HEIGHT,
+          pointerEvents: "auto",
+          cursor: crosshairState.position ? "crosshair" : "default",
+        }}
+      />
+
+      <FluxionCrosshair
+        state={crosshairState}
+        style={{
+          position: "absolute",
+          top: 0,
+          left: Y_AXIS_WIDTH,
+          right: 0,
+          bottom: X_AXIS_HEIGHT,
+        }}
+      />
+
+      {/* Series toggles */}
       <div
         style={{
           position: "absolute",
           top: 8,
-          left: 8,
+          left: Y_AXIS_WIDTH + 8,
           display: "flex",
           flexDirection: "column",
           gap: 4,
@@ -196,6 +249,8 @@ export function StreamDemoPage({
           </label>
         ))}
       </div>
+
+      {/* HUD */}
       <div
         style={{
           position: "absolute",
@@ -206,26 +261,30 @@ export function StreamDemoPage({
           gap: 8,
           fontSize: compactHud ? 11 : 12,
           color: THEME.page.textSecondary,
+          pointerEvents: "none",
         }}
       >
         {!hideSelector && (
-          <WindowSelector
-            value={windowMs}
-            onChange={setLocalWindowMs}
-            compact={compactHud}
-          />
+          <div style={{ pointerEvents: "auto" }}>
+            <WindowSelector
+              value={windowMs}
+              onChange={setLocalWindowMs}
+              compact={compactHud}
+            />
+          </div>
         )}
         <span>
           {rate} samples/s · {SERIES.length} series · {windowMs / 1000}s
         </span>
       </div>
+
       <FluxionTable
         columns={TABLE_COLUMNS}
         rows={tableRows}
         style={{
           position: "absolute",
-          bottom: 8,
-          left: 8,
+          bottom: X_AXIS_HEIGHT + 8,
+          left: Y_AXIS_WIDTH + 8,
           background: "rgba(255,255,255,0.88)",
           backdropFilter: "blur(4px)",
           borderRadius: 6,

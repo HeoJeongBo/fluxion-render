@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { AllDemoPage } from "../pages/all-demo";
 import { AreaDemoPage } from "../pages/area-demo";
+import { CrosshairDemoPage } from "../pages/crosshair-demo";
 import { BarDemoPage } from "../pages/bar-demo";
 import { CandlestickDemoPage } from "../pages/candlestick-demo";
 import { ExternalAxesDemoPage } from "../pages/external-axes-demo";
@@ -21,6 +22,7 @@ type Tab =
   | "all"
   | "line"
   | "stream"
+  | "crosshair"
   | "static"
   | "scatter"
   | "area"
@@ -39,6 +41,7 @@ const tabs: readonly TabBarItem<Tab>[] = [
   { id: "all", label: "All" },
   { id: "line", label: "Stream" },
   { id: "stream", label: "Multi-stream" },
+  { id: "crosshair", label: "Crosshair" },
   { id: "static", label: "Static xy" },
   { id: "scatter", label: "Scatter" },
   { id: "area", label: "Area" },
@@ -71,6 +74,7 @@ export function App() {
         {tab === "all" && <AllDemoPage />}
         {tab === "line" && <LineDemoPage />}
         {tab === "stream" && <StreamDemoPage />}
+        {tab === "crosshair" && <CrosshairDemoPage />}
         {tab === "static" && <StaticXyDemoPage />}
         {tab === "scatter" && <ScatterDemoPage />}
         {tab === "area" && <AreaDemoPage />}

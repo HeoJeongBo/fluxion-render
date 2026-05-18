@@ -21,7 +21,10 @@
       "Bash(sed -n '264,268p' /Users/heojeongbo/Desktop/personal/fluxion-render/packages/fluxion-worker/src/features/worker-pool/model/worker-pool.ts)",
       "Bash(sed -n '315,321p' /Users/heojeongbo/Desktop/personal/fluxion-render/packages/fluxion-worker/src/features/worker-pool/model/worker-pool.ts)",
       "Bash(sed -n '543,547p' /Users/heojeongbo/Desktop/personal/fluxion-render/packages/fluxion-worker/src/features/worker-pool/model/worker-pool.ts)",
-      "Bash(pnpm --filter vite-demo typecheck)"
+      "Bash(pnpm --filter vite-demo typecheck)",
+      "Bash(grep -E \"\\\\.\\(ts|tsx\\)$\")",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:5177/)",
+      "Bash(pnpm --filter @heojeongbo/fluxion-render test --reporter=verbose)"
     ]
   }
 }
