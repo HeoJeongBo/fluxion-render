@@ -1,5 +1,14 @@
 # Changelog
 
+# [0.3.0](https://github-personal/HeoJeongBo/fluxion-render/compare/fluxion-worker-v0.2.0...fluxion-worker-v0.3.0) (2026-05-18)
+
+
+### Features
+
+* **render,examples:** add area, step, bar, candlestick, heatmap chart layers ([3ec63bd](https://github-personal/HeoJeongBo/fluxion-render/commit/3ec63bd70ae625e1cbcab056fafb43c618f215c6))
+* **render,examples:** dx improvements — factory fn exports, FluxionCanvas cleanup, null-host warning ([40d7ac6](https://github-personal/HeoJeongBo/fluxion-render/commit/40d7ac6ab77fb3eb09ff42dd1f322be76e0fde67))
+* **worker,examples:** add /react subpath with hooks and React Hooks demo tab ([ff9f04a](https://github-personal/HeoJeongBo/fluxion-render/commit/ff9f04a14bde8eb5b0c8735378d1ecb491a3085b))
+
 # [0.2.0](https://github-personal/HeoJeongBo/fluxion-render/compare/fluxion-worker-v0.1.10...fluxion-worker-v0.2.0) (2026-05-11)
 
 
