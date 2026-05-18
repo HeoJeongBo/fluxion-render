@@ -29,7 +29,10 @@ export type LayerKind =
   | "step"
   | "bar"
   | "candlestick"
-  | "heatmap";
+  | "heatmap"
+  | "event-marker"
+  | "scatter-colored"
+  | "heatmap-stream";
 
 export type DType = "f32" | "u8" | "i16" | "u16" | "i32";
 

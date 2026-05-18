@@ -24,7 +24,8 @@
       "Bash(pnpm --filter vite-demo typecheck)",
       "Bash(grep -E \"\\\\.\\(ts|tsx\\)$\")",
       "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:5177/)",
-      "Bash(pnpm --filter @heojeongbo/fluxion-render test --reporter=verbose)"
+      "Bash(pnpm --filter @heojeongbo/fluxion-render test --reporter=verbose)",
+      "Bash(pnpm --filter @heojeongbo/fluxion-render test --reporter=dot)"
     ]
   }
 }

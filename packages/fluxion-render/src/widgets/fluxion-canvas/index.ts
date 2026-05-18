@@ -3,10 +3,13 @@ export {
   axisGridLayer,
   barLayer,
   candlestickLayer,
+  eventMarkerLayer,
   heatmapLayer,
+  heatmapStreamLayer,
   lidarLayer,
   lineLayer,
   lineStaticLayer,
+  scatterColoredLayer,
   scatterLayer,
   stepLayer,
 } from "./lib/layer-specs";

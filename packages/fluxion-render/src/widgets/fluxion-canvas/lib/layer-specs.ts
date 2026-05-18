@@ -2,11 +2,14 @@ import type { AreaChartConfig } from "../../../entities/area-chart-layer";
 import type { AxisGridConfig } from "../../../entities/axis-grid-layer";
 import type { BarChartConfig } from "../../../entities/bar-chart-layer";
 import type { CandlestickConfig } from "../../../entities/candlestick-layer";
+import type { EventMarkerConfig } from "../../../entities/event-marker-layer";
 import type { HeatmapConfig } from "../../../entities/heatmap-layer";
+import type { HeatmapStreamConfig } from "../../../entities/heatmap-stream-layer";
 import type { LidarScatterConfig } from "../../../entities/lidar-scatter-layer";
 import type { LineChartConfig } from "../../../entities/line-chart-layer";
 import type { LineChartStaticConfig } from "../../../entities/line-chart-static-layer";
 import type { ScatterChartConfig } from "../../../entities/scatter-chart-layer";
+import type { ScatterColoredConfig } from "../../../entities/scatter-colored-layer";
 import type { StepChartConfig } from "../../../entities/step-chart-layer";
 import type { FluxionLayerSpec } from "./use-fluxion-canvas";
 
@@ -66,4 +69,16 @@ export function candlestickLayer(id: string, config?: CandlestickConfig): Fluxio
 
 export function heatmapLayer(id: string, config?: HeatmapConfig): FluxionLayerSpec {
   return { id, kind: "heatmap", config };
+}
+
+export function eventMarkerLayer(id: string, config?: EventMarkerConfig): FluxionLayerSpec {
+  return { id, kind: "event-marker", config };
+}
+
+export function scatterColoredLayer(id: string, config?: ScatterColoredConfig): FluxionLayerSpec {
+  return { id, kind: "scatter-colored", config };
+}
+
+export function heatmapStreamLayer(id: string, config?: HeatmapStreamConfig): FluxionLayerSpec {
+  return { id, kind: "heatmap-stream", config };
 }

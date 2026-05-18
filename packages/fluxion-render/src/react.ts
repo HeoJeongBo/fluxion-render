@@ -22,12 +22,15 @@ export {
   axisGridLayer,
   barLayer,
   candlestickLayer,
+  eventMarkerLayer,
   FluxionCanvas,
   FluxionLegend,
   heatmapLayer,
+  heatmapStreamLayer,
   lidarLayer,
   lineLayer,
   lineStaticLayer,
+  scatterColoredLayer,
   scatterLayer,
   stepLayer,
   useAxisTicks,
@@ -58,3 +61,28 @@ export {
   type UseFluxionTableOptions,
   type UseFluxionTableResult,
 } from "./widgets/fluxion-canvas";
+export {
+  FluxionGauge,
+  useFluxionGauge,
+  type FluxionGaugeProps,
+  type GaugeThreshold,
+  type UseFluxionGaugeOptions,
+  type UseFluxionGaugeResult,
+} from "./features/gauge";
+export {
+  useSyncedTimeWindow,
+  type UseSyncedTimeWindowResult,
+} from "./features/synced-time";
+export {
+  FluxionBrush,
+  useFluxionBrush,
+  type BrushSelection,
+  type FluxionBrushProps,
+  type UseFluxionBrushOptions,
+  type UseFluxionBrushResult,
+} from "./features/brush";
+export {
+  useFluxionExport,
+  type UseFluxionExportOptions,
+  type UseFluxionExportResult,
+} from "./features/export";

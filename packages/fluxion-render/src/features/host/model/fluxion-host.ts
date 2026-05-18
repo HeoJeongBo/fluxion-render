@@ -20,11 +20,14 @@ import {
   AreaLayerHandle,
   BarLayerHandle,
   CandlestickLayerHandle,
+  EventMarkerHandle,
   HeatmapLayerHandle,
+  HeatmapStreamHandle,
   LidarLayerHandle,
   type LidarStride,
   LineLayerHandle,
   LineStaticLayerHandle,
+  ScatterColoredHandle,
   ScatterLayerHandle,
   StepLayerHandle,
 } from "./layer-handles";
@@ -339,6 +342,18 @@ export class FluxionHost {
 
   heatmap(id: string): HeatmapLayerHandle {
     return new HeatmapLayerHandle(this, id);
+  }
+
+  eventMarker(id: string): EventMarkerHandle {
+    return new EventMarkerHandle(this, id);
+  }
+
+  scatterColored(id: string): ScatterColoredHandle {
+    return new ScatterColoredHandle(this, id);
+  }
+
+  heatmapStream(id: string): HeatmapStreamHandle {
+    return new HeatmapStreamHandle(this, id);
   }
 
   /**

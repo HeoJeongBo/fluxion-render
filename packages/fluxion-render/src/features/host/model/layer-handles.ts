@@ -389,3 +389,129 @@ export class HeatmapLayerHandle {
     this.sink.pushData(this.id, data);
   }
 }
+
+// ────────────────────────────────────────────────────────────────────────────
+// EventMarker — data layout: [t, severity, t, severity, ...] stride=2
+// severity: 0=info, 1=warning, 2=error
+// ────────────────────────────────────────────────────────────────────────────
+
+export type EventSeverity = 0 | 1 | 2;
+
+export interface MarkerEvent {
+  /** Host-relative timestamp in ms. */
+  t: number;
+  /** 0=info, 1=warning, 2=error. Default 0. */
+  severity?: EventSeverity;
+}
+
+/**
+ * Handle for `kind: "event-marker"` layers. Each `setEvents` call replaces
+ * the full marker list (suitable for static annotation overlays).
+ * Call `setEvents([])` to clear all markers.
+ */
+export class EventMarkerHandle {
+  constructor(
+    private readonly sink: FluxionDataSink,
+    readonly id: string,
+  ) {}
+
+  setEvents(events: readonly MarkerEvent[]): void {
+    const n = events.length;
+    const buf = new Float32Array(n * 2);
+    for (let i = 0; i < n; i++) {
+      buf[i * 2] = events[i]!.t;
+      buf[i * 2 + 1] = events[i]!.severity ?? 0;
+    }
+    this.sink.pushData(this.id, buf);
+  }
+
+  clearEvents(): void {
+    this.sink.pushData(this.id, new Float32Array(0));
+  }
+
+  pushRaw(data: Float32Array): void {
+    this.sink.pushData(this.id, data);
+  }
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// ScatterColored — data layout: [t, y, colorValue, size, ...] stride=4
+// colorValue: 0–1 normalised → LUT color
+// size: 0–1 normalised → minSize–maxSize pixels
+// ────────────────────────────────────────────────────────────────────────────
+
+export interface ScatterColoredSample {
+  /** Host-relative timestamp in ms. */
+  t: number;
+  y: number;
+  /** 0–1 normalised value mapped to colormap. Default 0.5. */
+  colorValue?: number;
+  /** 0–1 normalised size. Default 0.5. */
+  size?: number;
+}
+
+export class ScatterColoredHandle {
+  constructor(
+    private readonly sink: FluxionDataSink,
+    readonly id: string,
+  ) {}
+
+  push(sample: ScatterColoredSample): void {
+    const buf = new Float32Array(4);
+    buf[0] = sample.t;
+    buf[1] = sample.y;
+    buf[2] = sample.colorValue ?? 0.5;
+    buf[3] = sample.size ?? 0.5;
+    this.sink.pushData(this.id, buf);
+  }
+
+  pushBatch(samples: readonly ScatterColoredSample[]): void {
+    const n = samples.length;
+    if (n === 0) return;
+    const buf = new Float32Array(n * 4);
+    for (let i = 0; i < n; i++) {
+      const s = samples[i]!;
+      buf[i * 4] = s.t;
+      buf[i * 4 + 1] = s.y;
+      buf[i * 4 + 2] = s.colorValue ?? 0.5;
+      buf[i * 4 + 3] = s.size ?? 0.5;
+    }
+    this.sink.pushData(this.id, buf);
+  }
+
+  pushRaw(data: Float32Array): void {
+    this.sink.pushData(this.id, data);
+  }
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// HeatmapStream — data layout: [t, v0, v1, ..., v_{yBins-1}]
+// One call per column update.
+// ────────────────────────────────────────────────────────────────────────────
+
+export class HeatmapStreamHandle {
+  constructor(
+    private readonly sink: FluxionDataSink,
+    readonly id: string,
+  ) {}
+
+  /**
+   * Push a single column. `t` is the column timestamp; `values` must have
+   * exactly `yBins` elements matching the layer's `yBins` config.
+   */
+  pushColumn(t: number, values: Float32Array | readonly number[]): void {
+    const n = values.length;
+    const buf = new Float32Array(n + 1);
+    buf[0] = t;
+    if (values instanceof Float32Array) {
+      buf.set(values, 1);
+    } else {
+      for (let i = 0; i < n; i++) buf[i + 1] = values[i]!;
+    }
+    this.sink.pushData(this.id, buf);
+  }
+
+  pushRaw(data: Float32Array): void {
+    this.sink.pushData(this.id, data);
+  }
+}

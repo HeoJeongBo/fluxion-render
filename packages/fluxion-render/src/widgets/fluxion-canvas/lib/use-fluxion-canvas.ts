@@ -3,11 +3,14 @@ import type { AreaChartConfig } from "../../../entities/area-chart-layer";
 import type { AxisGridConfig } from "../../../entities/axis-grid-layer";
 import type { BarChartConfig } from "../../../entities/bar-chart-layer";
 import type { CandlestickConfig } from "../../../entities/candlestick-layer";
+import type { EventMarkerConfig } from "../../../entities/event-marker-layer";
 import type { HeatmapConfig } from "../../../entities/heatmap-layer";
+import type { HeatmapStreamConfig } from "../../../entities/heatmap-stream-layer";
 import type { LidarScatterConfig } from "../../../entities/lidar-scatter-layer";
 import type { LineChartConfig } from "../../../entities/line-chart-layer";
 import type { LineChartStaticConfig } from "../../../entities/line-chart-static-layer";
 import type { ScatterChartConfig } from "../../../entities/scatter-chart-layer";
+import type { ScatterColoredConfig } from "../../../entities/scatter-colored-layer";
 import type { StepChartConfig } from "../../../entities/step-chart-layer";
 import { FluxionHost, type FluxionHostOptions } from "../../../features/host";
 import { type ResizeInfo, useResizeObserver } from "./use-resize-observer";
@@ -30,7 +33,10 @@ export type FluxionLayerSpec =
   | { id: string; kind: "step"; config?: StepChartConfig }
   | { id: string; kind: "bar"; config?: BarChartConfig }
   | { id: string; kind: "candlestick"; config?: CandlestickConfig }
-  | { id: string; kind: "heatmap"; config?: HeatmapConfig };
+  | { id: string; kind: "heatmap"; config?: HeatmapConfig }
+  | { id: string; kind: "event-marker"; config?: EventMarkerConfig }
+  | { id: string; kind: "scatter-colored"; config?: ScatterColoredConfig }
+  | { id: string; kind: "heatmap-stream"; config?: HeatmapStreamConfig };
 
 export interface UseFluxionCanvasOptions {
   layers: FluxionLayerSpec[];

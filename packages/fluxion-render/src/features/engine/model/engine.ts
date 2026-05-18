@@ -2,12 +2,15 @@ import { AreaChartLayer } from "../../../entities/area-chart-layer";
 import { AxisGridLayer } from "../../../entities/axis-grid-layer";
 import { BarChartLayer } from "../../../entities/bar-chart-layer";
 import { CandlestickLayer } from "../../../entities/candlestick-layer";
+import { EventMarkerLayer } from "../../../entities/event-marker-layer";
 import { HeatmapLayer } from "../../../entities/heatmap-layer";
+import { HeatmapStreamLayer } from "../../../entities/heatmap-stream-layer";
 import { LayerStack } from "../../../entities/layer-stack";
 import { LidarScatterLayer } from "../../../entities/lidar-scatter-layer";
 import { LineChartLayer } from "../../../entities/line-chart-layer";
 import { LineChartStaticLayer } from "../../../entities/line-chart-static-layer";
 import { ScatterChartLayer } from "../../../entities/scatter-chart-layer";
+import { ScatterColoredLayer } from "../../../entities/scatter-colored-layer";
 import { StepChartLayer } from "../../../entities/step-chart-layer";
 import type { Layer } from "../../../shared/model/layer";
 import { Scheduler } from "../../../shared/model/scheduler";
@@ -37,6 +40,12 @@ function createLayer(id: string, kind: LayerKind): Layer {
       return new CandlestickLayer(id);
     case "heatmap":
       return new HeatmapLayer(id);
+    case "event-marker":
+      return new EventMarkerLayer(id);
+    case "scatter-colored":
+      return new ScatterColoredLayer(id);
+    case "heatmap-stream":
+      return new HeatmapStreamLayer(id);
   }
 }
 

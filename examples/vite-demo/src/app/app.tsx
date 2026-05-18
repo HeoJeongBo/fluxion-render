@@ -1,22 +1,27 @@
 import { useState } from "react";
 import { AllDemoPage } from "../pages/all-demo";
 import { AreaDemoPage } from "../pages/area-demo";
+import { BrushDemoPage } from "../pages/brush-demo";
 import { CrosshairDemoPage } from "../pages/crosshair-demo";
 import { BarDemoPage } from "../pages/bar-demo";
 import { CandlestickDemoPage } from "../pages/candlestick-demo";
+import { EventMarkerDemoPage } from "../pages/event-marker-demo";
 import { ExternalAxesDemoPage } from "../pages/external-axes-demo";
 import { FluxionWorkerDemoPage } from "../pages/fluxion-worker-demo";
+import { GaugeDemoPage } from "../pages/gauge-demo";
 import { HeatmapDemoPage } from "../pages/heatmap-demo";
 import { HistoricalDemoPage } from "../pages/historical-demo";
 import { LidarDemoPage } from "../pages/lidar-demo";
 import { LineDemoPage } from "../pages/line-demo";
 import { PoolDemoPage } from "../pages/pool-demo";
+import { RobotDashboardPage } from "../pages/robot-dashboard";
+import { ScatterColoredDemoPage } from "../pages/scatter-colored-demo";
 import { ScatterDemoPage } from "../pages/scatter-demo";
 import { StaticXyDemoPage } from "../pages/static-xy-demo";
 import { StepDemoPage } from "../pages/step-demo";
 import { StreamDemoPage } from "../pages/stream-demo";
 import { TableDemoPage } from "../pages/table-demo";
-import { TabBar, type TabBarItem } from "../widgets/tab-bar";
+import { SideBar, type SideBarGroup } from "../widgets/tab-bar";
 
 type Tab =
   | "all"
@@ -35,42 +40,63 @@ type Tab =
   | "pool"
   | "fluxion-worker"
   | "external-axes"
-  | "table";
+  | "table"
+  | "event-marker"
+  | "scatter-colored"
+  | "gauge"
+  | "brush"
+  | "robot-dashboard";
 
-const tabs: readonly TabBarItem<Tab>[] = [
-  { id: "all", label: "All" },
-  { id: "line", label: "Stream" },
-  { id: "stream", label: "Multi-stream" },
-  { id: "crosshair", label: "Crosshair" },
-  { id: "static", label: "Static xy" },
-  { id: "scatter", label: "Scatter" },
-  { id: "area", label: "Area" },
-  { id: "step", label: "Step" },
-  { id: "bar", label: "Bar" },
-  { id: "candlestick", label: "Candlestick" },
-  { id: "heatmap", label: "Heatmap" },
-  { id: "historical", label: "Historical" },
-  { id: "lidar", label: "LiDAR 30k" },
-  { id: "pool", label: "Pool (40 charts)" },
-  { id: "fluxion-worker", label: "fluxion-worker" },
-  { id: "external-axes", label: "External axes" },
-  { id: "table", label: "Table" },
+const groups: readonly SideBarGroup<Tab>[] = [
+  {
+    label: "Robot",
+    items: [{ id: "robot-dashboard", label: "Dashboard" }],
+  },
+  {
+    label: "Basic Charts",
+    items: [
+      { id: "all", label: "All" },
+      { id: "line", label: "Stream" },
+      { id: "stream", label: "Multi-stream" },
+      { id: "crosshair", label: "Crosshair" },
+      { id: "static", label: "Static XY" },
+      { id: "scatter", label: "Scatter" },
+      { id: "area", label: "Area" },
+      { id: "step", label: "Step" },
+      { id: "bar", label: "Bar" },
+      { id: "candlestick", label: "Candlestick" },
+      { id: "heatmap", label: "Heatmap" },
+      { id: "table", label: "Table" },
+    ],
+  },
+  {
+    label: "Robot Specific",
+    items: [
+      { id: "event-marker", label: "Event Markers" },
+      { id: "scatter-colored", label: "Scatter Colored" },
+      { id: "gauge", label: "Gauge" },
+      { id: "brush", label: "Brush + Export" },
+    ],
+  },
+  {
+    label: "Infrastructure",
+    items: [
+      { id: "historical", label: "Historical" },
+      { id: "lidar", label: "LiDAR 30k" },
+      { id: "pool", label: "Pool (40 charts)" },
+      { id: "fluxion-worker", label: "fluxion-worker" },
+      { id: "external-axes", label: "External axes" },
+    ],
+  },
 ];
 
 export function App() {
-  const [tab, setTab] = useState<Tab>("all");
+  const [tab, setTab] = useState<Tab>("robot-dashboard");
 
   return (
-    <div
-      style={{
-        display: "flex",
-        flexDirection: "column",
-        height: "100%",
-        width: "100%",
-      }}
-    >
-      <TabBar items={tabs} active={tab} onSelect={setTab} />
-      <main style={{ flex: 1, minHeight: 0 }}>
+    <div style={{ display: "flex", flexDirection: "row", height: "100%", width: "100%" }}>
+      <SideBar groups={groups} active={tab} onSelect={setTab} />
+      <main style={{ flex: 1, minHeight: 0, overflow: "hidden" }}>
         {tab === "all" && <AllDemoPage />}
         {tab === "line" && <LineDemoPage />}
         {tab === "stream" && <StreamDemoPage />}
@@ -88,6 +114,11 @@ export function App() {
         {tab === "fluxion-worker" && <FluxionWorkerDemoPage />}
         {tab === "external-axes" && <ExternalAxesDemoPage />}
         {tab === "table" && <TableDemoPage />}
+        {tab === "event-marker" && <EventMarkerDemoPage />}
+        {tab === "scatter-colored" && <ScatterColoredDemoPage />}
+        {tab === "gauge" && <GaugeDemoPage />}
+        {tab === "brush" && <BrushDemoPage />}
+        {tab === "robot-dashboard" && <RobotDashboardPage />}
       </main>
     </div>
   );
