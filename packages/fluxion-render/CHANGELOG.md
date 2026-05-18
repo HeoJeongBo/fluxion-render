@@ -1,5 +1,12 @@
 # Changelog
 
+# [0.8.0](https://github-personal/HeoJeongBo/fluxion-render/compare/fluxion-render-v0.7.3...fluxion-render-v0.8.0) (2026-05-18)
+
+
+### Features
+
+* **render,examples:** add robot visualization layers and demo dashboard ([438aca2](https://github-personal/HeoJeongBo/fluxion-render/commit/438aca2a3432276f1d0ba5dbd73b88faa2a7fd30))
+
 ## [0.7.3](https://github-personal/HeoJeongBo/fluxion-render/compare/fluxion-render-v0.7.2...fluxion-render-v0.7.3) (2026-05-18)
 
 
