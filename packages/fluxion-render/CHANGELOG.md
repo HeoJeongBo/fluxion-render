@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.7.3](https://github-personal/HeoJeongBo/fluxion-render/compare/fluxion-render-v0.7.2...fluxion-render-v0.7.3) (2026-05-18)
+
+
+### Features
+
+* **render,examples:** add crosshair + tooltip hover interaction ([eb2e4db](https://github-personal/HeoJeongBo/fluxion-render/commit/eb2e4dba1df2a8f45add0f2bd759a258e2d747a3))
+* **worker,examples:** add /react subpath with hooks and React Hooks demo tab ([ff9f04a](https://github-personal/HeoJeongBo/fluxion-render/commit/ff9f04a14bde8eb5b0c8735378d1ecb491a3085b))
+
 ## [0.7.2](https://github-personal/HeoJeongBo/fluxion-render/compare/fluxion-render-v0.7.1...fluxion-render-v0.7.2) (2026-05-13)
 
 
