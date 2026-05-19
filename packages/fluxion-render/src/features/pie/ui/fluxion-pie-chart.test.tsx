@@ -1,5 +1,6 @@
-import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { act, render, screen } from "@testing-library/react";
+import { useState } from "react";
+import { describe, expect, it, vi } from "vitest";
 import {
   _polarToXY,
   _toRad,
@@ -7,6 +8,10 @@ import {
   FluxionPieChart,
   type PieSlice,
 } from "./fluxion-pie-chart";
+
+// All render tests that check final DOM state use animationDuration={0} so
+// slices are at their final positions immediately (rAF is not driven in the
+// happy-dom test environment).
 
 // ── _toRad ────────────────────────────────────────────────────────────────────
 
@@ -100,17 +105,17 @@ const SINGLE: PieSlice[] = [{ name: "Alpha", value: 100 }];
 
 describe("FluxionPieChart label variants", () => {
   it('label="name" renders slice name', () => {
-    render(<FluxionPieChart data={SINGLE} label="name" tooltip={false} />);
+    render(<FluxionPieChart data={SINGLE} label="name" tooltip={false} animationDuration={0} />);
     expect(screen.queryByText("Alpha")).toBeTruthy();
   });
 
   it('label="percent" renders 100.0%', () => {
-    render(<FluxionPieChart data={SINGLE} label="percent" tooltip={false} />);
+    render(<FluxionPieChart data={SINGLE} label="percent" tooltip={false} animationDuration={0} />);
     expect(screen.queryByText("100.0%")).toBeTruthy();
   });
 
   it('label="value" renders raw value', () => {
-    render(<FluxionPieChart data={SINGLE} label="value" tooltip={false} />);
+    render(<FluxionPieChart data={SINGLE} label="value" tooltip={false} animationDuration={0} />);
     expect(screen.queryByText("100")).toBeTruthy();
   });
 
@@ -120,6 +125,7 @@ describe("FluxionPieChart label variants", () => {
         data={SINGLE}
         label={(s) => `${s.name}!`}
         tooltip={false}
+        animationDuration={0}
       />,
     );
     expect(screen.queryByText("Alpha!")).toBeTruthy();
@@ -135,13 +141,13 @@ describe("FluxionPieChart legend", () => {
   ];
 
   it("renders legend items when legend=true", () => {
-    render(<FluxionPieChart data={DATA} legend tooltip={false} />);
+    render(<FluxionPieChart data={DATA} legend tooltip={false} animationDuration={0} />);
     expect(screen.queryByText("CPU")).toBeTruthy();
     expect(screen.queryByText("RAM")).toBeTruthy();
   });
 
   it("does not render legend when legend=false", () => {
-    const { container } = render(<FluxionPieChart data={DATA} legend={false} tooltip={false} />);
+    const { container } = render(<FluxionPieChart data={DATA} legend={false} tooltip={false} animationDuration={0} />);
     const htmlText = Array.from(container.querySelectorAll("*"))
       .filter((el) => el.children.length === 0)
       .map((el) => el.textContent ?? "");
@@ -161,9 +167,9 @@ describe("FluxionPieChart donut center", () => {
         centerValue="42"
         centerLabel="Total"
         tooltip={false}
+        animationDuration={0}
       />,
     );
-    expect(container.querySelector("text")?.textContent).toBeTruthy();
     const texts = Array.from(container.querySelectorAll("text")).map((t) => t.textContent);
     expect(texts).toContain("42");
     expect(texts).toContain("Total");
@@ -177,6 +183,7 @@ describe("FluxionPieChart donut center", () => {
         centerValue="42"
         centerLabel="Total"
         tooltip={false}
+        animationDuration={0}
       />,
     );
     const texts = Array.from(container.querySelectorAll("text")).map((t) => t.textContent);
@@ -195,9 +202,88 @@ describe("FluxionPieChart slice rendering", () => {
       { name: "C", value: 0 }, // filtered out
     ];
     const { container } = render(
-      <FluxionPieChart data={data} tooltip={false} />,
+      <FluxionPieChart data={data} tooltip={false} animationDuration={0} />,
     );
     const paths = container.querySelectorAll("path");
     expect(paths.length).toBe(2);
+  });
+});
+
+// ── Animation ─────────────────────────────────────────────────────────────────
+
+describe("FluxionPieChart animation", () => {
+  it("animationDuration=0 renders slices at final position immediately", () => {
+    // With duration=0 paths must be present on first render — no rAF needed.
+    const { container } = render(
+      <FluxionPieChart data={SINGLE} tooltip={false} animationDuration={0} />,
+    );
+    expect(container.querySelectorAll("path").length).toBe(1);
+    const d = container.querySelector("path")!.getAttribute("d")!;
+    // Solid pie must start from center.
+    expect(d).toMatch(/M/);
+    expect(d.length).toBeGreaterThan(10);
+  });
+
+  it("update does not re-trigger enter animation (paths stay present)", () => {
+    // This test guards against the bug where every data change collapses slices
+    // back to startAngle and replays the enter animation.
+    //
+    // With animationDuration=0 the update effect runs synchronously inside
+    // act(), so we can assert the path is still rendered after the re-render.
+
+    const DATA_A: PieSlice[] = [
+      { name: "A", value: 60 },
+      { name: "B", value: 40 },
+    ];
+    const DATA_B: PieSlice[] = [
+      { name: "A", value: 30 },
+      { name: "B", value: 70 },
+    ];
+
+    function Wrapper() {
+      const [data, setData] = useState(DATA_A);
+      return (
+        <>
+          <button onClick={() => setData(DATA_B)}>update</button>
+          <FluxionPieChart data={data} tooltip={false} animationDuration={0} />
+        </>
+      );
+    }
+
+    const { container, getByText } = render(<Wrapper />);
+
+    // Initial render: 2 paths present.
+    expect(container.querySelectorAll("path").length).toBe(2);
+
+    // Capture path `d` before update.
+    const dBefore = container.querySelector("path")!.getAttribute("d")!;
+
+    // Trigger data update.
+    act(() => {
+      getByText("update").click();
+    });
+
+    // After update: still 2 paths (not collapsed to empty strings).
+    expect(container.querySelectorAll("path").length).toBe(2);
+
+    // Path changed because data changed — not reset to collapsed.
+    const dAfter = container.querySelector("path")!.getAttribute("d")!;
+    expect(dAfter).not.toBe(dBefore);
+    // Both before and after must be non-trivial paths (not collapsed).
+    expect(dBefore.length).toBeGreaterThan(10);
+    expect(dAfter.length).toBeGreaterThan(10);
+  });
+
+  it("enter animation starts collapsed (paths empty) before rAF fires", () => {
+    // With duration > 0 the enter effect schedules rAF but hasn't fired yet,
+    // so animRef is still collapsed → paths not rendered on first paint.
+    // This is the expected enter-animation behaviour.
+    vi.useFakeTimers();
+    const { container } = render(
+      <FluxionPieChart data={SINGLE} tooltip={false} animationDuration={600} />,
+    );
+    // rAF not yet fired: slice is collapsed, path absent.
+    expect(container.querySelectorAll("path").length).toBe(0);
+    vi.useRealTimers();
   });
 });

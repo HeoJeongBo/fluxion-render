@@ -1,5 +1,5 @@
 import type { CSSProperties, MouseEvent } from "react";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 export interface PieSlice {
   /** Display name for this slice. */
@@ -70,6 +70,11 @@ export interface FluxionPieChartProps {
   legend?: boolean;
   /** Legend placement. Default "bottom". */
   legendPosition?: "bottom" | "right";
+  /**
+   * Animation duration in ms for enter and update transitions. Default 600.
+   * Set to 0 to disable animation.
+   */
+  animationDuration?: number;
   style?: CSSProperties;
   className?: string;
   classNames?: FluxionPieChartClassNames;
@@ -173,6 +178,116 @@ export function describeSlice(
     `A ${innerR} ${innerR} 0 ${large} ${sweep === 0 ? 1 : 0} ${i2.x} ${i2.y}`,
     "Z",
   ].join(" ");
+}
+
+// ── Easing ───────────────────────────────────────────────────────────────────
+
+function easeOutCubic(t: number): number {
+  return 1 - Math.pow(1 - t, 3);
+}
+
+// ── Animation hook ────────────────────────────────────────────────────────────
+//
+// Handles both enter (mount) and update (data change) transitions.
+// Returns interpolated angle ranges that components use directly for rendering.
+
+interface AngleRange {
+  sliceStart: number;
+  sliceEnd: number;
+}
+
+function usePieAnimation(
+  targets: AngleRange[],
+  startAngle: number,
+  duration: number,
+): AngleRange[] {
+  // Start collapsed (all slices at startAngle) so enter animation can play.
+  const animRef = useRef<AngleRange[]>(
+    targets.map(() => ({ sliceStart: startAngle, sliceEnd: startAngle })),
+  );
+  const [, forceRender] = useState(0);
+  const fromRef = useRef<AngleRange[]>(animRef.current);
+  const rafRef = useRef<number | null>(null);
+  const startTimeRef = useRef<number | null>(null);
+  // Tracks the last target key that was handed to a running/completed animation.
+  const prevKeyRef = useRef<string>("");
+
+  const targetKey = targets
+    .map((r) => `${r.sliceStart.toFixed(3)},${r.sliceEnd.toFixed(3)}`)
+    .join("|");
+
+  function runAnimation(from: AngleRange[], to: AngleRange[]) {
+    fromRef.current = from;
+    startTimeRef.current = null;
+    if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
+
+    function tick(now: number) {
+      if (startTimeRef.current === null) startTimeRef.current = now;
+      const elapsed = now - startTimeRef.current;
+      const t = easeOutCubic(Math.min(elapsed / duration, 1));
+
+      animRef.current = to.map((target, i) => {
+        const f = from[i] ?? { sliceStart: target.sliceStart, sliceEnd: target.sliceStart };
+        return {
+          sliceStart: f.sliceStart + (target.sliceStart - f.sliceStart) * t,
+          sliceEnd: f.sliceEnd + (target.sliceEnd - f.sliceEnd) * t,
+        };
+      });
+
+      forceRender((n) => n + 1);
+
+      if (elapsed < duration) {
+        rafRef.current = requestAnimationFrame(tick);
+      } else {
+        animRef.current = to;
+        rafRef.current = null;
+      }
+    }
+
+    rafRef.current = requestAnimationFrame(tick);
+  }
+
+  // ── Enter animation (mount only) ────────────────────────────────────────
+  // Runs once on mount. StrictMode fires cleanup+remount in dev, which means
+  // the enter animation replays on the remount — acceptable: prod is unaffected.
+  useEffect(() => {
+    if (duration <= 0) {
+      animRef.current = targets;
+      prevKeyRef.current = targetKey;
+      forceRender((n) => n + 1);
+      return;
+    }
+    const collapsed = targets.map(() => ({ sliceStart: startAngle, sliceEnd: startAngle }));
+    animRef.current = collapsed;
+    prevKeyRef.current = targetKey;
+    runAnimation(collapsed, targets);
+    return () => {
+      if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
+    };
+    // Intentionally empty deps: this effect must run on mount only.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // ── Update animation (data change) ─────────────────────────────────────
+  useEffect(() => {
+    // Skip on first run (enter effect handles it) and when nothing changed.
+    if (prevKeyRef.current === "" || targetKey === prevKeyRef.current) return;
+    prevKeyRef.current = targetKey;
+
+    if (duration <= 0) {
+      animRef.current = targets;
+      forceRender((n) => n + 1);
+      return;
+    }
+
+    runAnimation(animRef.current.map((r) => ({ ...r })), targets);
+    return () => {
+      if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [targetKey]);
+
+  return animRef.current;
 }
 
 // ── Label text helper ────────────────────────────────────────────────────────
@@ -326,6 +441,7 @@ export function FluxionPieChart({
   tooltip = true,
   legend = false,
   legendPosition = "bottom",
+  animationDuration = 600,
   style,
   className,
   classNames = {},
@@ -347,9 +463,9 @@ export function FluxionPieChart({
     return { slice, idx, fraction };
   });
 
-  // Build angle ranges
+  // Build target angle ranges (final positions)
   let cursor = startAngle;
-  const angleRanges = slices.map(({ slice, idx, fraction }) => {
+  const targetRanges = slices.map(({ slice, idx, fraction }) => {
     const sweep = fraction * usableSweep;
     const pad = paddingAngle * (totalSweep < 0 ? -1 : 1);
     const sliceStart = cursor;
@@ -357,6 +473,13 @@ export function FluxionPieChart({
     cursor = sliceEnd + pad;
     return { slice, idx, fraction, sliceStart, sliceEnd };
   });
+
+  // Animated angle ranges (interpolated between previous and target)
+  const animatedRanges = usePieAnimation(
+    targetRanges.map(({ sliceStart, sliceEnd }) => ({ sliceStart, sliceEnd })),
+    startAngle,
+    animationDuration,
+  );
 
   const showLabel = !!label;
   const showLabelLine = labelLine ?? showLabel;
@@ -385,13 +508,14 @@ export function FluxionPieChart({
           style={{ display: "block", overflow: "visible" }}
         >
           {/* Slices */}
-          {angleRanges.map(({ slice, idx, fraction, sliceStart, sliceEnd }) => {
+          {targetRanges.map(({ slice, idx, fraction }, i) => {
+            const animated = animatedRanges[i] ?? { sliceStart: startAngle, sliceEnd: startAngle };
             const fill = slice.fill ?? colors[idx % colors.length] ?? colors[0];
             const isHovered = hovered?.idx === idx;
-            const d = describeSlice(svgCx, svgCy, innerRadius, outerRadius, sliceStart, sliceEnd, cornerRadius);
+            const d = describeSlice(svgCx, svgCy, innerRadius, outerRadius, animated.sliceStart, animated.sliceEnd, cornerRadius);
             if (!d) return null;
 
-            const midAngle = (sliceStart + sliceEnd) / 2;
+            const midAngle = (animated.sliceStart + animated.sliceEnd) / 2;
             const percent = fraction * 100;
             const labelText = resolveLabel(label, slice, percent);
 

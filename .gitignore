@@ -33,6 +33,9 @@ lerna-debug.log*
 *.swp
 *.swo
 
+# Claude Code — local settings only; skills/ is intentionally tracked
+.claude/settings.json
+
 # OS
 .DS_Store
 Thumbs.db
