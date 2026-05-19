@@ -6,6 +6,8 @@ import type { CandlestickConfig } from "../../../entities/candlestick-layer";
 import type { EventMarkerConfig } from "../../../entities/event-marker-layer";
 import type { HeatmapConfig } from "../../../entities/heatmap-layer";
 import type { HeatmapStreamConfig } from "../../../entities/heatmap-stream-layer";
+import type { PoseArrowConfig } from "../../../entities/pose-arrow-layer";
+import type { ReferenceLineConfig } from "../../../entities/reference-line-layer";
 import type { LidarScatterConfig } from "../../../entities/lidar-scatter-layer";
 import type { LineChartConfig } from "../../../entities/line-chart-layer";
 import type { LineChartStaticConfig } from "../../../entities/line-chart-static-layer";
@@ -36,7 +38,9 @@ export type FluxionLayerSpec =
   | { id: string; kind: "heatmap"; config?: HeatmapConfig }
   | { id: string; kind: "event-marker"; config?: EventMarkerConfig }
   | { id: string; kind: "scatter-colored"; config?: ScatterColoredConfig }
-  | { id: string; kind: "heatmap-stream"; config?: HeatmapStreamConfig };
+  | { id: string; kind: "heatmap-stream"; config?: HeatmapStreamConfig }
+  | { id: string; kind: "reference-line"; config?: ReferenceLineConfig }
+  | { id: string; kind: "pose-arrow"; config?: PoseArrowConfig };
 
 export interface UseFluxionCanvasOptions {
   layers: FluxionLayerSpec[];

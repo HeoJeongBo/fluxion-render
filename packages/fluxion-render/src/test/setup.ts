@@ -17,15 +17,22 @@ export interface FakeCtx {
   lineWidth: number;
   font: string;
   textBaseline: string;
+  textAlign: string;
+  globalAlpha: number;
   setTransform(...args: unknown[]): void;
   fillRect(...args: unknown[]): void;
   rect(...args: unknown[]): void;
   beginPath(): void;
+  closePath(): void;
   moveTo(...args: unknown[]): void;
   lineTo(...args: unknown[]): void;
   stroke(): void;
   fill(): void;
   fillText(...args: unknown[]): void;
+  setLineDash(segments: number[]): void;
+  save(): void;
+  restore(): void;
+  arc(...args: unknown[]): void;
 }
 
 export function createFakeCtx(): FakeCtx {
@@ -42,15 +49,22 @@ export function createFakeCtx(): FakeCtx {
     lineWidth: 0,
     font: "",
     textBaseline: "",
+    textAlign: "",
+    globalAlpha: 1,
     setTransform: rec("setTransform"),
     fillRect: rec("fillRect"),
     rect: rec("rect"),
     beginPath: rec("beginPath") as () => void,
+    closePath: rec("closePath") as () => void,
     moveTo: rec("moveTo"),
     lineTo: rec("lineTo"),
     stroke: rec("stroke") as () => void,
     fill: rec("fill") as () => void,
     fillText: rec("fillText"),
+    setLineDash: rec("setLineDash") as (segments: number[]) => void,
+    save: rec("save") as () => void,
+    restore: rec("restore") as () => void,
+    arc: rec("arc"),
   };
 }
 

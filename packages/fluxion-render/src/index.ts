@@ -14,6 +14,8 @@ export type { LineChartStaticConfig } from "./entities/line-chart-static-layer";
 export type { ScatterChartConfig } from "./entities/scatter-chart-layer";
 export type { ScatterColoredConfig } from "./entities/scatter-colored-layer";
 export type { StepChartConfig } from "./entities/step-chart-layer";
+export type { ReferenceLineConfig } from "./entities/reference-line-layer";
+export type { PoseArrowConfig } from "./entities/pose-arrow-layer";
 export type {
   CandlestickSample,
   EventSeverity,
@@ -29,6 +31,7 @@ export type {
   ScatterColoredSample,
   ScatterSample,
   XyPoint,
+  PoseArrowSample,
 } from "./features/host";
 export {
   AreaLayerHandle,
@@ -47,6 +50,8 @@ export {
   ScatterColoredHandle,
   ScatterLayerHandle,
   StepLayerHandle,
+  PoseArrowHandle,
+  ReferenceLineHandle,
 } from "./features/host";
 export type {
   AxisTick,
@@ -68,6 +73,8 @@ export {
   lidarLayer,
   lineLayer,
   lineStaticLayer,
+  poseArrowLayer,
+  referenceLineLayer,
   scatterColoredLayer,
   scatterLayer,
   stepLayer,

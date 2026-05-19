@@ -30,4 +30,7 @@ export {
   type ScatterSample,
   StepLayerHandle,
   type XyPoint,
+  PoseArrowHandle,
+  type PoseArrowSample,
+  ReferenceLineHandle,
 } from "./model/layer-handles";

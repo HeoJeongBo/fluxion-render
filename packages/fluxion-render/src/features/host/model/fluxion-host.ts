@@ -27,6 +27,8 @@ import {
   type LidarStride,
   LineLayerHandle,
   LineStaticLayerHandle,
+  PoseArrowHandle,
+  ReferenceLineHandle,
   ScatterColoredHandle,
   ScatterLayerHandle,
   StepLayerHandle,
@@ -354,6 +356,14 @@ export class FluxionHost {
 
   heatmapStream(id: string): HeatmapStreamHandle {
     return new HeatmapStreamHandle(this, id);
+  }
+
+  referenceLine(id: string): ReferenceLineHandle {
+    return new ReferenceLineHandle(this, id);
+  }
+
+  poseArrow(id: string): PoseArrowHandle {
+    return new PoseArrowHandle(this, id);
   }
 
   /**

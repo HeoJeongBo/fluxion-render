@@ -32,7 +32,9 @@ export type LayerKind =
   | "heatmap"
   | "event-marker"
   | "scatter-colored"
-  | "heatmap-stream";
+  | "heatmap-stream"
+  | "reference-line"
+  | "pose-arrow";
 
 export type DType = "f32" | "u8" | "i16" | "u16" | "i32";
 

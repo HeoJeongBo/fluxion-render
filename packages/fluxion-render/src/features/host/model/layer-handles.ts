@@ -1,3 +1,5 @@
+import type { ReferenceLineConfig } from "../../../entities/reference-line-layer";
+
 /**
  * Type-safe layer handles.
  *
@@ -15,6 +17,7 @@
 // so this module has no circular import with fluxion-host.ts.
 export interface FluxionDataSink {
   pushData(id: string, data: Float32Array): void;
+  configLayer(id: string, config: unknown): void;
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -507,6 +510,71 @@ export class HeatmapStreamHandle {
       buf.set(values, 1);
     } else {
       for (let i = 0; i < n; i++) buf[i + 1] = values[i]!;
+    }
+    this.sink.pushData(this.id, buf);
+  }
+
+  pushRaw(data: Float32Array): void {
+    this.sink.pushData(this.id, data);
+  }
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// ReferenceLine — config-only, no data streaming
+// ────────────────────────────────────────────────────────────────────────────
+
+
+/**
+ * Handle for `kind: "reference-line"` layers.
+ * Use `setReference` to move the line and band at runtime.
+ */
+export class ReferenceLineHandle {
+  constructor(
+    private readonly sink: FluxionDataSink,
+    readonly id: string,
+  ) {}
+
+  setReference(config: ReferenceLineConfig): void {
+    this.sink.configLayer(this.id, config);
+  }
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// PoseArrow — data layout: [t, y, theta, ...] stride=3
+// ────────────────────────────────────────────────────────────────────────────
+
+export interface PoseArrowSample {
+  /** Host-relative timestamp in ms. */
+  t: number;
+  /** Y position value (mapped to y-axis). */
+  y: number;
+  /** Heading angle in radians (0 = right, π/2 = up). */
+  theta: number;
+}
+
+export class PoseArrowHandle {
+  constructor(
+    private readonly sink: FluxionDataSink,
+    readonly id: string,
+  ) {}
+
+  push(sample: PoseArrowSample): void {
+    const buf = new Float32Array(3);
+    buf[0] = sample.t;
+    buf[1] = sample.y;
+    buf[2] = sample.theta;
+    this.sink.pushData(this.id, buf);
+  }
+
+  pushBatch(samples: readonly PoseArrowSample[]): void {
+    const n = samples.length;
+    if (n === 0) return;
+    const buf = new Float32Array(n * 3);
+    for (let i = 0; i < n; i++) {
+      const s = samples[i]!;
+      buf[i * 3] = s.t;
+      buf[i * 3 + 1] = s.y;
+      buf[i * 3 + 2] = s.theta;
     }
     this.sink.pushData(this.id, buf);
   }

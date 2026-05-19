@@ -10,6 +10,8 @@ import { ExternalAxesDemoPage } from "../pages/external-axes-demo";
 import { FluxionWorkerDemoPage } from "../pages/fluxion-worker-demo";
 import { GaugeDemoPage } from "../pages/gauge-demo";
 import { HeatmapDemoPage } from "../pages/heatmap-demo";
+import { PoseArrowDemoPage } from "../pages/pose-arrow-demo";
+import { ReferenceLineDemoPage } from "../pages/reference-line-demo";
 import { HistoricalDemoPage } from "../pages/historical-demo";
 import { LidarDemoPage } from "../pages/lidar-demo";
 import { LineDemoPage } from "../pages/line-demo";
@@ -45,7 +47,9 @@ type Tab =
   | "scatter-colored"
   | "gauge"
   | "brush"
-  | "robot-dashboard";
+  | "robot-dashboard"
+  | "reference-line"
+  | "pose-arrow";
 
 const groups: readonly SideBarGroup<Tab>[] = [
   {
@@ -75,6 +79,8 @@ const groups: readonly SideBarGroup<Tab>[] = [
       { id: "event-marker", label: "Event Markers" },
       { id: "scatter-colored", label: "Scatter Colored" },
       { id: "gauge", label: "Gauge" },
+      { id: "reference-line", label: "Reference Line" },
+      { id: "pose-arrow", label: "Pose Arrow" },
       { id: "brush", label: "Brush + Export" },
     ],
   },
@@ -119,6 +125,8 @@ export function App() {
         {tab === "gauge" && <GaugeDemoPage />}
         {tab === "brush" && <BrushDemoPage />}
         {tab === "robot-dashboard" && <RobotDashboardPage />}
+        {tab === "reference-line" && <ReferenceLineDemoPage />}
+        {tab === "pose-arrow" && <PoseArrowDemoPage />}
       </main>
     </div>
   );

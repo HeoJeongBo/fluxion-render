@@ -12,6 +12,8 @@ export {
   scatterColoredLayer,
   scatterLayer,
   stepLayer,
+  poseArrowLayer,
+  referenceLineLayer,
 } from "./lib/layer-specs";
 export { useXAxisCanvas, useYAxisCanvas } from "./lib/use-axis-canvas";
 export { useAxisTicks } from "./lib/use-axis-ticks";

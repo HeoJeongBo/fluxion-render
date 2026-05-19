@@ -30,6 +30,8 @@ export {
   lidarLayer,
   lineLayer,
   lineStaticLayer,
+  poseArrowLayer,
+  referenceLineLayer,
   scatterColoredLayer,
   scatterLayer,
   stepLayer,

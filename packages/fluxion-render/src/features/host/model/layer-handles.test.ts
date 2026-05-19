@@ -4,16 +4,22 @@ import {
   LidarLayerHandle,
   LineLayerHandle,
   LineStaticLayerHandle,
+  PoseArrowHandle,
+  ReferenceLineHandle,
 } from "./layer-handles";
 
 function makeFakeSink() {
   const pushes: { id: string; data: Float32Array }[] = [];
+  const configs: { id: string; config: unknown }[] = [];
   const sink: FluxionDataSink = {
     pushData: vi.fn((id: string, data: Float32Array) => {
       pushes.push({ id, data });
     }),
+    configLayer: vi.fn((id: string, config: unknown) => {
+      configs.push({ id, config });
+    }),
   };
-  return { sink, pushes };
+  return { sink, pushes, configs };
 }
 
 /** Compare a Float32Array to an expected float array with tolerance. */
@@ -122,6 +128,61 @@ describe("LidarLayerHandle", () => {
     const { sink, pushes } = makeFakeSink();
     const h = new LidarLayerHandle(sink, "cloud", 4);
     const raw = new Float32Array(8);
+    h.pushRaw(raw);
+    expect(pushes[0].data).toBe(raw);
+  });
+});
+
+describe("ReferenceLineHandle", () => {
+  it("setReference calls configLayer with the config object", () => {
+    const { sink, configs } = makeFakeSink();
+    const h = new ReferenceLineHandle(sink, "ref");
+    h.setReference({ y: 50, bandMin: 40, bandMax: 60, color: "#4fc3f7" });
+    expect(configs).toHaveLength(1);
+    expect(configs[0].id).toBe("ref");
+    expect(configs[0].config).toMatchObject({ y: 50, bandMin: 40, bandMax: 60 });
+  });
+});
+
+describe("PoseArrowHandle", () => {
+  it("push encodes a single [t, y, theta] sample", () => {
+    const { sink, pushes } = makeFakeSink();
+    const h = new PoseArrowHandle(sink, "pose");
+    h.push({ t: 100, y: 0.5, theta: Math.PI / 2 });
+    expect(pushes).toHaveLength(1);
+    expect(pushes[0].id).toBe("pose");
+    expect(pushes[0].data.length).toBe(3);
+    expect(pushes[0].data[0]).toBeCloseTo(100);
+    expect(pushes[0].data[1]).toBeCloseTo(0.5);
+    expect(pushes[0].data[2]).toBeCloseTo(Math.PI / 2);
+  });
+
+  it("pushBatch encodes multiple samples into one Float32Array", () => {
+    const { sink, pushes } = makeFakeSink();
+    const h = new PoseArrowHandle(sink, "pose");
+    h.pushBatch([
+      { t: 100, y: 0.1, theta: 0 },
+      { t: 200, y: 0.2, theta: Math.PI },
+      { t: 300, y: 0.3, theta: -Math.PI / 4 },
+    ]);
+    expect(pushes).toHaveLength(1);
+    expect(pushes[0].data.length).toBe(9);
+    expect(pushes[0].data[0]).toBeCloseTo(100);
+    expect(pushes[0].data[3]).toBeCloseTo(200);
+    expect(pushes[0].data[6]).toBeCloseTo(300);
+  });
+
+  it("pushBatch is a no-op for empty arrays", () => {
+    const { sink, pushes } = makeFakeSink();
+    const h = new PoseArrowHandle(sink, "pose");
+    h.pushBatch([]);
+    expect(pushes).toHaveLength(0);
+  });
+
+  it("pushRaw forwards the buffer unchanged", () => {
+    const { sink, pushes } = makeFakeSink();
+    const h = new PoseArrowHandle(sink, "pose");
+    const raw = new Float32Array([1, 2, 3]);
     h.pushRaw(raw);
     expect(pushes[0].data).toBe(raw);
   });

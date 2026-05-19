@@ -9,6 +9,8 @@ import { LayerStack } from "../../../entities/layer-stack";
 import { LidarScatterLayer } from "../../../entities/lidar-scatter-layer";
 import { LineChartLayer } from "../../../entities/line-chart-layer";
 import { LineChartStaticLayer } from "../../../entities/line-chart-static-layer";
+import { PoseArrowLayer } from "../../../entities/pose-arrow-layer";
+import { ReferenceLineLayer } from "../../../entities/reference-line-layer";
 import { ScatterChartLayer } from "../../../entities/scatter-chart-layer";
 import { ScatterColoredLayer } from "../../../entities/scatter-colored-layer";
 import { StepChartLayer } from "../../../entities/step-chart-layer";
@@ -46,6 +48,10 @@ function createLayer(id: string, kind: LayerKind): Layer {
       return new ScatterColoredLayer(id);
     case "heatmap-stream":
       return new HeatmapStreamLayer(id);
+    case "reference-line":
+      return new ReferenceLineLayer(id);
+    case "pose-arrow":
+      return new PoseArrowLayer(id);
   }
 }
 

@@ -8,6 +8,8 @@ import type { HeatmapStreamConfig } from "../../../entities/heatmap-stream-layer
 import type { LidarScatterConfig } from "../../../entities/lidar-scatter-layer";
 import type { LineChartConfig } from "../../../entities/line-chart-layer";
 import type { LineChartStaticConfig } from "../../../entities/line-chart-static-layer";
+import type { PoseArrowConfig } from "../../../entities/pose-arrow-layer";
+import type { ReferenceLineConfig } from "../../../entities/reference-line-layer";
 import type { ScatterChartConfig } from "../../../entities/scatter-chart-layer";
 import type { ScatterColoredConfig } from "../../../entities/scatter-colored-layer";
 import type { StepChartConfig } from "../../../entities/step-chart-layer";
@@ -81,4 +83,12 @@ export function scatterColoredLayer(id: string, config?: ScatterColoredConfig): 
 
 export function heatmapStreamLayer(id: string, config?: HeatmapStreamConfig): FluxionLayerSpec {
   return { id, kind: "heatmap-stream", config };
+}
+
+export function referenceLineLayer(id: string, config?: ReferenceLineConfig): FluxionLayerSpec {
+  return { id, kind: "reference-line", config };
+}
+
+export function poseArrowLayer(id: string, config?: PoseArrowConfig): FluxionLayerSpec {
+  return { id, kind: "pose-arrow", config };
 }
