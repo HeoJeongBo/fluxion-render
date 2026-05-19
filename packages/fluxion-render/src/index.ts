@@ -83,11 +83,18 @@ export type { FluxionLayerSpec } from "./widgets/fluxion-canvas/lib/use-fluxion-
 export {
   FluxionGauge,
   useFluxionGauge,
+  type FluxionGaugeClassNames,
   type FluxionGaugeProps,
   type GaugeThreshold,
   type UseFluxionGaugeOptions,
   type UseFluxionGaugeResult,
 } from "./features/gauge";
+export {
+  FluxionPieChart,
+  type FluxionPieChartClassNames,
+  type FluxionPieChartProps,
+  type PieSlice,
+} from "./features/pie";
 export {
   useSyncedTimeWindow,
   type UseSyncedTimeWindowResult,

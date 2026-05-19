@@ -10,6 +10,7 @@ import { ExternalAxesDemoPage } from "../pages/external-axes-demo";
 import { FluxionWorkerDemoPage } from "../pages/fluxion-worker-demo";
 import { GaugeDemoPage } from "../pages/gauge-demo";
 import { HeatmapDemoPage } from "../pages/heatmap-demo";
+import { PieDemoPage } from "../pages/pie-demo";
 import { PoseArrowDemoPage } from "../pages/pose-arrow-demo";
 import { ReferenceLineDemoPage } from "../pages/reference-line-demo";
 import { HistoricalDemoPage } from "../pages/historical-demo";
@@ -49,7 +50,8 @@ type Tab =
   | "brush"
   | "robot-dashboard"
   | "reference-line"
-  | "pose-arrow";
+  | "pose-arrow"
+  | "pie";
 
 const groups: readonly SideBarGroup<Tab>[] = [
   {
@@ -70,6 +72,7 @@ const groups: readonly SideBarGroup<Tab>[] = [
       { id: "bar", label: "Bar" },
       { id: "candlestick", label: "Candlestick" },
       { id: "heatmap", label: "Heatmap" },
+      { id: "pie", label: "Pie Chart" },
       { id: "table", label: "Table" },
     ],
   },
@@ -127,6 +130,7 @@ export function App() {
         {tab === "robot-dashboard" && <RobotDashboardPage />}
         {tab === "reference-line" && <ReferenceLineDemoPage />}
         {tab === "pose-arrow" && <PoseArrowDemoPage />}
+        {tab === "pie" && <PieDemoPage />}
       </main>
     </div>
   );

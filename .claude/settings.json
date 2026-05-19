@@ -29,7 +29,9 @@
       "Bash(node -e \"console.log\\(Math.ceil\\(\\(5000/1000\\) * 10 * 1.1\\)\\)\")",
       "Bash(sed -i '' '526d' /Users/heojeongbo/Desktop/personal/fluxion-render/packages/fluxion-render/src/features/host/model/layer-handles.ts)",
       "Bash(sed -i '' '1s|../../../../entities/reference-line-layer|../../../entities/reference-line-layer|' /Users/heojeongbo/Desktop/personal/fluxion-render/packages/fluxion-render/src/features/host/model/layer-handles.ts)",
-      "Bash(pnpm --filter vite-demo exec tsc --noEmit)"
+      "Bash(pnpm --filter vite-demo exec tsc --noEmit)",
+      "Bash(pnpm --filter @heojeongbo/fluxion-render test --run)",
+      "Bash(pnpm --filter @heojeongbo/fluxion-render exec vitest run)"
     ]
   }
 }

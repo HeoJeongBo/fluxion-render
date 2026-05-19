@@ -41,7 +41,7 @@ export type { ResizeInfo } from "./lib/use-resize-observer";
 export { useResizeObserver } from "./lib/use-resize-observer";
 export type { FluxionCanvasHandle, FluxionCanvasProps } from "./ui/fluxion-canvas";
 export { FluxionCanvas } from "./ui/fluxion-canvas";
-export type { FluxionLegendProps, LegendItem } from "./ui/fluxion-legend";
+export type { FluxionLegendClassNames, FluxionLegendProps, LegendItem } from "./ui/fluxion-legend";
 export { FluxionLegend } from "./ui/fluxion-legend";
 export type {
   FluxionTableClassNames,

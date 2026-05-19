@@ -5,6 +5,17 @@ export interface LegendItem {
   label: string;
 }
 
+export interface FluxionLegendClassNames {
+  /** Outermost wrapper div. */
+  root?: string;
+  /** Individual legend item row div. */
+  item?: string;
+  /** Color dot span. */
+  dot?: string;
+  /** Label text span. */
+  label?: string;
+}
+
 export interface FluxionLegendProps {
   items: LegendItem[];
   /** Whether to always show the legend or only on container hover. Default: 'always'. */
@@ -14,6 +25,8 @@ export interface FluxionLegendProps {
   /** In 'hover' mode, the container element whose hover state is tracked. Falls back to legend self-hover if omitted. */
   containerRef?: RefObject<HTMLElement | null>;
   style?: CSSProperties;
+  className?: string;
+  classNames?: FluxionLegendClassNames;
 }
 
 const POSITION_STYLES: Record<NonNullable<FluxionLegendProps["position"]>, CSSProperties> = {
@@ -29,6 +42,8 @@ export function FluxionLegend({
   position = "top-right",
   containerRef,
   style,
+  className,
+  classNames = {},
 }: FluxionLegendProps) {
   const [hovered, setHovered] = useState(false);
   const legendRef = useRef<HTMLDivElement>(null);
@@ -49,10 +64,10 @@ export function FluxionLegend({
 
   const visible = visibility === "always" || hovered;
 
-  return (
-    <div
-      ref={legendRef}
-      style={{
+  const rootClassName = classNames.root ?? className;
+  const rootStyle: CSSProperties = rootClassName
+    ? { opacity: visible ? 1 : 0, transition: "opacity 0.15s ease", ...style }
+    : {
         position: "absolute",
         ...POSITION_STYLES[position],
         display: "flex",
@@ -69,15 +84,19 @@ export function FluxionLegend({
         opacity: visible ? 1 : 0,
         transition: "opacity 0.15s ease",
         ...style,
-      }}
-    >
+      };
+
+  return (
+    <div ref={legendRef} className={rootClassName} style={rootStyle}>
       {items.map((item) => (
         <div
           key={item.label}
-          style={{ display: "flex", alignItems: "center", gap: 6, whiteSpace: "nowrap" }}
+          className={classNames.item}
+          style={classNames.item ? undefined : { display: "flex", alignItems: "center", gap: 6, whiteSpace: "nowrap" }}
         >
           <span
-            style={{
+            className={classNames.dot}
+            style={classNames.dot ? undefined : {
               display: "inline-block",
               width: 10,
               height: 10,
@@ -86,7 +105,12 @@ export function FluxionLegend({
               flexShrink: 0,
             }}
           />
-          <span style={{ color: "#1b1f2a" }}>{item.label}</span>
+          <span
+            className={classNames.label}
+            style={classNames.label ? undefined : { color: "#1b1f2a" }}
+          >
+            {item.label}
+          </span>
         </div>
       ))}
     </div>

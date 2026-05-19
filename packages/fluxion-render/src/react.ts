@@ -47,6 +47,7 @@ export {
   type FluxionCanvasHandle,
   type FluxionCanvasProps,
   type FluxionLayerSpec,
+  type FluxionLegendClassNames,
   type FluxionLegendProps,
   type LegendItem,
   type ResizeInfo,
@@ -66,11 +67,18 @@ export {
 export {
   FluxionGauge,
   useFluxionGauge,
+  type FluxionGaugeClassNames,
   type FluxionGaugeProps,
   type GaugeThreshold,
   type UseFluxionGaugeOptions,
   type UseFluxionGaugeResult,
 } from "./features/gauge";
+export {
+  FluxionPieChart,
+  type FluxionPieChartClassNames,
+  type FluxionPieChartProps,
+  type PieSlice,
+} from "./features/pie";
 export {
   useSyncedTimeWindow,
   type UseSyncedTimeWindowResult,
