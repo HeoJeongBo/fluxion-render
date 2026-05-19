@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.8.1](https://github-personal/HeoJeongBo/fluxion-render/compare/fluxion-render-v0.8.0...fluxion-render-v0.8.1) (2026-05-19)
+
+
+### Features
+
+* **render,examples:** add reference-line and pose-arrow layers ([7a0cc92](https://github-personal/HeoJeongBo/fluxion-render/commit/7a0cc92ae4784e19e31ab5bbd1fc406c8a2dd6b6))
+
 # [0.8.0](https://github-personal/HeoJeongBo/fluxion-render/compare/fluxion-render-v0.7.3...fluxion-render-v0.8.0) (2026-05-18)
 
 
