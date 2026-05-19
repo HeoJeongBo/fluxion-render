@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.8.2](https://github-personal/HeoJeongBo/fluxion-render/compare/fluxion-render-v0.8.1...fluxion-render-v0.8.2) (2026-05-19)
+
+
+### Features
+
+* **render,examples:** add FluxionPieChart and classNames CSS injection support ([96f1c77](https://github-personal/HeoJeongBo/fluxion-render/commit/96f1c771bd6d9de361d89011dbd02e4aeaf83027))
+* **render,examples:** add pie chart enter/update animations and fix StrictMode bug ([cb19933](https://github-personal/HeoJeongBo/fluxion-render/commit/cb19933110dcd62496eb0c49648b1d79cfb69e1a))
+
 ## [0.8.1](https://github-personal/HeoJeongBo/fluxion-render/compare/fluxion-render-v0.8.0...fluxion-render-v0.8.1) (2026-05-19)
 
 
