@@ -1,0 +1,245 @@
+import type { SerializedFrame } from "../../../shared/model/frame";
+
+export interface ReplayStoreOptions {
+  dbName?: string;
+  dbVersion?: number;
+  retentionMs?: number;
+  batchIntervalMs?: number;
+}
+
+const DEFAULT_DB_NAME = "fluxion-replay";
+const DEFAULT_DB_VERSION = 1;
+const DEFAULT_RETENTION_MS = 10 * 60 * 1000;
+const DEFAULT_BATCH_INTERVAL_MS = 500;
+
+interface FrameRecord {
+  t: number;
+  channelId: string;
+  payload: ArrayBuffer;
+}
+
+export class ReplayStore {
+  private _db: IDBDatabase | null = null;
+  private _opfsRoot: FileSystemDirectoryHandle | null = null;
+  private _pending: FrameRecord[] = [];
+  private _flushTimer: ReturnType<typeof setInterval> | null = null;
+  private _retentionMs: number;
+  private _batchIntervalMs: number;
+  private _dbName: string;
+  private _dbVersion: number;
+
+  constructor(opts?: ReplayStoreOptions) {
+    this._dbName = opts?.dbName ?? DEFAULT_DB_NAME;
+    this._dbVersion = opts?.dbVersion ?? DEFAULT_DB_VERSION;
+    this._retentionMs = opts?.retentionMs ?? DEFAULT_RETENTION_MS;
+    this._batchIntervalMs = opts?.batchIntervalMs ?? DEFAULT_BATCH_INTERVAL_MS;
+  }
+
+  async open(): Promise<void> {
+    this._db = await this._openIDB();
+    try {
+      this._opfsRoot = await navigator.storage.getDirectory();
+    } catch {
+      // OPFS not available (e.g. non-secure context) — video recording disabled
+      this._opfsRoot = null;
+    }
+    this._startFlushTimer();
+  }
+
+  appendFrame(frame: SerializedFrame): void {
+    this._pending.push({ t: frame.t, channelId: frame.channelId, payload: frame.payload });
+  }
+
+  async flush(): Promise<void> {
+    await this._flushPending();
+  }
+
+  async getFrames(fromMs: number, toMs: number): Promise<SerializedFrame[]> {
+    const db = this._assertOpen();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction("frames", "readonly");
+      const index = tx.objectStore("frames").index("by_t");
+      const range = IDBKeyRange.bound(fromMs, toMs);
+      const req = index.getAll(range);
+      req.onsuccess = (e) => {
+        const records = (e.target as IDBRequest<FrameRecord[]>).result;
+        resolve(
+          records.map((r) => ({
+            t: r.t,
+            channelId: r.channelId,
+            payload: r.payload,
+          })),
+        );
+      };
+      req.onerror = () => reject(req.error);
+    });
+  }
+
+  async deleteFramesBefore(cutoffMs: number): Promise<void> {
+    const db = this._assertOpen();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction("frames", "readwrite");
+      const index = tx.objectStore("frames").index("by_t");
+      const range = IDBKeyRange.upperBound(cutoffMs, true);
+      const req = index.openCursor(range);
+      req.onsuccess = (e) => {
+        const cursor = (e.target as IDBRequest<IDBCursorWithValue | null>).result;
+        if (!cursor) {
+          resolve();
+          return;
+        }
+        cursor.delete();
+        cursor.continue();
+      };
+      req.onerror = () => reject(req.error);
+    });
+  }
+
+  async getTimeRange(): Promise<{ earliest: number; latest: number } | null> {
+    const earliest = await this._querySingleT("next");
+    if (earliest === null) return null;
+    const latest = await this._querySingleT("prev");
+    return { earliest, latest: latest ?? earliest };
+  }
+
+  private _querySingleT(direction: IDBCursorDirection): Promise<number | null> {
+    const db = this._assertOpen();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction("frames", "readonly");
+      const index = tx.objectStore("frames").index("by_t");
+      const req = index.openCursor(null, direction);
+      req.onsuccess = (e) => {
+        const cursor = (e.target as IDBRequest<IDBCursorWithValue | null>).result;
+        resolve(cursor ? (cursor.value as FrameRecord).t : null);
+      };
+      req.onerror = () => reject(req.error);
+    });
+  }
+
+  async writeVideoChunk(channelId: string, filename: string, data: Uint8Array): Promise<void> {
+    const root = this._assertOpfs();
+    const dir = await root.getDirectoryHandle(channelId, { create: true });
+    const file = await dir.getFileHandle(filename, { create: true });
+    const writable = await file.createWritable();
+    await writable.write(data as unknown as FileSystemWriteChunkType);
+    await writable.close();
+  }
+
+  async readVideoChunk(channelId: string, filename: string): Promise<Uint8Array | null> {
+    const root = this._opfsRoot;
+    if (!root) return null;
+    try {
+      const dir = await root.getDirectoryHandle(channelId);
+      const file = await dir.getFileHandle(filename);
+      const f = await file.getFile();
+      const buf = await f.arrayBuffer();
+      return new Uint8Array(buf);
+    } catch {
+      return null;
+    }
+  }
+
+  async clearAll(): Promise<void> {
+    // Clear IDB frames
+    const db = this._assertOpen();
+    await new Promise<void>((resolve, reject) => {
+      const tx = db.transaction("frames", "readwrite");
+      const req = tx.objectStore("frames").clear();
+      req.onsuccess = () => resolve();
+      req.onerror = () => reject(req.error);
+    });
+
+    // Clear OPFS video chunks
+    const root = this._opfsRoot;
+    if (!root) return;
+    try {
+      for await (const [name] of (root as unknown as AsyncIterable<[string, FileSystemHandle]>)) {
+        try {
+          await root.removeEntry(name, { recursive: true });
+        } catch {
+          // ignore individual failures
+        }
+      }
+    } catch {
+      // OPFS iteration not supported in all environments — skip silently
+    }
+  }
+
+  async deleteVideoChunk(channelId: string, filename: string): Promise<void> {
+    const root = this._opfsRoot;
+    if (!root) return;
+    try {
+      const dir = await root.getDirectoryHandle(channelId);
+      await dir.removeEntry(filename);
+    } catch {
+      // Already deleted or never existed
+    }
+  }
+
+  dispose(): void {
+    this._stopFlushTimer();
+    this._db?.close();
+    this._db = null;
+    this._opfsRoot = null;
+    this._pending = [];
+  }
+
+  private _assertOpen(): IDBDatabase {
+    if (!this._db) throw new Error("ReplayStore is not open. Call open() first.");
+    return this._db;
+  }
+
+  private _assertOpfs(): FileSystemDirectoryHandle {
+    if (!this._opfsRoot) throw new Error("OPFS is not available in this context.");
+    return this._opfsRoot;
+  }
+
+  private _startFlushTimer(): void {
+    this._flushTimer = setInterval(() => {
+      void this._flushPending();
+    }, this._batchIntervalMs);
+  }
+
+  private _stopFlushTimer(): void {
+    if (this._flushTimer != null) {
+      clearInterval(this._flushTimer);
+      this._flushTimer = null;
+    }
+  }
+
+  private async _flushPending(): Promise<void> {
+    if (this._pending.length === 0 || !this._db) return;
+    const batch = this._pending.splice(0, this._pending.length);
+    await this._writeBatch(batch);
+  }
+
+  private async _writeBatch(records: FrameRecord[]): Promise<void> {
+    const db = this._db;
+    if (!db) return;
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction("frames", "readwrite");
+      const store = tx.objectStore("frames");
+      for (const record of records) {
+        store.add({ t: record.t, channelId: record.channelId, payload: record.payload });
+      }
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+  }
+
+  private _openIDB(): Promise<IDBDatabase> {
+    return new Promise((resolve, reject) => {
+      const req = indexedDB.open(this._dbName, this._dbVersion);
+      req.onupgradeneeded = (e) => {
+        const db = (e.target as IDBOpenDBRequest).result;
+        if (!db.objectStoreNames.contains("frames")) {
+          const store = db.createObjectStore("frames", { autoIncrement: true });
+          store.createIndex("by_t", "t");
+          store.createIndex("by_channel_t", ["channelId", "t"]);
+        }
+      };
+      req.onsuccess = (e) => resolve((e.target as IDBOpenDBRequest).result);
+      req.onerror = () => reject(req.error);
+    });
+  }
+}

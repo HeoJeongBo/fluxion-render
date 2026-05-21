@@ -3,8 +3,10 @@
   "private": true,
   "version": "0.0.0",
   "scripts": {
-    "build": "pnpm --filter @heojeongbo/fluxion-worker build && pnpm --filter @heojeongbo/fluxion-render build",
+    "build": "pnpm --filter @heojeongbo/fluxion-worker build && pnpm --filter @heojeongbo/fluxion-render build && pnpm --filter @heojeongbo/fluxion-replay build",
+    "build:replay": "pnpm --filter @heojeongbo/fluxion-replay build",
     "dev": "pnpm --filter @heojeongbo/fluxion-render build && pnpm -r --parallel --filter @heojeongbo/fluxion-render --filter vite-demo run dev",
+    "dev:replay": "pnpm --filter @heojeongbo/fluxion-replay build && pnpm --filter fluxion-replay-demo run dev",
     "typecheck": "pnpm -r typecheck",
     "test": "pnpm -r run test",
     "format": "biome format --write .",
@@ -18,7 +20,12 @@
     "release:worker:dry": "pnpm --filter @heojeongbo/fluxion-worker release:dry",
     "release:worker:patch": "pnpm --filter @heojeongbo/fluxion-worker release:patch",
     "release:worker:minor": "pnpm --filter @heojeongbo/fluxion-worker release:minor",
-    "release:worker:major": "pnpm --filter @heojeongbo/fluxion-worker release:major"
+    "release:worker:major": "pnpm --filter @heojeongbo/fluxion-worker release:major",
+    "release:replay": "pnpm --filter @heojeongbo/fluxion-replay release",
+    "release:replay:dry": "pnpm --filter @heojeongbo/fluxion-replay release:dry",
+    "release:replay:patch": "pnpm --filter @heojeongbo/fluxion-replay release:patch",
+    "release:replay:minor": "pnpm --filter @heojeongbo/fluxion-replay release:minor",
+    "release:replay:major": "pnpm --filter @heojeongbo/fluxion-replay release:major"
   },
   "packageManager": "pnpm@9.0.0",
   "devDependencies": {

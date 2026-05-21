@@ -1,0 +1,534 @@
+import { vi } from "vitest";
+
+// ─── IndexedDB in-memory stub ─────────────────────────────────────────────────
+
+type IDBRecord = { _key: number; [key: string]: unknown };
+
+class FakeIDBKeyRange {
+  lower: unknown;
+  upper: unknown;
+  lowerOpen: boolean;
+  upperOpen: boolean;
+
+  constructor(lower: unknown, upper: unknown, lowerOpen = false, upperOpen = false) {
+    this.lower = lower;
+    this.upper = upper;
+    this.lowerOpen = lowerOpen;
+    this.upperOpen = upperOpen;
+  }
+
+  static bound(lower: unknown, upper: unknown, lowerOpen = false, upperOpen = false) {
+    return new FakeIDBKeyRange(lower, upper, lowerOpen, upperOpen);
+  }
+
+  static lowerBound(lower: unknown, open = false) {
+    return new FakeIDBKeyRange(lower, undefined, open, false);
+  }
+
+  static upperBound(upper: unknown, open = false) {
+    return new FakeIDBKeyRange(undefined, upper, false, open);
+  }
+
+  static only(value: unknown) {
+    return new FakeIDBKeyRange(value, value, false, false);
+  }
+
+  includes(value: unknown): boolean {
+    const v = value as number;
+    if (this.lower !== undefined) {
+      if (this.lowerOpen && (v as number) <= (this.lower as number)) return false;
+      if (!this.lowerOpen && (v as number) < (this.lower as number)) return false;
+    }
+    if (this.upper !== undefined) {
+      if (this.upperOpen && (v as number) >= (this.upper as number)) return false;
+      if (!this.upperOpen && (v as number) > (this.upper as number)) return false;
+    }
+    return true;
+  }
+}
+
+class FakeIDBIndex {
+  constructor(
+    private readonly _store: FakeIDBObjectStore,
+    private readonly _field: string | string[],
+  ) {}
+
+  openCursor(range?: FakeIDBKeyRange | null, direction?: IDBCursorDirection): FakeIDBRequest<FakeIDBCursorWithValue | null> {
+    const field = this._field;
+    let records = this._store._records.filter((r) => {
+      if (!range) return true;
+      const key = Array.isArray(field) ? (r[field[field.length - 1]] as number) : (r[field as string] as number);
+      return range.includes(key);
+    });
+    // Sort by the indexed field
+    records = [...records].sort((a, b) => {
+      const ka = Array.isArray(field) ? (a[field[field.length - 1]] as number) : (a[field as string] as number);
+      const kb = Array.isArray(field) ? (b[field[field.length - 1]] as number) : (b[field as string] as number);
+      return ka - kb;
+    });
+    if (direction === "prev" || direction === "prevunique") {
+      records = records.reverse();
+    }
+    let idx = 0;
+    const req = new FakeIDBRequest<FakeIDBCursorWithValue | null>(null, false);
+    const advance = () => {
+      if (idx >= records.length) {
+        req._result = null;
+        req.onsuccess?.({ target: req } as unknown as Event);
+        return;
+      }
+      const record = records[idx++];
+      const cursor: FakeIDBCursorWithValue = {
+        value: record,
+        key: record._key,
+        delete: () => {
+          const i = this._store._records.indexOf(record);
+          if (i !== -1) this._store._records.splice(i, 1);
+          return new FakeIDBRequest(undefined);
+        },
+        continue: () => advance(),
+      };
+      req._result = cursor;
+      req.onsuccess?.({ target: req } as unknown as Event);
+    };
+    queueMicrotask(advance);
+    return req;
+  }
+
+  getAll(range?: FakeIDBKeyRange): FakeIDBRequest<IDBRecord[]> {
+    const field = this._field;
+    const results = this._store._records.filter((r) => {
+      if (!range) return true;
+      const key = Array.isArray(field) ? (r[field[field.length - 1]] as number) : (r[field as string] as number);
+      return range.includes(key);
+    });
+    return new FakeIDBRequest([...results]);
+  }
+}
+
+interface FakeIDBCursorWithValue {
+  value: IDBRecord;
+  key: number;
+  delete(): FakeIDBRequest<undefined>;
+  continue(): void;
+}
+
+class FakeIDBRequest<T> {
+  _result: T;
+  onsuccess: ((e: Event) => void) | null = null;
+  onerror: ((e: Event) => void) | null = null;
+
+  constructor(result: T, autoFire = true) {
+    this._result = result;
+    if (autoFire && !(result instanceof Promise)) {
+      queueMicrotask(() => {
+        this.onsuccess?.({ target: this } as unknown as Event);
+      });
+    }
+  }
+
+  get result(): T {
+    return this._result;
+  }
+}
+
+class FakeIDBObjectStore {
+  _records: IDBRecord[] = [];
+  private _autoKey = 1;
+  private _indexes = new Map<string, FakeIDBIndex>();
+
+  createIndex(name: string, keyPath: string | string[]): FakeIDBIndex {
+    const idx = new FakeIDBIndex(this, keyPath);
+    this._indexes.set(name, idx);
+    return idx;
+  }
+
+  index(name: string): FakeIDBIndex {
+    const idx = this._indexes.get(name);
+    if (!idx) throw new Error(`Index '${name}' not found`);
+    return idx;
+  }
+
+  add(value: unknown): FakeIDBRequest<number> {
+    const key = this._autoKey++;
+    this._records.push({ ...(value as object), _key: key } as IDBRecord);
+    return new FakeIDBRequest(key);
+  }
+
+  put(value: unknown): FakeIDBRequest<number> {
+    return this.add(value);
+  }
+
+  getAll(range?: FakeIDBKeyRange): FakeIDBRequest<IDBRecord[]> {
+    const results = range ? this._records.filter((r) => range.includes(r._key)) : [...this._records];
+    return new FakeIDBRequest(results);
+  }
+
+  delete(key: number): FakeIDBRequest<undefined> {
+    const i = this._records.findIndex((r) => r._key === key);
+    if (i !== -1) this._records.splice(i, 1);
+    return new FakeIDBRequest(undefined);
+  }
+
+  clear(): FakeIDBRequest<undefined> {
+    this._records = [];
+    return new FakeIDBRequest(undefined);
+  }
+
+  openCursor(range?: FakeIDBKeyRange): FakeIDBRequest<FakeIDBCursorWithValue | null> {
+    return this.index("by_t").openCursor(range);
+  }
+
+  count(): FakeIDBRequest<number> {
+    return new FakeIDBRequest(this._records.length);
+  }
+}
+
+class FakeIDBTransaction {
+  oncomplete: (() => void) | null = null;
+  onerror: ((e: unknown) => void) | null = null;
+
+  constructor(private readonly _stores: Map<string, FakeIDBObjectStore>) {
+    // Auto-complete after all synchronous requests have been queued.
+    // Uses two microtask hops: first lets add() requests enqueue their
+    // queueMicrotask callbacks, second fires after those resolve.
+    queueMicrotask(() => queueMicrotask(() => this.oncomplete?.()));
+  }
+
+  objectStore(name: string): FakeIDBObjectStore {
+    const store = this._stores.get(name);
+    if (!store) throw new Error(`Object store '${name}' not found`);
+    return store;
+  }
+}
+
+class FakeIDBDatabase {
+  private readonly _stores = new Map<string, FakeIDBObjectStore>();
+
+  get objectStoreNames(): DOMStringList {
+    const names = [...this._stores.keys()];
+    return {
+      length: names.length,
+      contains: (name: string) => names.includes(name),
+      item: (index: number) => names[index] ?? null,
+      [Symbol.iterator]: function* () { yield* names; },
+    } as unknown as DOMStringList;
+  }
+
+  createObjectStore(name: string): FakeIDBObjectStore {
+    const store = new FakeIDBObjectStore();
+    this._stores.set(name, store);
+    return store;
+  }
+
+  transaction(_storeNames: string | string[], _mode?: string): FakeIDBTransaction {
+    return new FakeIDBTransaction(this._stores);
+  }
+
+  close(): void {}
+}
+
+class FakeIDBOpenRequest {
+  result: FakeIDBDatabase | null = null;
+  onsuccess: ((e: Event) => void) | null = null;
+  onerror: ((e: Event) => void) | null = null;
+  onupgradeneeded: ((e: IDBVersionChangeEvent) => void) | null = null;
+
+  constructor() {
+    queueMicrotask(() => {
+      const db = new FakeIDBDatabase();
+      this.result = db;
+      const upgradeEvent = {
+        target: { result: db },
+        oldVersion: 0,
+        newVersion: 1,
+      } as unknown as IDBVersionChangeEvent;
+      this.onupgradeneeded?.(upgradeEvent);
+      this.onsuccess?.({ target: this } as unknown as Event);
+    });
+  }
+}
+
+const fakeIndexedDB = {
+  open: (_name: string, _version?: number) => new FakeIDBOpenRequest(),
+  deleteDatabase: (_name: string) => new FakeIDBRequest(undefined),
+  databases: async () => [],
+  cmp: (a: unknown, b: unknown) => (a === b ? 0 : (a as number) < (b as number) ? -1 : 1),
+};
+
+Object.defineProperty(globalThis, "indexedDB", {
+  value: fakeIndexedDB,
+  writable: true,
+  configurable: true,
+});
+
+Object.defineProperty(globalThis, "IDBKeyRange", {
+  value: FakeIDBKeyRange,
+  writable: true,
+  configurable: true,
+});
+
+// ─── OPFS stub ────────────────────────────────────────────────────────────────
+
+const opfsFiles = new Map<string, Uint8Array>();
+
+class FakeFileSystemWritableFileStream {
+  private readonly _path: string;
+  private _chunks: Uint8Array[] = [];
+
+  constructor(path: string) {
+    this._path = path;
+  }
+
+  async write(data: Uint8Array | ArrayBuffer): Promise<void> {
+    const chunk = data instanceof Uint8Array ? data : new Uint8Array(data);
+    this._chunks.push(chunk);
+  }
+
+  async close(): Promise<void> {
+    const total = this._chunks.reduce((a, b) => a + b.byteLength, 0);
+    const merged = new Uint8Array(total);
+    let offset = 0;
+    for (const chunk of this._chunks) {
+      merged.set(chunk, offset);
+      offset += chunk.byteLength;
+    }
+    opfsFiles.set(this._path, merged);
+  }
+}
+
+class FakeFileSystemFileHandle {
+  constructor(private readonly _path: string) {}
+
+  async createWritable(): Promise<FakeFileSystemWritableFileStream> {
+    return new FakeFileSystemWritableFileStream(this._path);
+  }
+
+  async getFile(): Promise<{ arrayBuffer(): Promise<ArrayBuffer> }> {
+    const data = opfsFiles.get(this._path);
+    return {
+      arrayBuffer: async () => (data ? data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength) as ArrayBuffer : new ArrayBuffer(0)),
+    };
+  }
+}
+
+class FakeFileSystemDirectoryHandle {
+  constructor(private readonly _prefix: string) {}
+
+  async getDirectoryHandle(name: string, opts?: { create?: boolean }): Promise<FakeFileSystemDirectoryHandle> {
+    return new FakeFileSystemDirectoryHandle(`${this._prefix}/${name}`);
+  }
+
+  async getFileHandle(name: string, opts?: { create?: boolean }): Promise<FakeFileSystemFileHandle> {
+    const path = `${this._prefix}/${name}`;
+    if (!opts?.create && !opfsFiles.has(path)) {
+      throw new DOMException("File not found", "NotFoundError");
+    }
+    return new FakeFileSystemFileHandle(path);
+  }
+
+  async removeEntry(name: string): Promise<void> {
+    const path = `${this._prefix}/${name}`;
+    opfsFiles.delete(path);
+  }
+}
+
+const fakeStorageManager = {
+  getDirectory: async () => new FakeFileSystemDirectoryHandle("opfs"),
+  estimate: async () => ({ usage: 0, quota: 1_000_000_000 }),
+  persist: async () => true,
+  persisted: async () => true,
+};
+
+Object.defineProperty(globalThis.navigator, "storage", {
+  value: fakeStorageManager,
+  writable: true,
+  configurable: true,
+});
+
+// ─── WebCodecs stubs ──────────────────────────────────────────────────────────
+
+class FakeVideoEncoder {
+  state: "unconfigured" | "configured" | "closed" = "unconfigured";
+  private _output: (chunk: FakeEncodedVideoChunk, meta: unknown) => void;
+  private _error: (e: Error) => void;
+
+  constructor(init: {
+    output: (chunk: FakeEncodedVideoChunk, meta: unknown) => void;
+    error: (e: Error) => void;
+  }) {
+    this._output = init.output;
+    this._error = init.error;
+  }
+
+  configure(_config: unknown): void {
+    this.state = "configured";
+  }
+
+  encode(_frame: unknown, opts?: { keyFrame?: boolean }): void {}
+
+  async flush(): Promise<void> {}
+
+  close(): void {
+    this.state = "closed";
+  }
+}
+
+class FakeVideoDecoder {
+  state: "unconfigured" | "configured" | "closed" = "unconfigured";
+  private _output: (frame: FakeVideoFrame) => void;
+  private _error: (e: Error) => void;
+
+  constructor(init: {
+    output: (frame: FakeVideoFrame) => void;
+    error: (e: Error) => void;
+  }) {
+    this._output = init.output;
+    this._error = init.error;
+  }
+
+  configure(_config: unknown): void {
+    this.state = "configured";
+  }
+
+  decode(_chunk: unknown): void {}
+
+  async flush(): Promise<void> {}
+
+  close(): void {
+    this.state = "closed";
+  }
+}
+
+class FakeEncodedVideoChunk {
+  type: "key" | "delta";
+  timestamp: number;
+  duration: number | null;
+  byteLength: number;
+  private _data: Uint8Array;
+
+  constructor(init: {
+    type: "key" | "delta";
+    timestamp: number;
+    duration?: number;
+    data: ArrayBuffer | Uint8Array;
+  }) {
+    this.type = init.type;
+    this.timestamp = init.timestamp;
+    this.duration = init.duration ?? null;
+    this._data = init.data instanceof Uint8Array ? init.data : new Uint8Array(init.data);
+    this.byteLength = this._data.byteLength;
+  }
+
+  copyTo(dest: Uint8Array): void {
+    dest.set(this._data);
+  }
+}
+
+class FakeVideoFrame {
+  timestamp: number;
+  duration: number | null;
+  constructor(init: { timestamp: number; duration?: number }) {
+    this.timestamp = init.timestamp;
+    this.duration = init.duration ?? null;
+  }
+  close(): void {}
+}
+
+Object.defineProperty(globalThis, "VideoEncoder", {
+  value: FakeVideoEncoder,
+  writable: true,
+  configurable: true,
+});
+
+Object.defineProperty(globalThis, "VideoDecoder", {
+  value: FakeVideoDecoder,
+  writable: true,
+  configurable: true,
+});
+
+Object.defineProperty(globalThis, "EncodedVideoChunk", {
+  value: FakeEncodedVideoChunk,
+  writable: true,
+  configurable: true,
+});
+
+Object.defineProperty(globalThis, "VideoFrame", {
+  value: FakeVideoFrame,
+  writable: true,
+  configurable: true,
+});
+
+// ─── MediaSource stub ─────────────────────────────────────────────────────────
+
+class FakeMediaSource {
+  readyState: "closed" | "open" | "ended" = "closed";
+  sourceBuffers: unknown[] = [];
+
+  addSourceBuffer(_mimeType: string): unknown {
+    const buf = { appendBuffer: vi.fn(), remove: vi.fn() };
+    this.sourceBuffers.push(buf);
+    return buf;
+  }
+
+  endOfStream(): void {
+    this.readyState = "ended";
+  }
+
+  static isTypeSupported(_type: string): boolean {
+    return true;
+  }
+}
+
+Object.defineProperty(globalThis, "MediaSource", {
+  value: FakeMediaSource,
+  writable: true,
+  configurable: true,
+});
+
+// ─── MediaStreamTrackProcessor stub ──────────────────────────────────────────
+
+class FakeMediaStreamTrackProcessor {
+  readable: ReadableStream<unknown>;
+
+  constructor(_init: unknown) {
+    this.readable = new ReadableStream({
+      start(controller) {
+        controller.close(); // immediately done
+      },
+    });
+  }
+}
+
+Object.defineProperty(globalThis, "MediaStreamTrackProcessor", {
+  value: FakeMediaStreamTrackProcessor,
+  writable: true,
+  configurable: true,
+});
+
+// ─── requestAnimationFrame stub ───────────────────────────────────────────────
+
+if (typeof globalThis.requestAnimationFrame === "undefined") {
+  let rafId = 0;
+  Object.defineProperty(globalThis, "requestAnimationFrame", {
+    value: (cb: FrameRequestCallback) => {
+      const id = ++rafId;
+      setTimeout(() => cb(performance.now()), 16);
+      return id;
+    },
+    writable: true,
+    configurable: true,
+  });
+  Object.defineProperty(globalThis, "cancelAnimationFrame", {
+    value: (id: number) => clearTimeout(id),
+    writable: true,
+    configurable: true,
+  });
+}
+
+// React Testing Library requires this flag in test environments
+Object.defineProperty(globalThis, "IS_REACT_ACT_ENVIRONMENT", {
+  value: true,
+  writable: true,
+  configurable: true,
+});

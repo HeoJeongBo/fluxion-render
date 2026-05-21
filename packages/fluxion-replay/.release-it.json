@@ -1,0 +1,36 @@
+{
+  "$schema": "https://unpkg.com/release-it/schema/release-it.json",
+  "git": {
+    "commitMessage": "chore: release @heojeongbo/fluxion-replay v${version}",
+    "tagName": "fluxion-replay-v${version}",
+    "requireCleanWorkingDir": true,
+    "requireBranch": "main",
+    "push": true
+  },
+  "github": {
+    "release": true,
+    "releaseName": "fluxion-replay v${version}",
+    "releaseNotes": null
+  },
+  "npm": {
+    "publish": false
+  },
+  "hooks": {
+    "before:init": [
+      "pnpm --filter @heojeongbo/fluxion-replay typecheck",
+      "pnpm --filter @heojeongbo/fluxion-replay test",
+      "pnpm --filter @heojeongbo/fluxion-replay build"
+    ],
+    "after:bump": ["echo 'Version bumped to ${version}'"],
+    "after:release": [
+      "pnpm publish --access public --registry https://registry.npmjs.org --no-git-checks",
+      "echo 'Successfully released ${name} v${version} to ${repo.repository}.'"
+    ]
+  },
+  "plugins": {
+    "@release-it/conventional-changelog": {
+      "preset": "angular",
+      "infile": "CHANGELOG.md"
+    }
+  }
+}
