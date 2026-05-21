@@ -25,6 +25,26 @@ export interface ReplayPlayerOptions {
 
 const DEFAULT_PREFETCH_MS = 2_000;
 
+/** Returns the index of the first element with t > value (sorted ascending). */
+function upperBound(arr: SerializedFrame[], value: number): number {
+  let lo = 0;
+  let hi = arr.length;
+  while (lo < hi) {
+    const mid = (lo + hi) >>> 1;
+    if (arr[mid].t <= value) lo = mid + 1;
+    else hi = mid;
+  }
+  return lo;
+}
+
+/** Merges sorted `incoming` into sorted `target` in-place. */
+function mergeSorted(target: SerializedFrame[], incoming: SerializedFrame[]): void {
+  for (const frame of incoming) {
+    const pos = upperBound(target, frame.t);
+    target.splice(pos, 0, frame);
+  }
+}
+
 export class ReplayPlayer {
   private readonly _clock: VirtualClock;
   private readonly _store: ReplayStore;
@@ -156,14 +176,11 @@ export class ReplayPlayer {
       void this._prefetch(currentT);
     }
 
-    // Drain buffered frames up to currentT
-    const toEmit: SerializedFrame[] = [];
-    const remaining: SerializedFrame[] = [];
-    for (const f of this._prefetchBuffer) {
-      if (f.t <= currentT) toEmit.push(f);
-      else remaining.push(f);
-    }
-    this._prefetchBuffer = remaining;
+    // Drain buffered frames up to currentT.
+    // Buffer is kept sorted by t, so find the first frame past currentT with
+    // binary search and splice in O(k) instead of scanning the whole buffer.
+    const cutoff = upperBound(this._prefetchBuffer, currentT);
+    const toEmit = cutoff > 0 ? this._prefetchBuffer.splice(0, cutoff) : [];
 
     for (const f of toEmit) {
       const channel = this._channels.get(f.channelId);
@@ -187,8 +204,7 @@ export class ReplayPlayer {
     try {
       const frames = await this._store.getFrames(from, to);
       if (frames.length > 0) {
-        this._prefetchBuffer.push(...frames);
-        this._prefetchBuffer.sort((a, b) => a.t - b.t);
+        mergeSorted(this._prefetchBuffer, frames);
       }
     } catch {
       // Roll back so the range is retried next tick

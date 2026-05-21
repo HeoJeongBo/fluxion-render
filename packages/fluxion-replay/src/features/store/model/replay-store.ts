@@ -96,6 +96,7 @@ export class ReplayStore {
   }
 
   async getTimeRange(): Promise<{ earliest: number; latest: number } | null> {
+    if (!this._db) return null;
     const earliest = await this._querySingleT("next");
     if (earliest === null) return null;
     const latest = await this._querySingleT("prev");
@@ -153,13 +154,11 @@ export class ReplayStore {
     const root = this._opfsRoot;
     if (!root) return;
     try {
-      for await (const [name] of (root as unknown as AsyncIterable<[string, FileSystemHandle]>)) {
-        try {
-          await root.removeEntry(name, { recursive: true });
-        } catch {
-          // ignore individual failures
-        }
+      const names: string[] = [];
+      for await (const [name] of (root as unknown as { entries(): AsyncIterable<[string, FileSystemHandle]> }).entries()) {
+        names.push(name);
       }
+      await Promise.all(names.map((n) => root.removeEntry(n, { recursive: true }).catch(() => {})));
     } catch {
       // OPFS iteration not supported in all environments — skip silently
     }

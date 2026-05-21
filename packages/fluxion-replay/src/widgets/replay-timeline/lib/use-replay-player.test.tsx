@@ -102,4 +102,16 @@ describe("useReplayPlayer", () => {
     expect(seekSpy).toHaveBeenCalledWith(3000);
     player.dispose();
   });
+
+  it("seek() immediately updates currentT even while paused", () => {
+    const player = makePlayer();
+    const { result } = renderHook(() => useReplayPlayer(player));
+    // Start and pause so the player has a known state
+    act(() => { player.play(); });
+    act(() => { player.pause(); });
+    // Seek to a specific position — currentT must update without waiting for a tick
+    act(() => { result.current.seek(7000); });
+    expect(result.current.currentT).toBe(7000);
+    player.dispose();
+  });
 });

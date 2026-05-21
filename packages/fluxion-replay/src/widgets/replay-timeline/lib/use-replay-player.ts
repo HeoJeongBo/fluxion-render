@@ -47,7 +47,13 @@ export function useReplayPlayer(player: ReplayPlayer | null): UseReplayPlayerRes
   const play = useCallback((rate?: number) => player?.play(rate), [player]);
   const pause = useCallback(() => player?.pause(), [player]);
   const stop = useCallback(() => player?.stop(), [player]);
-  const seek = useCallback((t: number) => player?.seek(t), [player]);
+  const seek = useCallback((t: number) => {
+    if (!player) return;
+    player.seek(t);
+    // Update currentT immediately so the timeline scrubber moves even while paused
+    lastTRef.current = t;
+    setCurrentT(t);
+  }, [player]);
 
   return { player, state, currentT, play, pause, stop, seek };
 }

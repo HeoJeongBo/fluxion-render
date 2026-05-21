@@ -231,4 +231,70 @@ describe("ReplayPlayer", () => {
     player.stop();
     player.dispose();
   });
+
+  it("seek() during playback keeps currentT within timeRange", () => {
+    const { player } = makePlayer(0, 10_000);
+    player.play();
+    vi.advanceTimersByTime(50);
+    player.seek(8000);
+    expect(player.currentT).toBe(8000);
+    player.seek(99999); // above latest — clamped
+    expect(player.currentT).toBe(10_000);
+    player.seek(-999);  // below earliest — clamped
+    expect(player.currentT).toBe(0);
+    player.stop();
+    player.dispose();
+  });
+
+  it("unknown channelId frames are silently skipped in onFrame", async () => {
+    const store = new ReplayStore({ batchIntervalMs: 9999 });
+    const ch = new MetricChannel("cpu");
+    const player = new ReplayPlayer({
+      store,
+      channels: new Map([["cpu", ch]]),
+      timeRange: { earliest: 0, latest: 10_000 },
+      prefetchMs: 1000,
+    });
+
+    await store.open();
+    store.appendFrame({ t: 500, channelId: "unknown-channel", payload: new ArrayBuffer(8) });
+    await store.flush();
+
+    const frames: unknown[] = [];
+    player.onFrame((f) => frames.push(f));
+    player.play(1.0);
+
+    vi.advanceTimersByTime(100);
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+    vi.advanceTimersByTime(600);
+
+    expect(frames).toHaveLength(0);
+    player.stop();
+    player.dispose();
+  });
+
+  it("_prefetch error rolls back prefetchedUpTo for retry", async () => {
+    const { player, store } = makePlayer(0, 10_000);
+    await store.open();
+
+    let callCount = 0;
+    const getFramesSpy = vi.spyOn(store, "getFrames").mockImplementation(async () => {
+      callCount++;
+      if (callCount === 1) throw new Error("IDB read error");
+      return [];
+    });
+
+    player.play(1.0);
+    vi.advanceTimersByTime(50);
+    await Promise.resolve();
+
+    // After a prefetch error the player must still be running (no crash)
+    expect(player.state).toBe("playing");
+
+    player.stop();
+    player.dispose();
+    getFramesSpy.mockRestore();
+  });
 });

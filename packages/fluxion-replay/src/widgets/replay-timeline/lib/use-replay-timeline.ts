@@ -7,6 +7,13 @@ export interface BufferedRange {
   readonly end: number;
 }
 
+export interface TimelineProgress {
+  readonly currentMs: number;
+  readonly durationMs: number;
+  readonly remainingMs: number;
+  readonly percent: number;
+}
+
 export interface UseReplayTimelineResult {
   currentT: number;
   durationMs: number;
@@ -16,6 +23,12 @@ export interface UseReplayTimelineResult {
   fraction: number;
   seekTo: (fraction: number) => void;
   seekToMs: (t: number) => void;
+  seekForward: (ms: number) => void;
+  seekBackward: (ms: number) => void;
+  seekToPercent: (percent: number) => void;
+  progress: TimelineProgress;
+  isAtStart: boolean;
+  isAtLiveEdge: boolean;
 }
 
 export function useReplayTimeline(
@@ -29,6 +42,10 @@ export function useReplayTimeline(
   const durationMs = Math.max(0, latest - earliest);
 
   const fraction = durationMs > 0 ? Math.min(1, Math.max(0, (currentT - earliest) / durationMs)) : 0;
+
+  const currentMs = Math.max(0, currentT - earliest);
+  const remainingMs = Math.max(0, latest - currentT);
+  const percent = durationMs > 0 ? (currentMs / durationMs) * 100 : 0;
 
   const seekTo = useCallback(
     (f: number) => {
@@ -46,6 +63,27 @@ export function useReplayTimeline(
     [seek],
   );
 
+  const seekForward = useCallback(
+    (ms: number) => {
+      seek(currentT + ms);
+    },
+    [seek, currentT],
+  );
+
+  const seekBackward = useCallback(
+    (ms: number) => {
+      seek(currentT - ms);
+    },
+    [seek, currentT],
+  );
+
+  const seekToPercent = useCallback(
+    (p: number) => {
+      seekTo(Math.min(100, Math.max(0, p)) / 100);
+    },
+    [seekTo],
+  );
+
   return {
     currentT,
     durationMs,
@@ -55,5 +93,11 @@ export function useReplayTimeline(
     fraction,
     seekTo,
     seekToMs,
+    seekForward,
+    seekBackward,
+    seekToPercent,
+    progress: { currentMs, durationMs, remainingMs, percent },
+    isAtStart: currentT <= earliest,
+    isAtLiveEdge: durationMs === 0 || currentT >= latest,
   };
 }

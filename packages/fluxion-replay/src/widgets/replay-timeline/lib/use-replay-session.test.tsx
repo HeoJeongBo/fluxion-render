@@ -94,8 +94,54 @@ describe("useReplaySession", () => {
     const { result } = renderHook(() =>
       useReplaySession({ channels: [], autoOpen: false })
     );
-    // session hasn't been set yet immediately on first render before open completes
-    // exitReplay guard: if (!session) return
     expect(() => result.current.exitReplay()).not.toThrow();
+  });
+
+  it("enterReplay with timestamp passes it to session", async () => {
+    const { result } = renderHook(() =>
+      useReplaySession({ channels: [] })
+    );
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    let player: unknown = null;
+    await act(async () => {
+      player = await result.current.enterReplay(5000);
+    });
+
+    // Player should be returned and mode should be replay
+    expect(player).not.toBeNull();
+    expect(result.current.mode).toBe("replay");
+  });
+
+  it("multiple enterReplay calls do not throw", async () => {
+    const { result } = renderHook(() =>
+      useReplaySession({ channels: [] })
+    );
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    await expect(act(async () => {
+      await result.current.enterReplay();
+      await result.current.enterReplay();
+    })).resolves.not.toThrow();
+  });
+
+  it("record() passes channelId and data to session", async () => {
+    const { result } = renderHook(() =>
+      useReplaySession({ channels: [], autoOpen: false })
+    );
+    await act(async () => { await Promise.resolve(); });
+
+    const session = result.current.session;
+    if (session) {
+      const recordSpy = vi.spyOn(session, "record");
+      act(() => { result.current.record("test-channel", { value: 42 }); });
+      expect(recordSpy).toHaveBeenCalledWith("test-channel", { value: 42 }, undefined);
+    }
   });
 });

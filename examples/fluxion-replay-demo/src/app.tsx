@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import {
   LogChannel,
   MetricChannel,
@@ -162,8 +162,13 @@ export function App() {
   const videoRecorderRef = useRef<VideoRecorder | null>(null);
   const metricIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
-  const [cpuHistory, setCpuHistory] = useState<number[]>([]);
-  const [memHistory, setMemHistory] = useState<number[]>([]);
+  const [metrics, dispatchMetrics] = useReducer(
+    (state: { cpu: number[]; mem: number[] }, action: { cpu: number; mem: number } | "reset") =>
+      action === "reset"
+        ? { cpu: [], mem: [] }
+        : { cpu: [...state.cpu.slice(-39), action.cpu], mem: [...state.mem.slice(-39), action.mem] },
+    { cpu: [], mem: [] },
+  );
   const [recElapsedSec, setRecElapsedSec] = useState(0);
   const recTickRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [liveLogs, setLiveLogs] = useState<LiveLogEntry[]>([]);
@@ -226,8 +231,7 @@ export function App() {
         const mem = +(40 + Math.random() * 30).toFixed(1);
         record(CPU_CHANNEL_ID, { name: "cpu", value: cpu } as MetricSample);
         record(MEM_CHANNEL_ID, { name: "memory", value: mem } as MetricSample);
-        setCpuHistory((h) => [...h.slice(-39), cpu]);
-        setMemHistory((h) => [...h.slice(-39), mem]);
+        dispatchMetrics({ cpu, mem });
 
         if (Math.random() < 0.06) {
           const levels = ["info", "warn", "error"] as const;
@@ -427,8 +431,7 @@ export function App() {
               <button
                 onClick={async () => {
                   await session?.clearRecording();
-                  setCpuHistory([]);
-                  setMemHistory([]);
+                  dispatchMetrics("reset");
                   setLiveLogs([]);
                   setRecElapsedSec(0);
                 }}
@@ -608,8 +611,8 @@ export function App() {
           >
             {isRecording ? (
               <>
-                <Sparkline values={cpuHistory} color={T.accent} label="CPU %" />
-                <Sparkline values={memHistory} color={T.green} label="Memory %" />
+                <Sparkline values={metrics.cpu} color={T.accent} label="CPU %" />
+                <Sparkline values={metrics.mem} color={T.green} label="Memory %" />
                 <div style={{ fontSize: 11, color: T.textMuted, marginTop: 4 }}>
                   Recording metrics via{" "}
                   <code style={{ color: T.textSub }}>MetricChannel</code> + video via{" "}
