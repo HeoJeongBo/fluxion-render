@@ -1,10 +1,12 @@
 # @heojeongbo/fluxion-worker
 
+[![npm](https://img.shields.io/npm/v/@heojeongbo/fluxion-worker)](https://www.npmjs.com/package/@heojeongbo/fluxion-worker)
+
 Generic Web Worker pool and utilities. Zero dependencies, framework-agnostic.
 
 Used internally by [`@heojeongbo/fluxion-render`](https://www.npmjs.com/package/@heojeongbo/fluxion-render) but designed to work standalone with any worker script.
 
-```
+```bash
 npm install @heojeongbo/fluxion-worker
 ```
 

@@ -1,12 +1,16 @@
 # @heojeongbo/fluxion-render
 
+[![npm](https://img.shields.io/npm/v/@heojeongbo/fluxion-render)](https://www.npmjs.com/package/@heojeongbo/fluxion-render)
+
 High-performance OffscreenCanvas rendering engine for real-time data visualization.
 
 Built for robotics and sensor systems: streaming line charts, LiDAR point clouds, and high-frequency data pipelines up to 120Hz+. Rendering runs entirely in Web Workers — the main thread is never blocked.
 
-```
+```bash
 npm install @heojeongbo/fluxion-render
 ```
+
+> **Need time-travel replay?** See [`@heojeongbo/fluxion-replay`](https://www.npmjs.com/package/@heojeongbo/fluxion-replay) — record any data stream and scrub back through the last N minutes, including video.
 
 ---
 

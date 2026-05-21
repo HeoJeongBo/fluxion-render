@@ -35,9 +35,10 @@ Map paths to scopes using this table:
 |---|---|
 | `packages/fluxion-render/` | `render` |
 | `packages/fluxion-worker/` | `worker` |
+| `packages/fluxion-replay/` | `replay` |
 | `examples/` | `examples` |
 | Root files (`package.json`, `pnpm-workspace.yaml`, `.npmrc`, etc.) | `root` |
-| Multiple packages changed | list each, e.g. `render,worker` |
+| Multiple packages changed | list each, e.g. `render,worker` or `replay,examples` |
 
 ### Step 3: Infer commit type from the diff
 

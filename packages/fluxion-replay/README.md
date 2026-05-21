@@ -1,5 +1,7 @@
 # @heojeongbo/fluxion-replay
 
+[![npm](https://img.shields.io/npm/v/@heojeongbo/fluxion-replay)](https://www.npmjs.com/package/@heojeongbo/fluxion-replay)
+
 Time-travel replay for real-time dashboards. Record any stream of typed data (metrics, logs, ROS messages, screen video) and scrub back through the last N minutes — all in-browser with no backend.
 
 Built for robotics, ROS2 monitoring, sensor dashboards, and anything that needs "what just happened?"
