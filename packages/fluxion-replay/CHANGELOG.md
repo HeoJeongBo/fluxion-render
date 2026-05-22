@@ -1,5 +1,27 @@
 # Changelog
 
+# [0.3.0](https://github-personal/HeoJeongBo/fluxion-render/compare/fluxion-replay-v0.2.1...fluxion-replay-v0.3.0) (2026-05-22)
+
+
+### Bug Fixes
+
+* **examples:** auto-play on DVR entry and fix scrubber drag-lock ([8a8b30e](https://github-personal/HeoJeongBo/fluxion-render/commit/8a8b30ef6b153c3fa2523dfc0a46be5fe3cd91d0))
+* **examples:** freeze timeline latest on DVR entry for correct scrubber behavior ([bd2e7ec](https://github-personal/HeoJeongBo/fluxion-render/commit/bd2e7ec2c51f21053c2d64ebe5087f1389d95789))
+* **examples:** move storage capacity bar above timeline scrubber ([c1c8c1c](https://github-personal/HeoJeongBo/fluxion-render/commit/c1c8c1c4af74412c8b243288a906b880c03f231b))
+* **examples:** snap scrubber to next segment on gap and fix DVR page overflow ([e6fd8de](https://github-personal/HeoJeongBo/fluxion-render/commit/e6fd8deabca1e9c9c876001bcce8e0582da6686c))
+* **replay,examples:** fix VP8 decoder dimension mismatch on Retina displays ([79b2b32](https://github-personal/HeoJeongBo/fluxion-render/commit/79b2b3297275dd4d75fbaea12b517c9a68678636))
+* **replay,examples:** revert seenKeyframe guard and fix timeline overflow ([6908302](https://github-personal/HeoJeongBo/fluxion-render/commit/69083025f9bf185c76b2f97aa3170e563769f9a4))
+* **replay:** add codedWidth/codedHeight to VideoChannel round-trip tests ([fd279c2](https://github-personal/HeoJeongBo/fluxion-render/commit/fd279c29dd192e178cc641b924b0550f982364a1))
+* **replay:** extend seek lookback to 3s to guarantee keyframe before decode ([3427a49](https://github-personal/HeoJeongBo/fluxion-render/commit/3427a4938f6a3708519767a927e9cace4c81a213))
+
+
+### Features
+
+* **examples:** auto-return to live when replay reaches the live edge ([82521b2](https://github-personal/HeoJeongBo/fluxion-render/commit/82521b2fbd96eff2c972176fc88671168af3da70))
+* **replay,examples:** add DVR time-travel demo and extend useReplayTimeline ([e7f089f](https://github-personal/HeoJeongBo/fluxion-render/commit/e7f089ff4ee0ed9e8113bba05eefe75bfe03f5da))
+* **replay,examples:** add perf fixes, DX improvements, storage API, and new hooks ([f43ac1c](https://github-personal/HeoJeongBo/fluxion-render/commit/f43ac1c5c59dad150705515502d6998a93d30465))
+* **replay,examples:** recording segments, gap visualization, and video fix ([29bd089](https://github-personal/HeoJeongBo/fluxion-render/commit/29bd089fc67256bde3da13f217c62f35620ea0d3))
+
 ## [0.2.1](https://github-personal/HeoJeongBo/fluxion-render/compare/fluxion-replay-v0.2.0...fluxion-replay-v0.2.1) (2026-05-21)
 
 # [0.2.0](https://github-personal/HeoJeongBo/fluxion-render/compare/v0.5.0...fluxion-replay-v0.2.0) (2026-05-21)
