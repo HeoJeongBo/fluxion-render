@@ -1,7 +1,7 @@
 import type { BaseChannel } from "../../../shared/model/base-channel";
 import { ReplayPlayer } from "../../player/model/replay-player";
 import { ReplayRecorder } from "../../recorder/model/replay-recorder";
-import { ReplayStore, type ReplayStoreOptions } from "../../store/model/replay-store";
+import { ReplayStore, type ReplayStoreOptions, type StorageInfo } from "../../store/model/replay-store";
 
 export type ReplaySessionMode = "live" | "replay";
 
@@ -84,6 +84,10 @@ export class ReplaySession {
 
   async getTimeRange(): Promise<{ earliest: number; latest: number } | null> {
     return this._store.getTimeRange();
+  }
+
+  getStorageInfo(): Promise<StorageInfo> {
+    return this._store.getStorageInfo();
   }
 
   async clearRecording(): Promise<void> {

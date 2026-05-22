@@ -37,12 +37,20 @@ function upperBound(arr: SerializedFrame[], value: number): number {
   return lo;
 }
 
-/** Merges sorted `incoming` into sorted `target` in-place. */
+/** Merges sorted `incoming` into sorted `target` in-place — O(n+m). */
 function mergeSorted(target: SerializedFrame[], incoming: SerializedFrame[]): void {
-  for (const frame of incoming) {
-    const pos = upperBound(target, frame.t);
-    target.splice(pos, 0, frame);
+  if (incoming.length === 0) return;
+  if (target.length === 0) { target.push(...incoming); return; }
+  const result: SerializedFrame[] = [];
+  let i = 0, j = 0;
+  while (i < target.length && j < incoming.length) {
+    if (target[i].t <= incoming[j].t) result.push(target[i++]);
+    else result.push(incoming[j++]);
   }
+  while (i < target.length) result.push(target[i++]);
+  while (j < incoming.length) result.push(incoming[j++]);
+  target.length = 0;
+  for (const f of result) target.push(f);
 }
 
 export class ReplayPlayer {
@@ -58,6 +66,7 @@ export class ReplayPlayer {
   private _endListeners = new Set<EndListener>();
   private _prefetchBuffer: SerializedFrame[] = [];
   private _prefetchedUpTo: number;
+  private _isPrefetching = false;
   private _offTick: (() => void) | null = null;
   private _ended = false;
 
@@ -171,8 +180,8 @@ export class ReplayPlayer {
       return;
     }
 
-    // Prefetch ahead
-    if (currentT + this._prefetchMs > this._prefetchedUpTo) {
+    // Prefetch ahead — skip if a fetch is already in-flight
+    if (!this._isPrefetching && currentT + this._prefetchMs > this._prefetchedUpTo) {
       void this._prefetch(currentT);
     }
 
@@ -198,7 +207,7 @@ export class ReplayPlayer {
     const from = this._prefetchedUpTo;
     const to = Math.min(currentT + this._prefetchMs, this._timeRange.latest);
     if (from >= to) return;
-    // Claim the range before awaiting to prevent duplicate queries from concurrent ticks
+    this._isPrefetching = true;
     this._prefetchedUpTo = to;
 
     try {
@@ -209,6 +218,8 @@ export class ReplayPlayer {
     } catch {
       // Roll back so the range is retried next tick
       this._prefetchedUpTo = from;
+    } finally {
+      this._isPrefetching = false;
     }
   }
 }

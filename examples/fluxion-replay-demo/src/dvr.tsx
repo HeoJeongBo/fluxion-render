@@ -4,13 +4,16 @@ import {
   MetricChannel,
   VideoChannel,
   VideoRecorder,
-  VideoReplayer,
   type ReplayPlayerFrame,
 } from "@heojeongbo/fluxion-replay";
 import {
+  useDisplayMedia,
+  useLiveTimeRange,
   useReplayPlayer,
   useReplaySession,
   useReplayTimeline,
+  useStorageInfo,
+  useVideoReplayer,
 } from "@heojeongbo/fluxion-replay/react";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -71,6 +74,13 @@ function formatMs(ms: number): string {
   return `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
 }
 
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
+}
+
 function btn(active: boolean, danger = false, highlight = false): React.CSSProperties {
   return {
     padding: "5px 14px",
@@ -127,7 +137,6 @@ export function DvrApp() {
 
   // ── Recording state ────────────────────────────────────────────────────────
   const [isRecording, setIsRecording] = useState(false);
-  const streamRef = useRef<MediaStream | null>(null);
   const videoRecorderRef = useRef<VideoRecorder | null>(null);
   const metricIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const logIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -142,48 +151,47 @@ export function DvrApp() {
   );
   const [liveLogs, setLiveLogs] = useState<LiveLogEntry[]>([]);
 
+  // ── Package hooks ──────────────────────────────────────────────────────────
+  const { stream, start: startCapture, stop: stopCapture } = useDisplayMedia();
+  const { timeRange, seed: seedTimeRange } = useLiveTimeRange(isRecording ? session : null);
+  const storageInfo = useStorageInfo(session, { intervalMs: 3000 });
+
   // ── DVR / player state ────────────────────────────────────────────────────
-  // isDvr: true = time-travel mode, false = live edge
   const [isDvr, setIsDvr] = useState(false);
   const [player, setPlayer] = useState<ReturnType<typeof useReplayPlayer>["player"]>(null);
-  const [timeRange, setTimeRange] = useState<{ earliest: number; latest: number } | null>(null);
   const [rate, setRate] = useState(1.0);
   const [dvrLogs, setDvrLogs] = useState<ReplayPlayerFrame[]>([]);
 
-  // live edge tracking: update timeRange every second while recording
-  const liveRangeTickRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  // live video element (shown in live mode)
   const liveVideoRef = useRef<HTMLVideoElement>(null);
-  const videoReplayerRef = useRef<VideoReplayer | null>(null);
 
   const replayPlayer = useReplayPlayer(player);
   const timeline = useReplayTimeline(player, timeRange);
-
   const isPlaying = replayPlayer.state === "playing";
-  const elapsed = replayPlayer.currentT - (timeRange?.earliest ?? 0);
-  const total = (timeRange?.latest ?? 0) - (timeRange?.earliest ?? 0);
+
+  // Wire VideoReplayer in DVR mode — package hook handles create/dispose/onFrame
+  useVideoReplayer(isDvr ? player : null, canvasRef, session?.store ?? null as never, VIDEO_CHANNEL_ID);
+
+  // Sync live video srcObject when stream changes
+  useEffect(() => {
+    if (liveVideoRef.current) {
+      liveVideoRef.current.srcObject = stream;
+      if (stream) void liveVideoRef.current.play();
+    }
+  }, [stream]);
 
   // ── Start recording ────────────────────────────────────────────────────────
   const startRecording = useCallback(async () => {
     if (!isReady || !session) return;
     try {
-      const stream = await navigator.mediaDevices.getDisplayMedia({ video: { frameRate: 30 }, audio: false });
-      streamRef.current = stream;
-
-      if (liveVideoRef.current) {
-        liveVideoRef.current.srcObject = stream;
-        void liveVideoRef.current.play();
-      }
-
-      const videoTrack = stream.getVideoTracks()[0];
+      const capturedStream = await startCapture({ video: { frameRate: 30 } as MediaTrackConstraints, audio: false });
+      const videoTrack = capturedStream.getVideoTracks()[0];
       if (!videoTrack) throw new Error("No video track");
 
       await session.startRecording();
-      // Immediately seed timeRange so the scrubber is enabled from the first frame
+      // Seed timeRange immediately so the scrubber is enabled from the first frame
       const startNow = Date.now();
-      setTimeRange({ earliest: startNow, latest: startNow });
+      seedTimeRange({ earliest: startNow, latest: startNow });
 
       const vr = new VideoRecorder({
         channelId: VIDEO_CHANNEL_ID,
@@ -199,10 +207,9 @@ export function DvrApp() {
         await vr.start(videoTrack);
       } catch (videoErr) {
         console.warn("[DVR] VideoRecorder failed to start (WebCodecs may be unavailable):", videoErr);
-        // Continue without video recording — metric/log channels still work
       }
 
-      // Metric simulation (200ms) — batched into single dispatch
+      // Metric simulation (200ms)
       metricIntervalRef.current = setInterval(() => {
         const cpu = +(30 + Math.random() * 50).toFixed(1);
         const mem = +(40 + Math.random() * 30).toFixed(1);
@@ -211,7 +218,7 @@ export function DvrApp() {
         dispatchMetrics({ cpu, mem });
       }, 200);
 
-      // Log ticker (2s) — guaranteed log entry
+      // Log ticker (2s)
       logIntervalRef.current = setInterval(() => {
         const now = Date.now();
         const useSystem = Math.random() < 0.5;
@@ -231,18 +238,6 @@ export function DvrApp() {
         setRecElapsedSec(Math.floor((Date.now() - startMs) / 1000));
       }, 1000);
 
-      // Live timeRange tracker — keeps timeline bar up to date while recording
-      const pollRange = async () => {
-        try {
-          const range = await session.getTimeRange();
-          if (range) setTimeRange(range);
-        } catch {
-          // Store may not be open yet or session was replaced — ignore
-        }
-      };
-      void pollRange();
-      liveRangeTickRef.current = setInterval(pollRange, 500);
-
       videoTrack.addEventListener("ended", () => { void stopRecording(); }, { once: true });
       setIsRecording(true);
     } catch (e) {
@@ -251,28 +246,24 @@ export function DvrApp() {
         console.error("[DVR] startRecording failed:", err);
       }
     }
-  }, [isReady, session, record]);
+  }, [isReady, session, record, startCapture, seedTimeRange]);
 
   const stopRecording = useCallback(async () => {
     clearInterval(metricIntervalRef.current ?? undefined);
     clearInterval(logIntervalRef.current ?? undefined);
     clearInterval(recTickRef.current ?? undefined);
-    clearInterval(liveRangeTickRef.current ?? undefined);
     metricIntervalRef.current = null;
     logIntervalRef.current = null;
     recTickRef.current = null;
-    liveRangeTickRef.current = null;
     setRecElapsedSec(0);
     setLiveLogs([]);
     videoRecorderRef.current?.stop();
     videoRecorderRef.current = null;
-    streamRef.current?.getTracks().forEach((t) => t.stop());
-    streamRef.current = null;
-    if (liveVideoRef.current) liveVideoRef.current.srcObject = null;
+    stopCapture();
     session?.stopRecording();
     setIsRecording(false);
     setIsDvr(false);
-  }, [session]);
+  }, [session, stopCapture]);
 
   useEffect(() => () => { void stopRecording(); }, [stopRecording]);
 
@@ -281,28 +272,13 @@ export function DvrApp() {
     if (!session) return;
     const range = timeRange ?? { earliest: Date.now() - 60_000, latest: Date.now() };
 
-    // Pause live video
-    liveVideoRef.current?.pause();
-
     setDvrLogs([]);
     const p = await enterReplay(seekT ?? range.earliest);
     setPlayer(p);
 
-    if (canvasRef.current) {
-      videoReplayerRef.current?.dispose();
-      videoReplayerRef.current = new VideoReplayer({
-        channelId: VIDEO_CHANNEL_ID,
-        store: session.store,
-        outputCanvas: canvasRef.current,
-        decoderConfig: { codec: "vp8", codedWidth: 1280, codedHeight: 720 },
-      });
-    }
-
+    // Wire non-video frame log listener
     p?.onFrame((frame) => {
-      if (frame.channelId === VIDEO_CHANNEL_ID) {
-        videoReplayerRef.current?.feedFrame(frame);
-        return;
-      }
+      if (frame.channelId === VIDEO_CHANNEL_ID) return;
       setDvrLogs((prev) => [...prev.slice(-99), frame]);
     });
 
@@ -312,21 +288,19 @@ export function DvrApp() {
   // ── Return to live edge ────────────────────────────────────────────────────
   const goLive = useCallback(() => {
     player?.stop();
-    videoReplayerRef.current?.dispose();
-    videoReplayerRef.current = null;
     setPlayer(null);
     setDvrLogs([]);
     exitReplay();
     setIsDvr(false);
 
     // Resume live video
-    if (liveVideoRef.current && streamRef.current) {
-      liveVideoRef.current.srcObject = streamRef.current;
+    if (liveVideoRef.current && stream) {
+      liveVideoRef.current.srcObject = stream;
       void liveVideoRef.current.play();
     }
-  }, [player, exitReplay]);
+  }, [player, exitReplay, stream]);
 
-  // ── Timeline scrub: entering DVR automatically ─────────────────────────────
+  // ── Timeline scrub ─────────────────────────────────────────────────────────
   const handleSeek = useCallback((fraction: number) => {
     if (!timeRange) return;
     const t = timeRange.earliest + fraction * (timeRange.latest - timeRange.earliest);
@@ -362,28 +336,27 @@ export function DvrApp() {
                 await session?.clearRecording();
                 dispatchMetrics("reset");
                 setLiveLogs([]);
-                setTimeRange(null);
               }} style={btn(false)}>↺ Clear</button>
               <button onClick={() => void startRecording()} style={btn(true)}>⏺ Start Recording</button>
             </>
           )}
 
-          {/* Recording + live mode */}
-          {isRecording && !isDvr && (
+          {/* REC indicator — shown whenever recording */}
+          {isRecording && (
             <>
               <span style={{ color: T.red, fontSize: 11, fontWeight: 600 }}>● REC</span>
               <span style={{ color: T.textSub, fontSize: 11, fontVariantNumeric: "tabular-nums", minWidth: 44 }}>
                 {formatMs(recElapsedSec * 1000)}
               </span>
               <span style={{ color: T.textMuted, fontSize: 10 }}>/ 10:00 max</span>
-              <button onClick={() => void stopRecording()} style={btn(false, true)}>■ Stop</button>
+              {!isDvr && <button onClick={() => void stopRecording()} style={btn(false, true)}>■ Stop</button>}
             </>
           )}
 
-          {/* DVR / time-travel mode */}
+          {/* DVR playback controls */}
           {isDvr && (
             <>
-              <span style={{ color: T.textMuted, fontSize: 11 }}>TIME-TRAVEL</span>
+              <div style={{ width: 1, height: 16, background: T.border, margin: "0 4px" }} />
               <button onClick={() => (isPlaying ? player?.pause() : player?.play(rate))} style={btn(true)}>
                 {isPlaying ? "⏸" : "▶"} {isPlaying ? "Pause" : "Play"}
               </button>
@@ -393,13 +366,32 @@ export function DvrApp() {
                   {r}×
                 </button>
               ))}
-              <span style={{ fontVariantNumeric: "tabular-nums", color: T.textSub, fontSize: 11, minWidth: 80, textAlign: "right" }}>
-                {formatMs(elapsed)} / {formatMs(total)}
-              </span>
+              {/* Behind-live delay */}
+              {isRecording && timeRange && (
+                <span style={{ fontVariantNumeric: "tabular-nums", color: T.yellow, fontSize: 11, minWidth: 80 }}>
+                  -{formatMs(timeRange.latest - replayPlayer.currentT)} behind
+                </span>
+              )}
+              {/* GO LIVE chip */}
               {isRecording && (
-                <button onClick={goLive} style={btn(false, false, true)}>▶ GO LIVE</button>
+                <button onClick={goLive} style={{
+                  padding: "4px 12px", borderRadius: 20, cursor: "pointer",
+                  fontSize: 11, fontWeight: 700, letterSpacing: "0.04em",
+                  border: "none", background: T.red, color: "#fff",
+                  display: "flex", alignItems: "center", gap: 5,
+                }}>
+                  <span style={{ fontSize: 8 }}>●</span> LIVE
+                </button>
+              )}
+              {!isRecording && (
+                <button onClick={() => void stopRecording()} style={btn(false, true)}>■ Stop</button>
               )}
             </>
+          )}
+
+          {/* Stop button in live mode */}
+          {isRecording && !isDvr && (
+            <button onClick={() => void stopRecording()} style={btn(false, true)}>■ Stop</button>
           )}
         </div>
       </div>
@@ -410,7 +402,6 @@ export function DvrApp() {
         <div style={{ flex: "0 0 auto", width: "60%", display: "flex", flexDirection: "column", borderRight: `1px solid ${T.border}` }}>
           {/* Video/canvas */}
           <div style={{ flex: "0 0 auto", aspectRatio: "16/9", background: "#000", position: "relative", maxHeight: "55%" }}>
-            {/* Live video — visible when not in DVR mode */}
             <video
               ref={liveVideoRef}
               autoPlay muted playsInline
@@ -421,7 +412,6 @@ export function DvrApp() {
                 transition: "opacity 0.2s",
               }}
             />
-            {/* Replay canvas — visible when in DVR mode */}
             <canvas
               ref={canvasRef}
               width={1280} height={720}
@@ -442,20 +432,12 @@ export function DvrApp() {
                 <div style={{ fontSize: 12 }}>Click "Start Recording" to begin</div>
               </div>
             )}
-            {/* DVR badge */}
-            {isDvr && (
-              <div style={{
-                position: "absolute", top: 8, left: 8,
-                background: "rgba(0,0,0,0.7)", borderRadius: 4,
-                padding: "2px 8px", fontSize: 10, fontWeight: 700, color: T.yellow,
-                letterSpacing: "0.08em",
-              }}>⏪ DVR</div>
-            )}
-            {/* LIVE badge */}
+            {/* LIVE badge — only in live mode */}
             {isRecording && !isDvr && (
               <div style={{
                 position: "absolute", top: 8, left: 8,
-                background: "rgba(0,0,0,0.7)", borderRadius: 4,
+                background: "rgba(248,113,113,0.18)", border: `1px solid ${T.red}`,
+                borderRadius: 4,
                 padding: "2px 8px", fontSize: 10, fontWeight: 700, color: T.red,
                 display: "flex", alignItems: "center", gap: 4, letterSpacing: "0.08em",
               }}>
@@ -535,7 +517,7 @@ export function DvrApp() {
         </div>
       </div>
 
-      {/* ── Timeline bar (always shown when recording or has data) ── */}
+      {/* ── Timeline bar ── */}
       {(isRecording || timeRange) && (
         <div style={{
           flexShrink: 0, background: T.panel,
@@ -543,22 +525,51 @@ export function DvrApp() {
           padding: "6px 16px 8px",
         }}>
           {/* Time labels */}
-          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, color: T.textMuted, marginBottom: 2 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 10, color: T.textMuted, marginBottom: 2 }}>
             <span>{timeRange ? new Date(timeRange.earliest).toLocaleTimeString("en-US", { hour12: false }) : "--:--:--"}</span>
-            <span style={{ display: "flex", alignItems: "center", gap: 4 }}>
-              {isRecording && !isDvr && <span style={{ color: T.red, fontSize: 9 }}>●</span>}
-              {timeRange ? new Date(timeRange.latest).toLocaleTimeString("en-US", { hour12: false }) : "--:--:--"}
-              {isRecording && <span style={{ color: T.textMuted, fontSize: 9, marginLeft: 2 }}>LIVE</span>}
-            </span>
+            {isDvr && isRecording ? (
+              <button onClick={goLive} style={{
+                padding: "2px 8px", borderRadius: 12, cursor: "pointer",
+                fontSize: 10, fontWeight: 700, letterSpacing: "0.04em",
+                border: `1px solid ${T.red}`, background: "rgba(248,113,113,0.15)",
+                color: T.red, display: "flex", alignItems: "center", gap: 4,
+              }}>
+                <span style={{ fontSize: 7 }}>●</span> LIVE
+              </button>
+            ) : (
+              <span style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                {isRecording && <span style={{ color: T.red, fontSize: 9 }}>●</span>}
+                {timeRange ? new Date(timeRange.latest).toLocaleTimeString("en-US", { hour12: false }) : "--:--:--"}
+                {isRecording && <span style={{ color: T.textMuted, fontSize: 9, marginLeft: 2 }}>LIVE</span>}
+              </span>
+            )}
           </div>
 
-          {/* Unified scrubber — stays mounted so drag is never interrupted */}
+          {/* Unified scrubber */}
           <UnifiedScrubber
             isDvr={isDvr}
             dvrFraction={timeline.fraction}
             disabled={!timeRange}
             onSeek={handleSeek}
           />
+
+          {/* Storage capacity bar */}
+          {storageInfo && (
+            <div style={{ marginTop: 4, display: "flex", alignItems: "center", gap: 8 }}>
+              <div style={{ flex: 1, height: 3, background: T.border, borderRadius: 2, overflow: "hidden" }}>
+                <div style={{
+                  height: "100%", borderRadius: 2,
+                  width: `${Math.min(100, storageInfo.percentUsed)}%`,
+                  background: storageInfo.percentUsed > 80 ? T.red : storageInfo.percentUsed > 50 ? T.yellow : T.accent,
+                  transition: "width 0.5s ease",
+                }} />
+              </div>
+              <span style={{ color: T.textMuted, fontSize: 9, fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>
+                {formatBytes(storageInfo.usedBytes)} / {formatBytes(storageInfo.quotaBytes)}
+                {" "}({storageInfo.percentUsed.toFixed(1)}%) · {storageInfo.idbFrameCount.toLocaleString()} frames
+              </span>
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -566,9 +577,6 @@ export function DvrApp() {
 }
 
 // ─── UnifiedScrubber ──────────────────────────────────────────────────────────
-// Stays mounted in both live and DVR mode so drag is never interrupted by a
-// component swap. In live mode it sits at the right edge; in DVR mode we push
-// the DOM value to match the player's fraction on each render.
 
 function UnifiedScrubber({
   isDvr,
@@ -577,21 +585,18 @@ function UnifiedScrubber({
   onSeek,
 }: {
   isDvr: boolean;
-  dvrFraction: number;   // 0–1, only used while in DVR mode
+  dvrFraction: number;
   disabled: boolean;
   onSeek: (fraction: number) => void;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const isDraggingRef = useRef(false);
 
-  // While in DVR mode, keep the thumb position in sync with playback progress —
-  // but not while the user is actively dragging (that would fight their input).
   useEffect(() => {
     if (!isDvr || isDraggingRef.current || !inputRef.current) return;
     inputRef.current.value = String(Math.round(dvrFraction * 10_000));
   }, [isDvr, dvrFraction]);
 
-  // When returning to live mode, snap back to the right edge.
   useEffect(() => {
     if (!isDvr && inputRef.current) {
       inputRef.current.value = "10000";

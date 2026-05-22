@@ -58,7 +58,10 @@ export class ReplayRecorder {
     if (!this._recording) return;
 
     const channel = this._channels.get(channelId) as BaseChannel<T> | undefined;
-    if (!channel) throw new Error(`Unknown channel: "${channelId}". Register it in the channels option.`);
+    if (!channel) {
+      const available = [...this._channels.keys()].join(", ");
+      throw new Error(`Unknown channel: "${channelId}". Available channels: [${available}]`);
+    }
 
     const t = timestamp ?? Date.now();
     const payload = channel.encode(data);

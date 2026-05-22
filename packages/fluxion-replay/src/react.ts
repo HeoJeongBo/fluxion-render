@@ -15,3 +15,15 @@ export type {
 
 export { ReplayTimeline } from "./widgets/replay-timeline/ui/replay-timeline";
 export type { ReplayTimelineProps } from "./widgets/replay-timeline/ui/replay-timeline";
+
+export { useLiveTimeRange } from "./widgets/live/lib/use-live-time-range";
+export type { UseLiveTimeRangeOptions, UseLiveTimeRangeResult } from "./widgets/live/lib/use-live-time-range";
+
+export { useStorageInfo } from "./widgets/storage/lib/use-storage-info";
+export type { UseStorageInfoOptions } from "./widgets/storage/lib/use-storage-info";
+
+export { useDisplayMedia } from "./widgets/media/lib/use-display-media";
+export type { UseDisplayMediaResult } from "./widgets/media/lib/use-display-media";
+
+export { useVideoReplayer } from "./widgets/video/lib/use-video-replayer";
+export type { UseVideoReplayerOptions } from "./widgets/video/lib/use-video-replayer";

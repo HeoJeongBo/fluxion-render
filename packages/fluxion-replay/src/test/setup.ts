@@ -346,6 +346,19 @@ Object.defineProperty(globalThis.navigator, "storage", {
   configurable: true,
 });
 
+// ─── mediaDevices stub ────────────────────────────────────────────────────────
+
+const fakeMediaDevices = {
+  getDisplayMedia: async () => { throw new Error("getDisplayMedia not mocked"); },
+  getUserMedia: async () => { throw new Error("getUserMedia not mocked"); },
+};
+
+Object.defineProperty(globalThis.navigator, "mediaDevices", {
+  value: fakeMediaDevices,
+  writable: true,
+  configurable: true,
+});
+
 // ─── WebCodecs stubs ──────────────────────────────────────────────────────────
 
 class FakeVideoEncoder {

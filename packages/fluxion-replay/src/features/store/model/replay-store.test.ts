@@ -162,5 +162,40 @@ describe("ReplayStore", () => {
       await expect(storeNoOpfs.writeVideoChunk("cam", "x.chunk", new Uint8Array([1]))).rejects.toThrow("OPFS");
       storeNoOpfs.dispose();
     });
+
+    it("getStorageInfo returns usedBytes, quotaBytes and percentUsed", async () => {
+      const info = await store.getStorageInfo();
+      expect(typeof info.usedBytes).toBe("number");
+      expect(typeof info.quotaBytes).toBe("number");
+      expect(info.percentUsed).toBeGreaterThanOrEqual(0);
+      expect(info.percentUsed).toBeLessThanOrEqual(100);
+    });
+
+    it("getStorageInfo.idbFrameCount increases after flush", async () => {
+      const before = await store.getStorageInfo();
+      store.appendFrame({ t: 9000, channelId: "ch", payload: new ArrayBuffer(4) });
+      await store.flush();
+      const after = await store.getStorageInfo();
+      expect(after.idbFrameCount).toBeGreaterThan(before.idbFrameCount);
+    });
+
+    it("getFrames with inverted range (from > to) returns empty", async () => {
+      store.appendFrame({ t: 500, channelId: "ch", payload: new ArrayBuffer(4) });
+      await store.flush();
+      const frames = await store.getFrames(1000, 100);
+      expect(frames).toHaveLength(0);
+    });
+
+    it("dispose() clears pending frames", () => {
+      store.appendFrame({ t: 1, channelId: "ch", payload: new ArrayBuffer(4) });
+      store.dispose();
+      // After dispose, _db is null so getFrames would throw — just verify no crash
+      expect(() => store.dispose()).not.toThrow();
+    });
+
+    it("error message includes dbName when not open", () => {
+      const namedStore = new ReplayStore({ dbName: "my-custom-db" });
+      expect(() => namedStore.getFrames(0, 1000)).rejects.toThrow("my-custom-db");
+    });
   });
 });

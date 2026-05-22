@@ -104,4 +104,25 @@ describe("ReplaySession", () => {
     expect(stopSpy).toHaveBeenCalled();
     expect(session.player).toBeNull();
   });
+
+  it("record() continues working after enterReplay()", async () => {
+    const session = new ReplaySession({ channels: [new LogChannel("logs")] });
+    await session.open();
+    await session.startRecording();
+    await session.enterReplay();
+    // record() should still forward to the recorder, not crash
+    expect(() => session.record("logs", { level: "info" as const, message: "hello" })).not.toThrow();
+    session.dispose();
+  });
+
+  it("getStorageInfo() returns StorageInfo with numeric fields", async () => {
+    const session = new ReplaySession({ channels: [] });
+    await session.open();
+    const info = await session.getStorageInfo();
+    expect(typeof info.usedBytes).toBe("number");
+    expect(typeof info.quotaBytes).toBe("number");
+    expect(typeof info.percentUsed).toBe("number");
+    expect(typeof info.idbFrameCount).toBe("number");
+    session.dispose();
+  });
 });

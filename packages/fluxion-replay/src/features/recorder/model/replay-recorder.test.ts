@@ -162,4 +162,52 @@ describe("ReplayRecorder", () => {
     expect(recorder.getRecentFrames("cpu", 0, 9999)).toHaveLength(0);
     expect(recorder.index.earliest).toBeNull();
   });
+
+  it("record() to multiple channels simultaneously", () => {
+    const store = makeStore();
+    const spy = vi.spyOn(store, "appendFrame");
+    const recorder = new ReplayRecorder({
+      channels: [new MetricChannel("cpu"), new LogChannel("logs")],
+      store,
+    });
+    recorder.start();
+    recorder.record("cpu", { name: "cpu", value: 10 }, 100);
+    recorder.record("logs", { level: "info" as const, message: "hello" }, 100);
+    expect(spy).toHaveBeenCalledTimes(2);
+  });
+
+  it("record() with duplicate timestamps stores both frames", () => {
+    const store = makeStore();
+    const spy = vi.spyOn(store, "appendFrame");
+    const recorder = new ReplayRecorder({
+      channels: [new MetricChannel("cpu")],
+      store,
+    });
+    recorder.start();
+    recorder.record("cpu", { name: "cpu", value: 1 }, 500);
+    recorder.record("cpu", { name: "cpu", value: 2 }, 500);
+    expect(spy).toHaveBeenCalledTimes(2);
+    const frames = recorder.getRecentFrames("cpu", 0, 9999);
+    expect(frames).toHaveLength(2);
+  });
+
+  it("getRecentFrames() with empty buffer returns empty array", () => {
+    const store = makeStore();
+    const recorder = new ReplayRecorder({
+      channels: [new MetricChannel("cpu")],
+      store,
+    });
+    recorder.start();
+    expect(recorder.getRecentFrames("cpu", 0, 9999)).toHaveLength(0);
+  });
+
+  it("record() unknown channel error includes available channels list", () => {
+    const store = makeStore();
+    const recorder = new ReplayRecorder({
+      channels: [new MetricChannel("cpu"), new LogChannel("logs")],
+      store,
+    });
+    recorder.start();
+    expect(() => recorder.record("unknown", {})).toThrow(/cpu.*logs|logs.*cpu/);
+  });
 });

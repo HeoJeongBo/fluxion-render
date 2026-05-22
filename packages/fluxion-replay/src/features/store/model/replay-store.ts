@@ -7,6 +7,17 @@ export interface ReplayStoreOptions {
   batchIntervalMs?: number;
 }
 
+export interface StorageInfo {
+  /** Total bytes used by this origin (IDB + OPFS + all storage). */
+  usedBytes: number;
+  /** Storage quota for this origin in bytes. */
+  quotaBytes: number;
+  /** Percentage of quota used (0–100). */
+  percentUsed: number;
+  /** Number of frame records currently in IndexedDB. */
+  idbFrameCount: number;
+}
+
 const DEFAULT_DB_NAME = "fluxion-replay";
 const DEFAULT_DB_VERSION = 1;
 const DEFAULT_RETENTION_MS = 10 * 60 * 1000;
@@ -95,12 +106,35 @@ export class ReplayStore {
     });
   }
 
+  async getStorageInfo(): Promise<StorageInfo> {
+    const est = await navigator.storage.estimate();
+    const used = est.usage ?? 0;
+    const quota = est.quota ?? 0;
+    const count = this._db ? await this._countFrames() : 0;
+    return {
+      usedBytes: used,
+      quotaBytes: quota,
+      percentUsed: quota > 0 ? (used / quota) * 100 : 0,
+      idbFrameCount: count,
+    };
+  }
+
   async getTimeRange(): Promise<{ earliest: number; latest: number } | null> {
     if (!this._db) return null;
     const earliest = await this._querySingleT("next");
     if (earliest === null) return null;
     const latest = await this._querySingleT("prev");
     return { earliest, latest: latest ?? earliest };
+  }
+
+  private _countFrames(): Promise<number> {
+    const db = this._assertOpen();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction("frames", "readonly");
+      const req = tx.objectStore("frames").count();
+      req.onsuccess = (e) => resolve((e.target as IDBRequest<number>).result);
+      req.onerror = () => reject(req.error);
+    });
   }
 
   private _querySingleT(direction: IDBCursorDirection): Promise<number | null> {
@@ -184,7 +218,7 @@ export class ReplayStore {
   }
 
   private _assertOpen(): IDBDatabase {
-    if (!this._db) throw new Error("ReplayStore is not open. Call open() first.");
+    if (!this._db) throw new Error(`ReplayStore("${this._dbName}") is not open. Call open() first.`);
     return this._db;
   }
 

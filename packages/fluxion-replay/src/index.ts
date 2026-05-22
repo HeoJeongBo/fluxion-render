@@ -1,6 +1,7 @@
 // Core types
 export type { ReplayFrame, SerializedFrame } from "./shared/model/frame";
 export type { BaseChannel, ChannelSchema } from "./shared/model/base-channel";
+export type { ChannelId } from "./shared/model/channel-types";
 export { GenericRingBuffer } from "./shared/model/generic-ring-buffer";
 export { VirtualClock } from "./shared/lib/virtual-clock";
 export type { VirtualClockListener } from "./shared/lib/virtual-clock";
@@ -22,7 +23,7 @@ export type { Thumbnail } from "./features/timeline/model/thumbnail-store";
 
 // Storage
 export { ReplayStore } from "./features/store/model/replay-store";
-export type { ReplayStoreOptions } from "./features/store/model/replay-store";
+export type { ReplayStoreOptions, StorageInfo } from "./features/store/model/replay-store";
 
 // Recorder
 export { ReplayRecorder } from "./features/recorder/model/replay-recorder";

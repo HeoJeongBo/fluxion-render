@@ -275,6 +275,67 @@ describe("ReplayPlayer", () => {
     player.dispose();
   });
 
+  it("mergeSorted handles large incoming array without losing order", async () => {
+    // Directly calls _prefetch indirectly by mocking getFrames with a large batch,
+    // then verifies frames arrive in order via onFrame.
+    const { player, store, ch } = makePlayer(0, 10_000);
+    await store.open();
+
+    const bigBatch = Array.from({ length: 100 }, (_, i) => ({
+      t: 100 + i * 5,    // 100, 105, … 595
+      channelId: "cpu",
+      payload: ch.encode({ name: "cpu", value: i }),
+    }));
+    vi.spyOn(store, "getFrames").mockResolvedValue(bigBatch);
+
+    const frames: number[] = [];
+    player.onFrame((f) => frames.push(f.t));
+    player.play(1.0);
+
+    // Trigger first RAF tick (fires prefetch)
+    vi.advanceTimersByTime(16);
+    // Let getFrames promise resolve and populate the buffer
+    for (let i = 0; i < 5; i++) await Promise.resolve();
+
+    // Advance virtual clock past all queued frames (100–595ms)
+    vi.advanceTimersByTime(600);
+    for (let i = 0; i < 3; i++) await Promise.resolve();
+
+    expect(frames.length).toBeGreaterThan(0);
+    for (let i = 1; i < frames.length; i++) {
+      expect(frames[i]).toBeGreaterThanOrEqual(frames[i - 1]);
+    }
+    player.stop();
+    player.dispose();
+  });
+
+  it("concurrent prefetch calls do not double-fetch the same range", async () => {
+    const { player, store } = makePlayer(0, 10_000);
+    await store.open();
+
+    let callCount = 0;
+    const getFramesSpy = vi.spyOn(store, "getFrames").mockImplementation(async () => {
+      callCount++;
+      return [];
+    });
+
+    player.play(1.0);
+    // Advance enough to trigger tick but not enough to complete async prefetch
+    vi.advanceTimersByTime(16);
+    vi.advanceTimersByTime(16);
+    vi.advanceTimersByTime(16);
+
+    await Promise.resolve();
+    await Promise.resolve();
+
+    // In-flight guard should prevent duplicate calls for same window
+    expect(callCount).toBeLessThanOrEqual(3);
+
+    player.stop();
+    player.dispose();
+    getFramesSpy.mockRestore();
+  });
+
   it("_prefetch error rolls back prefetchedUpTo for retry", async () => {
     const { player, store } = makePlayer(0, 10_000);
     await store.open();

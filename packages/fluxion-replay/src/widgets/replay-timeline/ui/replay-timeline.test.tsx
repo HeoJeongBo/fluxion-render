@@ -13,6 +13,12 @@ function makeTimeline(overrides: Partial<UseReplayTimelineResult> = {}): UseRepl
     fraction: 0,
     seekTo: vi.fn(),
     seekToMs: vi.fn(),
+    seekForward: vi.fn(),
+    seekBackward: vi.fn(),
+    seekToPercent: vi.fn(),
+    progress: { currentMs: 0, durationMs: 10_000, remainingMs: 10_000, percent: 0 },
+    isAtStart: true,
+    isAtLiveEdge: false,
     ...overrides,
   };
 }
