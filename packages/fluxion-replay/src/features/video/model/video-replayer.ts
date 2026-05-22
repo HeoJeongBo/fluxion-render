@@ -29,7 +29,6 @@ export class VideoReplayer {
   private readonly _decoderConfig: VideoDecoderConfig;
   private _decoder: VideoDecoder | null = null;
   private _lastFrame: VideoFrame | null = null;
-  private _seenKeyframe = false;
 
   constructor(opts: VideoReplayerOptions) {
     this._store = opts.store;
@@ -44,11 +43,6 @@ export class VideoReplayer {
     if (frame.channelId !== this._channelId) return;
 
     const info = frame.data as VideoFrameInfo;
-
-    // Drop delta frames until a keyframe arrives — prevents decoder corruption
-    if (!info.isKeyframe && !this._seenKeyframe) return;
-    if (info.isKeyframe) this._seenKeyframe = true;
-
     void this._decodeChunk(info, info.isKeyframe);
   }
 
@@ -79,7 +73,6 @@ export class VideoReplayer {
   }
 
   private _resetDecoder(): void {
-    this._seenKeyframe = false;
     if (this._decoder) {
       try { this._decoder.close(); } catch { /* already closed */ }
       this._decoder = null;

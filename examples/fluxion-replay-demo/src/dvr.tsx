@@ -536,6 +536,7 @@ export function DvrApp() {
           flexShrink: 0, background: T.panel,
           borderTop: `1px solid ${T.border}`,
           padding: "6px 16px 8px",
+          overflow: "hidden",
         }}>
           {/* Storage capacity bar */}
           <div style={{ marginBottom: 6, display: "flex", alignItems: "center", gap: 8 }}>
