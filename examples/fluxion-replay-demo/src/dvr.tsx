@@ -17,6 +17,23 @@ import {
   type RecordingSegment,
 } from "@heojeongbo/fluxion-replay/react";
 
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+
+/** Snap t into the nearest recorded segment. If t falls in a gap, jumps to the
+ *  start of the next segment (forward snap). */
+function snapToSegment(t: number, segments: RecordingSegment[], latest: number): number {
+  if (segments.length === 0) return t;
+  for (const seg of segments) {
+    const end = seg.end ?? latest;
+    if (t >= seg.start && t <= end) return t;
+  }
+  for (const seg of segments) {
+    if (seg.start > t) return seg.start;
+  }
+  const last = segments[segments.length - 1];
+  return last.end ?? latest;
+}
+
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const VIDEO_CHANNEL_ID = "screen";
@@ -321,7 +338,8 @@ export function DvrApp() {
   const handleSeek = useCallback((fraction: number) => {
     if (!timeRange) return;
     const effectiveLatest = (isDvr && frozenLatest != null) ? frozenLatest : timeRange.latest;
-    const t = timeRange.earliest + fraction * (effectiveLatest - timeRange.earliest);
+    const raw = timeRange.earliest + fraction * (effectiveLatest - timeRange.earliest);
+    const t = snapToSegment(raw, segments, effectiveLatest);
     if (!isDvr) {
       void enterDvr(t);
     } else if (fraction >= 0.9999) {
@@ -329,12 +347,12 @@ export function DvrApp() {
     } else {
       replayPlayer.seek(t);
     }
-  }, [isDvr, frozenLatest, timeRange, enterDvr, replayPlayer, goLive]);
+  }, [isDvr, frozenLatest, timeRange, segments, enterDvr, replayPlayer, goLive]);
 
   // ── UI ─────────────────────────────────────────────────────────────────────
   return (
     <div style={{
-      display: "flex", flexDirection: "column", height: "100vh", overflow: "hidden",
+      display: "flex", flexDirection: "column", height: "100%", overflow: "hidden",
       background: T.bg, color: T.text, fontFamily: "-apple-system, system-ui, sans-serif", fontSize: 13,
     }}>
       {/* ── Top bar ── */}
@@ -419,9 +437,9 @@ export function DvrApp() {
       {/* ── Main content ── */}
       <div style={{ flex: 1, minHeight: 0, display: "flex", overflow: "hidden" }}>
         {/* ── Video / canvas area ── */}
-        <div style={{ flex: "0 0 auto", width: "60%", display: "flex", flexDirection: "column", borderRight: `1px solid ${T.border}` }}>
+        <div style={{ flex: "0 0 auto", width: "60%", display: "flex", flexDirection: "column", borderRight: `1px solid ${T.border}`, minHeight: 0, overflow: "hidden" }}>
           {/* Video/canvas */}
-          <div style={{ flex: "0 0 auto", aspectRatio: "16/9", background: "#000", position: "relative", maxHeight: "55%" }}>
+          <div style={{ flex: "0 0 auto", aspectRatio: "16/9", background: "#000", position: "relative", maxHeight: "50%", overflow: "hidden" }}>
             <video
               ref={liveVideoRef}
               autoPlay muted playsInline
