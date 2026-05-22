@@ -355,7 +355,6 @@ export function App() {
         channelId: VIDEO_CHANNEL_ID,
         store: session.store,
         outputCanvas: replayCanvasRef.current,
-        decoderConfig: { codec: "vp8", codedWidth: 1280, codedHeight: 720 },
       });
     }
 

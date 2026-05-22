@@ -441,9 +441,13 @@ class FakeEncodedVideoChunk {
 class FakeVideoFrame {
   timestamp: number;
   duration: number | null;
-  constructor(init: { timestamp: number; duration?: number }) {
+  displayWidth: number;
+  displayHeight: number;
+  constructor(init: { timestamp: number; duration?: number; displayWidth?: number; displayHeight?: number }) {
     this.timestamp = init.timestamp;
     this.duration = init.duration ?? null;
+    this.displayWidth = init.displayWidth ?? 640;
+    this.displayHeight = init.displayHeight ?? 480;
   }
   close(): void {}
 }

@@ -5,8 +5,6 @@ import type { TimelineIndex } from "../../timeline/model/timeline-index";
 
 export interface VideoDecoderConfig {
   codec: string;
-  codedWidth: number;
-  codedHeight: number;
 }
 
 export interface VideoReplayerOptions {
@@ -16,17 +14,13 @@ export interface VideoReplayerOptions {
   decoderConfig?: VideoDecoderConfig;
 }
 
-const DEFAULT_DECODER_CONFIG: VideoDecoderConfig = {
-  codec: "vp8",
-  codedWidth: 640,
-  codedHeight: 480,
-};
+const DEFAULT_CODEC = "vp8";
 
 export class VideoReplayer {
   private readonly _store: ReplayStore;
   private readonly _channelId: string;
   private readonly _canvas: HTMLCanvasElement | OffscreenCanvas;
-  private readonly _decoderConfig: VideoDecoderConfig;
+  private readonly _codec: string;
   private _decoder: VideoDecoder | null = null;
   private _lastFrame: VideoFrame | null = null;
 
@@ -34,7 +28,7 @@ export class VideoReplayer {
     this._store = opts.store;
     this._channelId = opts.channelId;
     this._canvas = opts.outputCanvas;
-    this._decoderConfig = opts.decoderConfig ?? DEFAULT_DECODER_CONFIG;
+    this._codec = opts.decoderConfig?.codec ?? DEFAULT_CODEC;
   }
 
   /** Feed a single frame from the ReplayPlayer onFrame event. */
@@ -79,7 +73,6 @@ export class VideoReplayer {
     }
     this._lastFrame?.close();
     this._lastFrame = null;
-    this._setupDecoder();
   }
 
   private _setupDecoder(): void {
@@ -95,24 +88,31 @@ export class VideoReplayer {
         console.error("[VideoReplayer] VideoDecoder error:", e);
       },
     });
-
-    this._decoder.configure({
-      codec: this._decoderConfig.codec,
-      codedWidth: this._decoderConfig.codedWidth,
-      codedHeight: this._decoderConfig.codedHeight,
-    });
+    // configure is deferred to first keyframe — dimensions come from VideoFrameInfo
   }
 
   private async _decodeChunk(info: VideoFrameInfo, isKeyframe: boolean): Promise<void> {
     if (!this._decoder) this._setupDecoder();
     if (!this._decoder) return;
 
+    // Decoder must be configured before any chunk. Configure on first keyframe using
+    // the actual encoded dimensions stored in VideoFrameInfo — this avoids the
+    // hardcoded-resolution mismatch that corrupts VP8 decode on Retina displays.
+    if (this._decoder.state === "unconfigured") {
+      if (!isKeyframe) return;
+      this._decoder.configure({
+        codec: this._codec,
+        codedWidth: info.codedWidth,
+        codedHeight: info.codedHeight,
+      });
+    }
+
     const channelId = this._channelId;
     const filename = info.opfsPath.split("/").pop() ?? "";
     const data = await this._store.readVideoChunk(channelId, filename);
     if (!data) return;
 
-    // Re-check after async gap — decoder may have been closed/disposed or not yet configured
+    // Re-check after async gap — decoder may have been closed/disposed
     if (!this._decoder || this._decoder.state !== "configured") return;
 
     const chunk = new EncodedVideoChunk({
@@ -125,6 +125,11 @@ export class VideoReplayer {
   }
 
   private _renderFrame(frame: VideoFrame): void {
+    // Resize canvas to match actual decoded frame dimensions so drawImage fills correctly
+    if (this._canvas.width !== frame.displayWidth || this._canvas.height !== frame.displayHeight) {
+      this._canvas.width = frame.displayWidth;
+      this._canvas.height = frame.displayHeight;
+    }
     const ctx = this._canvas.getContext("2d") as CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D | null;
     if (!ctx) return;
     ctx.drawImage(frame as unknown as CanvasImageSource, 0, 0);

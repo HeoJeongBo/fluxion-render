@@ -36,6 +36,8 @@ export class VideoRecorder {
   private _running = false;
   private _startWallMs = 0;
   private _startVideoUs = 0;
+  private _encodedWidth = 0;
+  private _encodedHeight = 0;
 
   constructor(opts: VideoRecorderOptions) {
     this._channelId = opts.channelId;
@@ -93,6 +95,8 @@ export class VideoRecorder {
     this._frameCount = 0;
     this._startWallMs = 0;
     this._startVideoUs = 0;
+    this._encodedWidth = 0;
+    this._encodedHeight = 0;
   }
 
   private _setupEncoder(): void {
@@ -104,7 +108,19 @@ export class VideoRecorder {
         console.error("[VideoRecorder] VideoEncoder error:", e);
       },
     });
-    this._encoder.configure(this._config);
+  }
+
+  private _configureEncoderForFrame(frame: VideoFrame): void {
+    // VP8 requires even dimensions
+    const w = frame.displayWidth & ~1;
+    const h = frame.displayHeight & ~1;
+    this._encodedWidth = w;
+    this._encodedHeight = h;
+    this._encoder!.configure({
+      ...this._config,
+      width: w,
+      height: h,
+    });
   }
 
   private async _readLoop(reader: ReadableStreamDefaultReader<VideoFrame>): Promise<void> {
@@ -123,8 +139,13 @@ export class VideoRecorder {
 
       const frame = result.value;
       if (this._startVideoUs < 0) this._startVideoUs = frame.timestamp;
-      const isKeyframe = this._frameCount % keyframeEvery === 0;
 
+      // Configure encoder on first frame using actual frame dimensions
+      if (this._frameCount === 0) {
+        this._configureEncoderForFrame(frame);
+      }
+
+      const isKeyframe = this._frameCount % keyframeEvery === 0;
       this._encoder?.encode(frame, { keyFrame: isKeyframe });
       frame.close();
       this._frameCount++;
@@ -147,6 +168,8 @@ export class VideoRecorder {
       isKeyframe,
       durationUs: chunk.duration ?? 0,
       byteLength: data.byteLength,
+      codedWidth: this._encodedWidth,
+      codedHeight: this._encodedHeight,
     };
 
     this._recorder.record(this._channelId, frameInfo, tMs);

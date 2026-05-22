@@ -5,6 +5,8 @@ export interface VideoFrameInfo {
   isKeyframe: boolean;
   durationUs: number;
   byteLength: number;
+  codedWidth: number;
+  codedHeight: number;
 }
 
 export class VideoChannel implements BaseChannel<VideoFrameInfo> {
