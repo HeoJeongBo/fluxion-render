@@ -29,6 +29,7 @@ export class VideoReplayer {
   private readonly _decoderConfig: VideoDecoderConfig;
   private _decoder: VideoDecoder | null = null;
   private _lastFrame: VideoFrame | null = null;
+  private _seenKeyframe = false;
 
   constructor(opts: VideoReplayerOptions) {
     this._store = opts.store;
@@ -43,6 +44,11 @@ export class VideoReplayer {
     if (frame.channelId !== this._channelId) return;
 
     const info = frame.data as VideoFrameInfo;
+
+    // Drop delta frames until a keyframe arrives — prevents decoder corruption
+    if (!info.isKeyframe && !this._seenKeyframe) return;
+    if (info.isKeyframe) this._seenKeyframe = true;
+
     void this._decodeChunk(info, info.isKeyframe);
   }
 
@@ -73,6 +79,7 @@ export class VideoReplayer {
   }
 
   private _resetDecoder(): void {
+    this._seenKeyframe = false;
     if (this._decoder) {
       try { this._decoder.close(); } catch { /* already closed */ }
       this._decoder = null;
@@ -112,8 +119,8 @@ export class VideoReplayer {
     const data = await this._store.readVideoChunk(channelId, filename);
     if (!data) return;
 
-    // Re-check after async gap — decoder may have been closed/disposed
-    if (!this._decoder || this._decoder.state === "closed") return;
+    // Re-check after async gap — decoder may have been closed/disposed or not yet configured
+    if (!this._decoder || this._decoder.state !== "configured") return;
 
     const chunk = new EncodedVideoChunk({
       type: isKeyframe ? "key" : "delta",

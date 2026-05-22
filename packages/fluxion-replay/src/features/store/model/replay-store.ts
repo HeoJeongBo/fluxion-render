@@ -18,6 +18,13 @@ export interface StorageInfo {
   idbFrameCount: number;
 }
 
+export interface RecordingSegment {
+  /** Segment start timestamp (ms since epoch). */
+  start: number;
+  /** Segment end timestamp (ms since epoch). null = currently recording. */
+  end: number | null;
+}
+
 const DEFAULT_DB_NAME = "fluxion-replay";
 const DEFAULT_DB_VERSION = 1;
 const DEFAULT_RETENTION_MS = 10 * 60 * 1000;
@@ -38,6 +45,7 @@ export class ReplayStore {
   private _batchIntervalMs: number;
   private _dbName: string;
   private _dbVersion: number;
+  private _segments: RecordingSegment[] = [];
 
   constructor(opts?: ReplayStoreOptions) {
     this._dbName = opts?.dbName ?? DEFAULT_DB_NAME;
@@ -119,6 +127,24 @@ export class ReplayStore {
     };
   }
 
+  startSegment(t = Date.now()): void {
+    // Close any open segment first
+    if (this._segments.length > 0 && this._segments[this._segments.length - 1].end === null) {
+      this._segments[this._segments.length - 1].end = t;
+    }
+    this._segments.push({ start: t, end: null });
+  }
+
+  endSegment(t = Date.now()): void {
+    if (this._segments.length > 0 && this._segments[this._segments.length - 1].end === null) {
+      this._segments[this._segments.length - 1].end = t;
+    }
+  }
+
+  getSegments(): RecordingSegment[] {
+    return this._segments;
+  }
+
   async getTimeRange(): Promise<{ earliest: number; latest: number } | null> {
     if (!this._db) return null;
     const earliest = await this._querySingleT("next");
@@ -175,6 +201,7 @@ export class ReplayStore {
   }
 
   async clearAll(): Promise<void> {
+    this._segments = [];
     // Clear IDB frames
     const db = this._assertOpen();
     await new Promise<void>((resolve, reject) => {

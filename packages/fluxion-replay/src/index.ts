@@ -23,7 +23,7 @@ export type { Thumbnail } from "./features/timeline/model/thumbnail-store";
 
 // Storage
 export { ReplayStore } from "./features/store/model/replay-store";
-export type { ReplayStoreOptions, StorageInfo } from "./features/store/model/replay-store";
+export type { ReplayStoreOptions, StorageInfo, RecordingSegment } from "./features/store/model/replay-store";
 
 // Recorder
 export { ReplayRecorder } from "./features/recorder/model/replay-recorder";

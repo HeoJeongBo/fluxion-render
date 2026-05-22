@@ -42,10 +42,12 @@ export class ReplaySession {
   }
 
   async startRecording(): Promise<void> {
+    this._store.startSegment();
     this._recorder.start();
   }
 
   stopRecording(): void {
+    this._store.endSegment();
     this._recorder.stop();
   }
 

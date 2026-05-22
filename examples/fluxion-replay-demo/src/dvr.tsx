@@ -14,6 +14,7 @@ import {
   useReplayTimeline,
   useStorageInfo,
   useVideoReplayer,
+  type RecordingSegment,
 } from "@heojeongbo/fluxion-replay/react";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -153,7 +154,7 @@ export function DvrApp() {
 
   // ── Package hooks ──────────────────────────────────────────────────────────
   const { stream, start: startCapture, stop: stopCapture } = useDisplayMedia();
-  const { timeRange, seed: seedTimeRange } = useLiveTimeRange(isRecording ? session : null);
+  const { timeRange, segments, seed: seedTimeRange } = useLiveTimeRange(isRecording ? session : null);
   const storageInfo = useStorageInfo(session, { intervalMs: 3000 });
 
   // ── DVR / player state ────────────────────────────────────────────────────
@@ -548,7 +549,7 @@ export function DvrApp() {
                 transition: "width 0.5s ease",
               }} />
             </div>
-            <span style={{ color: T.textMuted, fontSize: 9, fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap", minWidth: 120, textAlign: "right" }}>
+            <span style={{ color: T.textMuted, fontSize: 9, fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap", flexShrink: 0, textAlign: "right" }}>
               {storageInfo
                 ? `${formatBytes(storageInfo.usedBytes)} / ${formatBytes(storageInfo.quotaBytes)} (${storageInfo.percentUsed.toFixed(1)}%)`
                 : "Storage: --"}
@@ -585,6 +586,9 @@ export function DvrApp() {
             dvrFraction={timeline.fraction}
             disabled={!timeRange}
             onSeek={handleSeek}
+            segments={segments}
+            earliest={timeRange?.earliest ?? 0}
+            latest={isDvr && frozenLatest != null ? frozenLatest : (timeRange?.latest ?? 0)}
           />
 
         </div>
@@ -600,11 +604,17 @@ function UnifiedScrubber({
   dvrFraction,
   disabled,
   onSeek,
+  segments,
+  earliest,
+  latest,
 }: {
   isDvr: boolean;
   dvrFraction: number;
   disabled: boolean;
   onSeek: (fraction: number) => void;
+  segments: RecordingSegment[];
+  earliest: number;
+  latest: number;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const isDraggingRef = useRef(false);
@@ -620,8 +630,33 @@ function UnifiedScrubber({
     }
   }, [isDvr]);
 
+  const duration = latest - earliest;
+
   return (
-    <div style={{ padding: "2px 0" }}>
+    <div style={{ position: "relative", padding: "2px 0" }}>
+      {/* Segment track overlay */}
+      <div style={{
+        position: "absolute", left: 0, right: 0,
+        top: "50%", transform: "translateY(-50%)",
+        height: 4, background: T.border, borderRadius: 2, pointerEvents: "none",
+      }}>
+        {duration > 0 && segments.map((seg, i) => {
+          const segEnd = seg.end ?? latest;
+          const left = ((seg.start - earliest) / duration) * 100;
+          const width = ((Math.min(segEnd, latest) - seg.start) / duration) * 100;
+          if (width <= 0) return null;
+          return (
+            <div key={i} style={{
+              position: "absolute",
+              left: `${left}%`,
+              width: `${width}%`,
+              height: "100%",
+              background: isDvr ? T.accent : T.red,
+              borderRadius: 2,
+            }} />
+          );
+        })}
+      </div>
       <input
         ref={inputRef}
         type="range"
@@ -637,7 +672,12 @@ function UnifiedScrubber({
           const f = Number(e.target.value) / 10_000;
           onSeek(f);
         }}
-        style={{ width: "100%", accentColor: isDvr ? T.accent : T.red, cursor: disabled ? "default" : "pointer" }}
+        style={{
+          position: "relative", width: "100%",
+          accentColor: isDvr ? T.accent : T.red,
+          cursor: disabled ? "default" : "pointer",
+          background: "transparent",
+        }}
       />
     </div>
   );

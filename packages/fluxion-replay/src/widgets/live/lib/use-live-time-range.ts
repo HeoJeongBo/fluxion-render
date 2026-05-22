@@ -1,5 +1,8 @@
 import { useEffect, useRef, useState } from "react";
+import type { RecordingSegment } from "../../../features/store/model/replay-store";
 import type { ReplaySession } from "../../../features/session/model/replay-session";
+
+export type { RecordingSegment };
 
 export interface UseLiveTimeRangeOptions {
   /** How often to poll for the latest time range in milliseconds. Default: 500. */
@@ -8,6 +11,8 @@ export interface UseLiveTimeRangeOptions {
 
 export interface UseLiveTimeRangeResult {
   timeRange: { earliest: number; latest: number } | null;
+  /** Recording segments — each entry is a start/end pair; end=null means currently recording. */
+  segments: RecordingSegment[];
   /** Call this to immediately seed the timeRange without waiting for the next poll. */
   seed: (range: { earliest: number; latest: number }) => void;
 }
@@ -17,7 +22,7 @@ export interface UseLiveTimeRangeResult {
  * known time range. Useful for keeping a live scrubber in sync while recording.
  *
  * @example
- * const { timeRange, seed } = useLiveTimeRange(session);
+ * const { timeRange, segments, seed } = useLiveTimeRange(session);
  * // On recording start, seed immediately so the scrubber is enabled at once:
  * const now = Date.now();
  * seed({ earliest: now, latest: now });
@@ -28,6 +33,7 @@ export function useLiveTimeRange(
 ): UseLiveTimeRangeResult {
   const intervalMs = options?.intervalMs ?? 500;
   const [timeRange, setTimeRange] = useState<{ earliest: number; latest: number } | null>(null);
+  const [segments, setSegments] = useState<RecordingSegment[]>([]);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
@@ -37,6 +43,7 @@ export function useLiveTimeRange(
       try {
         const range = await session.getTimeRange();
         if (range) setTimeRange(range);
+        setSegments([...session.store.getSegments()]);
       } catch {
         // Store may not be open yet — ignore
       }
@@ -55,5 +62,5 @@ export function useLiveTimeRange(
 
   const seed = (range: { earliest: number; latest: number }) => setTimeRange(range);
 
-  return { timeRange, seed };
+  return { timeRange, segments, seed };
 }
