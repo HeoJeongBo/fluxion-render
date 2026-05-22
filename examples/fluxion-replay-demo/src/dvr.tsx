@@ -166,6 +166,7 @@ export function DvrApp() {
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const liveVideoRef = useRef<HTMLVideoElement>(null);
+  const goLiveRef = useRef<() => void>(() => {});
 
   const replayPlayer = useReplayPlayer(player);
   const effectiveTimeRange = isDvr && frozenLatest != null && timeRange
@@ -291,6 +292,9 @@ export function DvrApp() {
     // Auto-play from the seek point
     p?.play(rate);
 
+    // When replay reaches frozenLatest (the live edge at DVR entry), return to live
+    p?.onEnd(() => { goLiveRef.current(); });
+
     setIsDvr(true);
   }, [session, timeRange, enterReplay, rate]);
 
@@ -309,6 +313,9 @@ export function DvrApp() {
       void liveVideoRef.current.play();
     }
   }, [player, exitReplay, stream]);
+
+  // Keep ref in sync so enterDvr's onEnd closure always calls the latest goLive
+  goLiveRef.current = goLive;
 
   // ── Timeline scrub ─────────────────────────────────────────────────────────
   const handleSeek = useCallback((fraction: number) => {
