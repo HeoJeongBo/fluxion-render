@@ -287,8 +287,11 @@ export function DvrApp() {
       setDvrLogs((prev) => [...prev.slice(-99), frame]);
     });
 
+    // Auto-play from the seek point
+    p?.play(rate);
+
     setIsDvr(true);
-  }, [session, timeRange, enterReplay]);
+  }, [session, timeRange, enterReplay, rate]);
 
   // ── Return to live edge ────────────────────────────────────────────────────
   const goLive = useCallback(() => {
@@ -628,6 +631,7 @@ function UnifiedScrubber({
         onMouseDown={() => { isDraggingRef.current = true; }}
         onTouchStart={() => { isDraggingRef.current = true; }}
         onMouseUp={() => { isDraggingRef.current = false; }}
+        onMouseLeave={() => { isDraggingRef.current = false; }}
         onTouchEnd={() => { isDraggingRef.current = false; }}
         onChange={(e) => {
           const f = Number(e.target.value) / 10_000;
