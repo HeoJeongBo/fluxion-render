@@ -158,6 +158,7 @@ export function DvrApp() {
 
   // ── DVR / player state ────────────────────────────────────────────────────
   const [isDvr, setIsDvr] = useState(false);
+  const [frozenLatest, setFrozenLatest] = useState<number | null>(null);
   const [player, setPlayer] = useState<ReturnType<typeof useReplayPlayer>["player"]>(null);
   const [rate, setRate] = useState(1.0);
   const [dvrLogs, setDvrLogs] = useState<ReplayPlayerFrame[]>([]);
@@ -166,7 +167,10 @@ export function DvrApp() {
   const liveVideoRef = useRef<HTMLVideoElement>(null);
 
   const replayPlayer = useReplayPlayer(player);
-  const timeline = useReplayTimeline(player, timeRange);
+  const effectiveTimeRange = isDvr && frozenLatest != null && timeRange
+    ? { ...timeRange, latest: frozenLatest }
+    : timeRange;
+  const timeline = useReplayTimeline(player, effectiveTimeRange);
   const isPlaying = replayPlayer.state === "playing";
 
   // Wire VideoReplayer in DVR mode — package hook handles create/dispose/onFrame
@@ -271,6 +275,7 @@ export function DvrApp() {
   const enterDvr = useCallback(async (seekT?: number) => {
     if (!session) return;
     const range = timeRange ?? { earliest: Date.now() - 60_000, latest: Date.now() };
+    setFrozenLatest(range.latest);
 
     setDvrLogs([]);
     const p = await enterReplay(seekT ?? range.earliest);
@@ -292,6 +297,7 @@ export function DvrApp() {
     setDvrLogs([]);
     exitReplay();
     setIsDvr(false);
+    setFrozenLatest(null);
 
     // Resume live video
     if (liveVideoRef.current && stream) {
@@ -303,13 +309,16 @@ export function DvrApp() {
   // ── Timeline scrub ─────────────────────────────────────────────────────────
   const handleSeek = useCallback((fraction: number) => {
     if (!timeRange) return;
-    const t = timeRange.earliest + fraction * (timeRange.latest - timeRange.earliest);
+    const effectiveLatest = (isDvr && frozenLatest != null) ? frozenLatest : timeRange.latest;
+    const t = timeRange.earliest + fraction * (effectiveLatest - timeRange.earliest);
     if (!isDvr) {
       void enterDvr(t);
+    } else if (fraction >= 0.9999) {
+      goLive();
     } else {
       replayPlayer.seek(t);
     }
-  }, [isDvr, timeRange, enterDvr, replayPlayer]);
+  }, [isDvr, frozenLatest, timeRange, enterDvr, replayPlayer, goLive]);
 
   // ── UI ─────────────────────────────────────────────────────────────────────
   return (
@@ -367,9 +376,9 @@ export function DvrApp() {
                 </button>
               ))}
               {/* Behind-live delay */}
-              {isRecording && timeRange && (
+              {isRecording && (
                 <span style={{ fontVariantNumeric: "tabular-nums", color: T.yellow, fontSize: 11, minWidth: 80 }}>
-                  -{formatMs(timeRange.latest - replayPlayer.currentT)} behind
+                  -{formatMs(Date.now() - replayPlayer.currentT)} behind
                 </span>
               )}
               {/* GO LIVE chip */}
@@ -539,7 +548,10 @@ export function DvrApp() {
             ) : (
               <span style={{ display: "flex", alignItems: "center", gap: 4 }}>
                 {isRecording && <span style={{ color: T.red, fontSize: 9 }}>●</span>}
-                {timeRange ? new Date(timeRange.latest).toLocaleTimeString("en-US", { hour12: false }) : "--:--:--"}
+                {timeRange
+                ? new Date(isDvr && frozenLatest != null ? frozenLatest : timeRange.latest)
+                    .toLocaleTimeString("en-US", { hour12: false })
+                : "--:--:--"}
                 {isRecording && <span style={{ color: T.textMuted, fontSize: 9, marginLeft: 2 }}>LIVE</span>}
               </span>
             )}
