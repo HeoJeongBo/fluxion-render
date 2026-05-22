@@ -533,6 +533,25 @@ export function DvrApp() {
           borderTop: `1px solid ${T.border}`,
           padding: "6px 16px 8px",
         }}>
+          {/* Storage capacity bar */}
+          <div style={{ marginBottom: 6, display: "flex", alignItems: "center", gap: 8 }}>
+            <div style={{ flex: 1, height: 4, background: T.border, borderRadius: 2, overflow: "hidden" }}>
+              <div style={{
+                height: "100%", borderRadius: 2,
+                width: storageInfo ? `${Math.min(100, storageInfo.percentUsed)}%` : "0%",
+                background: storageInfo
+                  ? (storageInfo.percentUsed > 80 ? T.red : storageInfo.percentUsed > 50 ? T.yellow : T.accent)
+                  : T.accent,
+                transition: "width 0.5s ease",
+              }} />
+            </div>
+            <span style={{ color: T.textMuted, fontSize: 9, fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap", minWidth: 120, textAlign: "right" }}>
+              {storageInfo
+                ? `${formatBytes(storageInfo.usedBytes)} / ${formatBytes(storageInfo.quotaBytes)} (${storageInfo.percentUsed.toFixed(1)}%)`
+                : "Storage: --"}
+            </span>
+          </div>
+
           {/* Time labels */}
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 10, color: T.textMuted, marginBottom: 2 }}>
             <span>{timeRange ? new Date(timeRange.earliest).toLocaleTimeString("en-US", { hour12: false }) : "--:--:--"}</span>
@@ -565,23 +584,6 @@ export function DvrApp() {
             onSeek={handleSeek}
           />
 
-          {/* Storage capacity bar */}
-          {storageInfo && (
-            <div style={{ marginTop: 4, display: "flex", alignItems: "center", gap: 8 }}>
-              <div style={{ flex: 1, height: 3, background: T.border, borderRadius: 2, overflow: "hidden" }}>
-                <div style={{
-                  height: "100%", borderRadius: 2,
-                  width: `${Math.min(100, storageInfo.percentUsed)}%`,
-                  background: storageInfo.percentUsed > 80 ? T.red : storageInfo.percentUsed > 50 ? T.yellow : T.accent,
-                  transition: "width 0.5s ease",
-                }} />
-              </div>
-              <span style={{ color: T.textMuted, fontSize: 9, fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>
-                {formatBytes(storageInfo.usedBytes)} / {formatBytes(storageInfo.quotaBytes)}
-                {" "}({storageInfo.percentUsed.toFixed(1)}%) · {storageInfo.idbFrameCount.toLocaleString()} frames
-              </span>
-            </div>
-          )}
         </div>
       )}
     </div>
