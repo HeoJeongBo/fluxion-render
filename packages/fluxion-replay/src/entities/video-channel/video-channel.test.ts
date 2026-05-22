@@ -15,6 +15,8 @@ describe("VideoChannel", () => {
       isKeyframe: true,
       durationUs: 33333,
       byteLength: 4096,
+      codedWidth: 1280,
+      codedHeight: 720,
     };
     expect(channel.decode(channel.encode(info))).toEqual(info);
   });
@@ -25,6 +27,8 @@ describe("VideoChannel", () => {
       isKeyframe: false,
       durationUs: 33333,
       byteLength: 512,
+      codedWidth: 1280,
+      codedHeight: 720,
     };
     expect(channel.decode(channel.encode(info))).toEqual(info);
   });
