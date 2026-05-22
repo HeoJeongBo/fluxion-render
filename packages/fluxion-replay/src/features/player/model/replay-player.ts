@@ -90,9 +90,11 @@ export class ReplayPlayer {
   seek(t: number): void {
     const clamped = Math.max(this._timeRange.earliest, Math.min(this._timeRange.latest, t));
     this._clock.seek(clamped);
-    this._prefetchBuffer = this._prefetchBuffer.filter((f) => f.t >= clamped);
-    // Pull back prefetch cursor so the next tick re-queries from seek point
-    this._prefetchedUpTo = Math.max(clamped - this._prefetchMs, this._timeRange.earliest);
+    // Use at least 3s lookback so a keyframe (default interval = 2s) is always included
+    // before the seek point — prevents VP8 decoder corruption from missing keyframes.
+    const lookback = Math.max(this._prefetchMs, 3_000);
+    this._prefetchBuffer = this._prefetchBuffer.filter((f) => f.t >= clamped - lookback);
+    this._prefetchedUpTo = Math.max(clamped - lookback, this._timeRange.earliest);
     this._ended = false;
   }
 
