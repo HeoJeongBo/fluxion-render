@@ -284,4 +284,25 @@ describe("FluxionHost", () => {
     expect(msg.dpr).toBe(2);
     host.dispose();
   });
+
+  it("clearLayer posts CLEAR_DATA with optional latestT rewind", () => {
+    const { worker, posts } = makeFakeWorker();
+    const host = new FluxionHost(makeCanvas(), { workerFactory: () => worker });
+    posts.length = 0;
+
+    host.clearLayer("chart");
+    host.clearLayer("chart", { latestT: 5000 });
+
+    expect(posts.map((p) => (p.msg as { op: number }).op)).toEqual([
+      Op.CLEAR_DATA,
+      Op.CLEAR_DATA,
+    ]);
+    const first = posts[0].msg as { id: string; latestT?: number };
+    expect(first.id).toBe("chart");
+    expect(first.latestT).toBeUndefined();
+    const second = posts[1].msg as { id: string; latestT?: number };
+    expect(second.id).toBe("chart");
+    expect(second.latestT).toBe(5000);
+    host.dispose();
+  });
 });

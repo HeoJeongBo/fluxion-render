@@ -7,7 +7,13 @@ export default defineConfig({
     environment: "happy-dom",
     globals: false,
     include: ["src/**/*.test.{ts,tsx}"],
+    // Bench files are picked up by `vitest bench` only. Exclude here so a
+    // plain `vitest run` doesn't try to execute them as regular tests.
+    exclude: ["**/node_modules/**", "**/dist/**", "**/*.bench.{ts,tsx}"],
     setupFiles: ["src/test/setup.ts"],
+    benchmark: {
+      include: ["src/**/*.bench.{ts,tsx}"],
+    },
     coverage: {
       provider: "v8",
       include: ["src/**/*.ts", "src/**/*.tsx"],

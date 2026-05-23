@@ -126,6 +126,18 @@ export class Engine {
         }
         break;
       }
+      case Op.CLEAR_DATA: {
+        const layer = this.stack.get(msg.id);
+        layer?.clearData?.();
+        // `latestT` is normally monotonic-up (advanced by layer setData).
+        // An explicit rewind here is the only path a backward replay seek
+        // can use to drag the time-mode axis window with it.
+        if (msg.latestT !== undefined) {
+          this.viewport.latestT = msg.latestT;
+        }
+        this.scheduler.markDirty();
+        break;
+      }
       case Op.DISPOSE:
         this.dispose();
         break;

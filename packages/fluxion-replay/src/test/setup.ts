@@ -4,6 +4,23 @@ import { vi } from "vitest";
 
 type IDBRecord = { _key: number; [key: string]: unknown };
 
+/**
+ * Lexicographic compare matching IDB's array-key ordering. Returns -1, 0, or 1.
+ * Falls back to numeric/string compare for scalars.
+ */
+function cmpKey(a: unknown, b: unknown): number {
+  if (Array.isArray(a) && Array.isArray(b)) {
+    const n = Math.min(a.length, b.length);
+    for (let i = 0; i < n; i++) {
+      const c = cmpKey(a[i], b[i]);
+      if (c !== 0) return c;
+    }
+    return a.length - b.length;
+  }
+  if (a === b) return 0;
+  return (a as number | string) < (b as number | string) ? -1 : 1;
+}
+
 class FakeIDBKeyRange {
   lower: unknown;
   upper: unknown;
@@ -34,14 +51,15 @@ class FakeIDBKeyRange {
   }
 
   includes(value: unknown): boolean {
-    const v = value as number;
     if (this.lower !== undefined) {
-      if (this.lowerOpen && (v as number) <= (this.lower as number)) return false;
-      if (!this.lowerOpen && (v as number) < (this.lower as number)) return false;
+      const c = cmpKey(value, this.lower);
+      if (this.lowerOpen && c <= 0) return false;
+      if (!this.lowerOpen && c < 0) return false;
     }
     if (this.upper !== undefined) {
-      if (this.upperOpen && (v as number) >= (this.upper as number)) return false;
-      if (!this.upperOpen && (v as number) > (this.upper as number)) return false;
+      const c = cmpKey(value, this.upper);
+      if (this.upperOpen && c >= 0) return false;
+      if (!this.upperOpen && c > 0) return false;
     }
     return true;
   }
@@ -53,19 +71,18 @@ class FakeIDBIndex {
     private readonly _field: string | string[],
   ) {}
 
+  /** Extract this index's key from a record. Composite indexes return a tuple. */
+  private _keyOf(r: IDBRecord): unknown {
+    const f = this._field;
+    return Array.isArray(f) ? f.map((name) => r[name]) : r[f];
+  }
+
   openCursor(range?: FakeIDBKeyRange | null, direction?: IDBCursorDirection): FakeIDBRequest<FakeIDBCursorWithValue | null> {
-    const field = this._field;
     let records = this._store._records.filter((r) => {
       if (!range) return true;
-      const key = Array.isArray(field) ? (r[field[field.length - 1]] as number) : (r[field as string] as number);
-      return range.includes(key);
+      return range.includes(this._keyOf(r));
     });
-    // Sort by the indexed field
-    records = [...records].sort((a, b) => {
-      const ka = Array.isArray(field) ? (a[field[field.length - 1]] as number) : (a[field as string] as number);
-      const kb = Array.isArray(field) ? (b[field[field.length - 1]] as number) : (b[field as string] as number);
-      return ka - kb;
-    });
+    records = [...records].sort((a, b) => cmpKey(this._keyOf(a), this._keyOf(b)));
     if (direction === "prev" || direction === "prevunique") {
       records = records.reverse();
     }
@@ -96,12 +113,9 @@ class FakeIDBIndex {
   }
 
   getAll(range?: FakeIDBKeyRange): FakeIDBRequest<IDBRecord[]> {
-    const field = this._field;
-    const results = this._store._records.filter((r) => {
-      if (!range) return true;
-      const key = Array.isArray(field) ? (r[field[field.length - 1]] as number) : (r[field as string] as number);
-      return range.includes(key);
-    });
+    const results = this._store._records
+      .filter((r) => !range || range.includes(this._keyOf(r)))
+      .sort((a, b) => cmpKey(this._keyOf(a), this._keyOf(b)));
     return new FakeIDBRequest([...results]);
   }
 }

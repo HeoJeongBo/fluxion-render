@@ -31,3 +31,9 @@ export type { UseDisplayMediaResult } from "./widgets/media/lib/use-display-medi
 
 export { useVideoReplayer } from "./widgets/video/lib/use-video-replayer";
 export type { UseVideoReplayerOptions } from "./widgets/video/lib/use-video-replayer";
+
+export { useChartReplay } from "./widgets/chart-replay/lib/use-chart-replay";
+export type {
+  UseChartReplayOptions,
+  UseChartReplayResult,
+} from "./widgets/chart-replay/lib/use-chart-replay";

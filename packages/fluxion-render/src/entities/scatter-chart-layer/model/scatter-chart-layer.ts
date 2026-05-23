@@ -114,6 +114,10 @@ export class ScatterChartLayer implements Layer {
     ctx.fill();
   }
 
+  clearData(): void {
+    this.ring.clear();
+  }
+
   dispose(): void {
     this.ring.clear();
   }

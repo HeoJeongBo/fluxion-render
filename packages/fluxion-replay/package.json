@@ -27,6 +27,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
+    "test:bench": "vitest bench --run",
     "release": "release-it",
     "release:minor": "release-it minor",
     "release:major": "release-it major",
@@ -56,14 +57,19 @@
     "access": "public"
   },
   "peerDependencies": {
-    "react": ">=18"
+    "react": ">=18",
+    "@heojeongbo/fluxion-render": "^0.8.0"
   },
   "peerDependenciesMeta": {
     "react": {
       "optional": true
+    },
+    "@heojeongbo/fluxion-render": {
+      "optional": true
     }
   },
   "devDependencies": {
+    "@heojeongbo/fluxion-render": "workspace:*",
     "@release-it/conventional-changelog": "^10.0.6",
     "@testing-library/react": "^16.3.0",
     "@types/react": "^18.3.3",

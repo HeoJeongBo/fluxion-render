@@ -264,4 +264,36 @@ describe("LineChartLayer (streaming)", () => {
     layer.draw(ctx as unknown as OffscreenCanvasRenderingContext2D, vp);
     expect(ctx.calls.some((c) => c.name === "stroke")).toBe(false);
   });
+
+  describe("clearData (replay seek support)", () => {
+    it("drops every sample from the ring buffer", () => {
+      const layer = new LineChartLayer("l");
+      const vp = makeViewport();
+      layer.setData(new Float32Array([0, 0, 100, 1, 200, 2]).buffer, 6, vp);
+      layer.clearData();
+      const ctx = createFakeCtx();
+      layer.draw(ctx as unknown as OffscreenCanvasRenderingContext2D, vp);
+      expect(ctx.calls.some((c) => c.name === "stroke")).toBe(false);
+    });
+
+    it("preserves config so subsequent pushes use the same capacity", () => {
+      const layer = new LineChartLayer("l");
+      layer.setConfig({ capacity: 3, color: "#abc" });
+      const vp = makeViewport();
+      layer.setData(new Float32Array([0, 0, 100, 1]).buffer, 4, vp);
+      layer.clearData();
+      // Push 5 samples; the configured capacity of 3 must still cap the ring.
+      layer.setData(
+        new Float32Array([200, 2, 300, 3, 400, 4, 500, 5, 600, 6]).buffer,
+        10,
+        vp,
+      );
+      const ctx = createFakeCtx();
+      layer.draw(ctx as unknown as OffscreenCanvasRenderingContext2D, vp);
+      // 3 visible samples -> 1 moveTo + 2 lineTos
+      expect(ctx.calls.filter((c) => c.name === "moveTo").length).toBe(1);
+      expect(ctx.calls.filter((c) => c.name === "lineTo").length).toBe(2);
+      expect(ctx.strokeStyle).toBe("#abc");
+    });
+  });
 });

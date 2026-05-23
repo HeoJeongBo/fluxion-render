@@ -11,6 +11,7 @@ import {
 function makeFakeSink() {
   const pushes: { id: string; data: Float32Array }[] = [];
   const configs: { id: string; config: unknown }[] = [];
+  const clears: { id: string; opts?: { latestT?: number } }[] = [];
   const sink: FluxionDataSink = {
     pushData: vi.fn((id: string, data: Float32Array) => {
       pushes.push({ id, data });
@@ -18,8 +19,11 @@ function makeFakeSink() {
     configLayer: vi.fn((id: string, config: unknown) => {
       configs.push({ id, config });
     }),
+    clearLayer: vi.fn((id: string, opts?: { latestT?: number }) => {
+      clears.push({ id, opts });
+    }),
   };
-  return { sink, pushes, configs };
+  return { sink, pushes, configs, clears };
 }
 
 /** Compare a Float32Array to an expected float array with tolerance. */
@@ -69,6 +73,23 @@ describe("LineLayerHandle", () => {
     const raw = new Float32Array([1, 2, 3, 4]);
     h.pushRaw(raw);
     expect(pushes[0].data).toBe(raw);
+  });
+
+  it("reset(latestT) forwards a rewind to clearLayer", () => {
+    const { sink, clears } = makeFakeSink();
+    const h = new LineLayerHandle(sink, "chart");
+    h.reset(1234);
+    expect(clears).toHaveLength(1);
+    expect(clears[0]).toEqual({ id: "chart", opts: { latestT: 1234 } });
+  });
+
+  it("reset() with no argument leaves latestT untouched", () => {
+    const { sink, clears } = makeFakeSink();
+    const h = new LineLayerHandle(sink, "chart");
+    h.reset();
+    expect(clears).toHaveLength(1);
+    expect(clears[0].id).toBe("chart");
+    expect(clears[0].opts?.latestT).toBeUndefined();
   });
 });
 

@@ -94,6 +94,38 @@ export class ReplayStore {
     });
   }
 
+  /**
+   * Range query scoped to a single channel. Uses the composite `by_channel_t`
+   * index so IDB streams only the matching channel's frames — much cheaper
+   * than `getFrames(...).filter(...)` once the store has many channels.
+   *
+   * Returned frames are sorted ascending by `t`.
+   */
+  async getFramesByChannel(
+    channelId: string,
+    fromMs: number,
+    toMs: number,
+  ): Promise<SerializedFrame[]> {
+    const db = this._assertOpen();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction("frames", "readonly");
+      const index = tx.objectStore("frames").index("by_channel_t");
+      const range = IDBKeyRange.bound([channelId, fromMs], [channelId, toMs]);
+      const req = index.getAll(range);
+      req.onsuccess = (e) => {
+        const records = (e.target as IDBRequest<FrameRecord[]>).result;
+        resolve(
+          records.map((r) => ({
+            t: r.t,
+            channelId: r.channelId,
+            payload: r.payload,
+          })),
+        );
+      };
+      req.onerror = () => reject(req.error);
+    });
+  }
+
   async deleteFramesBefore(cutoffMs: number): Promise<void> {
     const db = this._assertOpen();
     return new Promise((resolve, reject) => {

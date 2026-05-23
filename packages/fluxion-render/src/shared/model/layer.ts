@@ -29,5 +29,11 @@ export interface Layer {
    */
   scan?(viewport: Viewport): void;
   draw(ctx: OffscreenCanvasRenderingContext2D, viewport: Viewport): void;
+  /**
+   * Optional. Drop the layer's data buffer (ring buffer for streaming layers,
+   * last-set dataset for static layers) without touching config or removing
+   * the layer. Layers that don't hold data may leave this unimplemented.
+   */
+  clearData?(): void;
   dispose(): void;
 }

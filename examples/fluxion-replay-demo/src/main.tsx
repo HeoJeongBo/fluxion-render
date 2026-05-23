@@ -1,16 +1,23 @@
 import { StrictMode, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "./app";
+import { ChartReplayApp } from "./chart-replay";
 import { DvrApp } from "./dvr";
 
-type Tab = "dvr" | "split";
+type Tab = "dvr" | "split" | "chart";
+
+const TAB_LABEL: Record<Tab, string> = {
+  dvr: "DVR Demo",
+  split: "Split Demo",
+  chart: "Chart Replay",
+};
 
 function Root() {
   const [tab, setTab] = useState<Tab>("dvr");
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100vh", background: "#0f1117" }}>
       <div style={{ display: "flex", borderBottom: "1px solid #2a2d3a", background: "#1a1d27", flexShrink: 0 }}>
-        {(["dvr", "split"] as Tab[]).map((t) => (
+        {(["dvr", "split", "chart"] as Tab[]).map((t) => (
           <button
             key={t}
             onClick={() => setTab(t)}
@@ -26,12 +33,12 @@ function Root() {
               transition: "color 0.15s",
             }}
           >
-            {t === "dvr" ? "DVR Demo" : "Split Demo"}
+            {TAB_LABEL[t]}
           </button>
         ))}
       </div>
       <div style={{ flex: 1, minHeight: 0 }}>
-        {tab === "dvr" ? <DvrApp /> : <App />}
+        {tab === "dvr" ? <DvrApp /> : tab === "split" ? <App /> : <ChartReplayApp />}
       </div>
     </div>
   );

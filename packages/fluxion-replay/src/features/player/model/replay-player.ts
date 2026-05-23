@@ -15,6 +15,7 @@ export type FrameListener = (frame: ReplayPlayerFrame) => void;
 export type TickListener = (currentT: number) => void;
 export type StateListener = (state: ReplayPlayerState) => void;
 export type EndListener = () => void;
+export type SeekListener = (clampedT: number) => void;
 
 export interface ReplayPlayerOptions {
   store: ReplayStore;
@@ -64,6 +65,7 @@ export class ReplayPlayer {
   private _tickListeners = new Set<TickListener>();
   private _stateListeners = new Set<StateListener>();
   private _endListeners = new Set<EndListener>();
+  private _seekListeners = new Set<SeekListener>();
   private _prefetchBuffer: SerializedFrame[] = [];
   private _prefetchedUpTo: number;
   private _isPrefetching = false;
@@ -96,6 +98,7 @@ export class ReplayPlayer {
     this._prefetchBuffer = this._prefetchBuffer.filter((f) => f.t >= clamped - lookback);
     this._prefetchedUpTo = Math.max(clamped - lookback, this._timeRange.earliest);
     this._ended = false;
+    for (const listener of this._seekListeners) listener(clamped);
   }
 
   play(rate = 1.0): void {
@@ -153,6 +156,20 @@ export class ReplayPlayer {
     return () => this._endListeners.delete(listener);
   }
 
+  /**
+   * Subscribe to `seek(t)` calls. Listener receives the clamped target time
+   * (so callers can react without re-clamping). Useful for downstream
+   * components — e.g. a chart that needs to re-hydrate from the store at
+   * the new seek point — that can't be reached via the streaming `onFrame`
+   * or `onTick` events.
+   *
+   * Returns an unsubscribe function.
+   */
+  onSeek(listener: SeekListener): () => void {
+    this._seekListeners.add(listener);
+    return () => this._seekListeners.delete(listener);
+  }
+
   dispose(): void {
     this._clock.dispose();
     this._offTick?.();
@@ -161,6 +178,7 @@ export class ReplayPlayer {
     this._tickListeners.clear();
     this._stateListeners.clear();
     this._endListeners.clear();
+    this._seekListeners.clear();
     this._prefetchBuffer = [];
   }
 

@@ -23,6 +23,13 @@ export interface LineChartConfig {
  *
  * On every append the layer advances `viewport.latestT` so the axis-grid in
  * `xMode: "time"` can compute a trailing sliding window.
+ *
+ * **Float32 timestamp range**: `t` is stored as Float32 in the wire format,
+ * so absolute ms-since-epoch (~1.78e12) quantises to ~131,072 ms buckets and
+ * collapses sub-second samples onto a single x coordinate. Always push
+ * host-relative `t` (e.g. `Date.now() - timeOrigin`, where `timeOrigin` is the
+ * session start) and let `axisGridLayer({ timeOrigin })` reconstruct wall-clock
+ * labels at draw time.
  */
 export class LineChartLayer implements Layer {
   readonly id: string;
@@ -113,6 +120,10 @@ export class LineChartLayer implements Layer {
       }
     });
     ctx.stroke();
+  }
+
+  clearData(): void {
+    this.ring.clear();
   }
 
   dispose(): void {

@@ -316,4 +316,138 @@ describe("Engine", () => {
     ).not.toThrow();
     engine.dispatch({ op: Op.DISPOSE });
   });
+
+  describe("CLEAR_DATA (replay seek support)", () => {
+    // Helpers — the axis-grid layer issues its own stroke/moveTo/lineTo calls
+    // (grid lines, axis ticks). To isolate the line layer's contribution we
+    // diff call counts before and after toggling whether the line has data.
+    const countStrokes = (ctx: FakeCtx) =>
+      ctx.calls.filter((c) => c.name === "stroke").length;
+
+    function setupTimeChart(timeWindowMs = 1000) {
+      const engine = new Engine();
+      const canvas = newCanvas(200, 100);
+      engine.dispatch({ op: Op.INIT, canvas, width: 200, height: 100, dpr: 1 });
+      engine.dispatch({
+        op: Op.ADD_LAYER,
+        id: "axis",
+        kind: "axis-grid",
+        config: { xMode: "time", timeWindowMs, yRange: [-1, 1] },
+      });
+      engine.dispatch({
+        op: Op.ADD_LAYER,
+        id: "line",
+        kind: "line",
+        config: { color: "#0f0", capacity: 16 },
+      });
+      const ctx = (canvas as unknown as { getContext: () => FakeCtx }).getContext();
+      return { engine, ctx };
+    }
+
+    it("drops the layer's ring buffer so the next frame stops rendering the line", () => {
+      const { engine, ctx } = setupTimeChart();
+      const seed = new Float32Array([100, 0.1, 500, 0.5, 900, 0.9]);
+      engine.dispatch({
+        op: Op.DATA,
+        id: "line",
+        buffer: seed.buffer,
+        dtype: "f32",
+        length: seed.length,
+      });
+      flushFrame();
+      // Baseline: axis strokes + 1 line stroke.
+      const withData = countStrokes(ctx);
+
+      engine.dispatch({ op: Op.CLEAR_DATA, id: "line" });
+      ctx.calls.length = 0;
+      flushFrame();
+      // Axis still draws but the line layer no longer strokes — exactly one
+      // fewer stroke than the baseline.
+      expect(countStrokes(ctx)).toBe(withData - 1);
+      engine.dispatch({ op: Op.DISPOSE });
+    });
+
+    it("rewinds viewport.latestT so the time-mode axis can scroll backward", () => {
+      const { engine, ctx } = setupTimeChart(1000);
+      // Seed: latestT advances to 2000 → axis window = [1000, 2000].
+      const seed = new Float32Array([1500, 0.1, 2000, 0.2]);
+      engine.dispatch({
+        op: Op.DATA,
+        id: "line",
+        buffer: seed.buffer,
+        dtype: "f32",
+        length: seed.length,
+      });
+      flushFrame();
+      const baselineStrokes = countStrokes(ctx);
+
+      // Rewind latestT to 600 → axis window = [-400, 600]. The backfilled
+      // samples at t=400,500 land inside that window, so the line layer
+      // re-issues its stroke.
+      engine.dispatch({ op: Op.CLEAR_DATA, id: "line", latestT: 600 });
+      const backfill = new Float32Array([400, 0.7, 500, 0.8]);
+      engine.dispatch({
+        op: Op.DATA,
+        id: "line",
+        buffer: backfill.buffer,
+        dtype: "f32",
+        length: backfill.length,
+      });
+      ctx.calls.length = 0;
+      flushFrame();
+      // Same axis cost plus the line layer's stroke = baseline count.
+      expect(countStrokes(ctx)).toBe(baselineStrokes);
+      engine.dispatch({ op: Op.DISPOSE });
+    });
+
+    it("omitting latestT leaves the time axis where it was", () => {
+      const { engine, ctx } = setupTimeChart(1000);
+      const seed = new Float32Array([1500, 0.1, 2000, 0.2]);
+      engine.dispatch({
+        op: Op.DATA,
+        id: "line",
+        buffer: seed.buffer,
+        dtype: "f32",
+        length: seed.length,
+      });
+      flushFrame();
+      // Baseline: axis moveTos + 1 line moveTo (start of the 2-sample stroke).
+      const baselineMoveTos = ctx.calls.filter((c) => c.name === "moveTo").length;
+
+      // Clear without rewind. latestT stays at 2000 → window stays [1000, 2000].
+      // Push samples at t=400,500: since 500 < 2000, the line layer's monotonic
+      // guard leaves latestT alone, so the window doesn't shift. The samples
+      // fall outside the window and get filtered in the draw loop, so the line
+      // layer issues zero moveTos.
+      engine.dispatch({ op: Op.CLEAR_DATA, id: "line" });
+      const after = new Float32Array([400, 0.7, 500, 0.8]);
+      engine.dispatch({
+        op: Op.DATA,
+        id: "line",
+        buffer: after.buffer,
+        dtype: "f32",
+        length: after.length,
+      });
+      ctx.calls.length = 0;
+      flushFrame();
+      // Axis layer is window-driven and the window didn't move, so its moveTo
+      // count is unchanged. Only the line layer's moveTo is gone (1 fewer).
+      const afterMoveTos = ctx.calls.filter((c) => c.name === "moveTo").length;
+      expect(afterMoveTos).toBe(baselineMoveTos - 1);
+      engine.dispatch({ op: Op.DISPOSE });
+    });
+
+    it("is a no-op for an unknown layer id", () => {
+      const engine = new Engine();
+      const canvas = newCanvas(100, 100);
+      engine.dispatch({ op: Op.INIT, canvas, width: 100, height: 100, dpr: 1 });
+      expect(() =>
+        engine.dispatch({ op: Op.CLEAR_DATA, id: "missing" }),
+      ).not.toThrow();
+      expect(() =>
+        engine.dispatch({ op: Op.CLEAR_DATA, id: "missing", latestT: 100 }),
+      ).not.toThrow();
+      engine.dispatch({ op: Op.DISPOSE });
+    });
+  });
 });

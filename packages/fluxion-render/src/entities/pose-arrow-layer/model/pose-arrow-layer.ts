@@ -126,6 +126,10 @@ export class PoseArrowLayer implements Layer {
     });
   }
 
+  clearData(): void {
+    this.ring.clear();
+  }
+
   dispose(): void {
     this.ring.clear();
   }

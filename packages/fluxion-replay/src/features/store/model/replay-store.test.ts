@@ -186,6 +186,53 @@ describe("ReplayStore", () => {
       expect(frames).toHaveLength(0);
     });
 
+    describe("getFramesByChannel", () => {
+      it("returns only frames for the requested channel", async () => {
+        for (const t of [100, 200, 300]) {
+          store.appendFrame({ t, channelId: "cpu", payload: new ArrayBuffer(4) });
+          store.appendFrame({ t, channelId: "mem", payload: new ArrayBuffer(4) });
+        }
+        await store.flush();
+
+        const cpu = await store.getFramesByChannel("cpu", 0, 1000);
+        expect(cpu).toHaveLength(3);
+        expect(cpu.every((f) => f.channelId === "cpu")).toBe(true);
+
+        const mem = await store.getFramesByChannel("mem", 0, 1000);
+        expect(mem).toHaveLength(3);
+        expect(mem.every((f) => f.channelId === "mem")).toBe(true);
+      });
+
+      it("respects the time range bounds", async () => {
+        for (const t of [100, 200, 300, 400, 500]) {
+          store.appendFrame({ t, channelId: "cpu", payload: new ArrayBuffer(4) });
+        }
+        await store.flush();
+
+        const mid = await store.getFramesByChannel("cpu", 150, 450);
+        expect(mid.map((f) => f.t).sort((a, b) => a - b)).toEqual([200, 300, 400]);
+      });
+
+      it("returns frames sorted ascending by t", async () => {
+        // Insert out of order to verify the IDB index returns sorted results
+        for (const t of [500, 100, 300, 200, 400]) {
+          store.appendFrame({ t, channelId: "cpu", payload: new ArrayBuffer(4) });
+        }
+        await store.flush();
+
+        const frames = await store.getFramesByChannel("cpu", 0, 1000);
+        const ts = frames.map((f) => f.t);
+        expect(ts).toEqual([...ts].sort((a, b) => a - b));
+      });
+
+      it("returns empty array when channel has no frames in range", async () => {
+        store.appendFrame({ t: 100, channelId: "cpu", payload: new ArrayBuffer(4) });
+        await store.flush();
+        const frames = await store.getFramesByChannel("missing", 0, 1000);
+        expect(frames).toEqual([]);
+      });
+    });
+
     it("dispose() clears pending frames", () => {
       store.appendFrame({ t: 1, channelId: "ch", payload: new ArrayBuffer(4) });
       store.dispose();

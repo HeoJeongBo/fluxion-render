@@ -394,6 +394,18 @@ export class FluxionHost {
     );
   }
 
+  /**
+   * Clear a layer's data buffer (ring buffer for streaming layers) without
+   * removing the layer or touching its config. Pass `latestT` to force the
+   * worker's time-mode axis window to rewind — needed when a replay player
+   * seeks backward, since `viewport.latestT` is otherwise monotonic-up.
+   *
+   * Pair with `LineLayerHandle.reset(latestT)` for a typed call site.
+   */
+  clearLayer(id: string, opts?: { latestT?: number }): void {
+    this.post({ op: Op.CLEAR_DATA, id, latestT: opts?.latestT });
+  }
+
   resize(width: number, height: number, dpr: number): void {
     this.post({ op: Op.RESIZE, width, height, dpr });
   }

@@ -358,4 +358,57 @@ describe("ReplayPlayer", () => {
     player.dispose();
     getFramesSpy.mockRestore();
   });
+
+  describe("onSeek", () => {
+    it("fires with the clamped target on seek()", () => {
+      const { player } = makePlayer(1000, 5000);
+      const seeks: number[] = [];
+      player.onSeek((t) => seeks.push(t));
+
+      player.play();
+      player.seek(2500);
+      player.seek(-100); // below earliest → clamped to 1000
+      player.seek(99999); // above latest → clamped to 5000
+
+      expect(seeks).toEqual([2500, 1000, 5000]);
+      player.dispose();
+    });
+
+    it("supports multiple listeners independently", () => {
+      const { player } = makePlayer();
+      const a: number[] = [];
+      const b: number[] = [];
+      player.onSeek((t) => a.push(t));
+      player.onSeek((t) => b.push(t));
+
+      player.play();
+      player.seek(1234);
+      expect(a).toEqual([1234]);
+      expect(b).toEqual([1234]);
+      player.dispose();
+    });
+
+    it("returns an unsubscribe function", () => {
+      const { player } = makePlayer();
+      const events: number[] = [];
+      const off = player.onSeek((t) => events.push(t));
+
+      player.play();
+      player.seek(100);
+      off();
+      player.seek(200);
+      expect(events).toEqual([100]);
+      player.dispose();
+    });
+
+    it("dispose() clears seek listeners", () => {
+      const { player } = makePlayer();
+      const events: number[] = [];
+      player.onSeek((t) => events.push(t));
+      player.dispose();
+      // dispose stops the clock; further seeks should not invoke listeners.
+      player.seek(500);
+      expect(events).toEqual([]);
+    });
+  });
 });

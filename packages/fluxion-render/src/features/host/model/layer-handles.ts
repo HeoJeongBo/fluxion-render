@@ -18,6 +18,7 @@ import type { ReferenceLineConfig } from "../../../entities/reference-line-layer
 export interface FluxionDataSink {
   pushData(id: string, data: Float32Array): void;
   configLayer(id: string, config: unknown): void;
+  clearLayer(id: string, opts?: { latestT?: number }): void;
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -68,6 +69,23 @@ export class LineLayerHandle {
    */
   pushRaw(data: Float32Array): void {
     this.sink.pushData(this.id, data);
+  }
+
+  /**
+   * Drop the layer's ring buffer and (optionally) rewind the worker-side
+   * time axis to `latestT`. Use when a replay player seeks backward and
+   * the chart needs to re-hydrate from a store at the seek point:
+   *
+   * ```ts
+   * handle.reset(seekT);                  // wipe + rewind axis
+   * handle.pushBatch(backfillSamples);    // refill with [seekT - windowMs, seekT]
+   * ```
+   *
+   * Omitting `latestT` leaves the axis where it was — useful when you're
+   * about to push fresh batches that will advance time forward anyway.
+   */
+  reset(latestT?: number): void {
+    this.sink.clearLayer(this.id, { latestT });
   }
 }
 

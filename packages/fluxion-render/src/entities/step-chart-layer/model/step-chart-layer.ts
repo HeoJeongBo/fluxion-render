@@ -103,6 +103,10 @@ export class StepChartLayer implements Layer {
     ctx.stroke();
   }
 
+  clearData(): void {
+    this.ring.clear();
+  }
+
   dispose(): void {
     this.ring.clear();
   }

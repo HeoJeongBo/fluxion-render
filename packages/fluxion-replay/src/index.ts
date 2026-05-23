@@ -39,6 +39,7 @@ export type {
   TickListener,
   StateListener,
   EndListener,
+  SeekListener,
 } from "./features/player/model/replay-player";
 
 // Session (main orchestrator)

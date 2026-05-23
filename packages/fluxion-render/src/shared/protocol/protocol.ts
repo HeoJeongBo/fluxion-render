@@ -16,6 +16,7 @@ export const Op = {
   POOL_DISPOSE: 10,
   SET_AXIS_CANVAS: 11,
   SET_AXIS_STYLE: 12,
+  CLEAR_DATA: 13,
 } as const;
 export type Op = (typeof Op)[keyof typeof Op];
 
@@ -144,6 +145,24 @@ export interface SetAxisCanvasMsg {
   yAxisWidth: number;
 }
 
+/**
+ * Clear a layer's data buffer (ring buffer for streaming layers, last-set
+ * dataset for static layers) without removing the layer. Useful for replay
+ * seek-back where the chart must drop stale data and re-hydrate from a store.
+ *
+ * Optionally rewinds `viewport.latestT` so the axis-grid time window can
+ * follow a backward seek — normally `latestT` is monotonic-up (it only
+ * advances when a layer pushes data with a newer `t`), which would freeze
+ * the visible window after a backward seek.
+ */
+export interface ClearDataMsg {
+  op: typeof Op.CLEAR_DATA;
+  id: string;
+  /** If set, force `viewport.latestT` to this value (allows backward rewind). */
+  latestT?: number;
+  hostId?: string;
+}
+
 /** Update axis rendering style (color, font, tick size, etc.). */
 export interface SetAxisStyleMsg {
   op: typeof Op.SET_AXIS_STYLE;
@@ -167,7 +186,8 @@ export type HostMsg =
   | PoolInitMsg
   | PoolDisposeMsg
   | SetAxisCanvasMsg
-  | SetAxisStyleMsg;
+  | SetAxisStyleMsg
+  | ClearDataMsg;
 
 // ────────────────────────────────────────────────────────────────────────
 // Worker → Main messages (posted via self.postMessage inside the worker)
