@@ -315,14 +315,16 @@ All hooks live under `@heojeongbo/fluxion-replay/react`.
 
 | Hook | What it gives you |
 |---|---|
-| `useReplaySession(opts)` | `{ session, isReady, mode, timeRange, record, enterReplay, exitReplay }` — owns IDB/OPFS lifecycle and toggles between live and replay modes. |
-| `useReplayPlayer(player)` | `{ state, currentT, play, pause, stop, seek }` — mirrors the player into React state. `currentT` is **snapped to whole seconds** (1-Hz cursor) and refreshed via a 250 ms `setInterval` so heavy chart traffic can't starve the scrubber. |
+| `useReplaySession(opts)` | `{ session, isReady, error, mode, timeRange, record, enterReplay, exitReplay }` — owns IDB/OPFS lifecycle and toggles between live and replay modes. `error` surfaces `session.open()` failures (quota / blocked IDB) instead of swallowing them to `console.error`. |
+| `useReplayPlayer(player, opts?)` | `{ state, currentT, play, pause, stop, seek }` — mirrors the player into React state. `currentT` is **snapped to whole seconds** by default (1-Hz cursor) and refreshed via a 250 ms `setInterval` so heavy chart traffic can't starve the scrubber. Tune via `{ snapMs, pollMs }` — `snapMs: 0` disables snapping. |
 | `useReplayScrubber(opts)` | `{ min, max, value, disabled }` — derives `<input type="range">` props snapped to 1 s, with a `recordingStartMs` anchor that pins the left edge and a `minSpanMs` floor that keeps the bar from collapsing at mount. |
 | `useReplayTimeline(player, timeRange)` | `{ fraction, buffered, seekTo }` — normalized 0–1 position for low-level scrubber UIs. Used internally by `<ReplayTimeline>`. |
 | `useReplayDvr(opts)` | `{ isDvr, player, frozenLatest, effectiveTimeRange, enter, exit }` — high-level DVR controller. Captures a "frozen latest" on entry so the scrubber stops drifting forward, optionally auto-plays on enter, and auto-exits to live when playback reaches the frozen edge. |
 | `useLiveTimeRange(session, opts?)` | `{ timeRange, segments, seed }` — polls `session.getTimeRange()` and exposes recording segments. `seed()` lets you avoid the first-poll empty state. |
 | `useChartReplay(opts)` | `{ isHydrating, hydratedCount }` — bridges a `ReplayPlayer` into a `fluxion-render` line layer. Backfills the trailing window on enter / seek and streams `onFrame` events into `handle.push`. Uses a sequential queue + microtask yield to defeat seek-burst and exit races. |
 | `useChartLiveBackfill(opts)` | `void` — when `active` flips true (mount, DVR→live), flushes the store and rewrites the chart with the most recent window so the live chart picks up where DVR left off. Pairs with `useFluxionStream` for ongoing pushes. |
+| `useChartReplayBridge(opts)` | `{ isHydrating, hydratedCount }` — **convenience bundle**: combines `useFluxionStream` (live pump) + `useChartReplay` (DVR hydrate) + `useChartLiveBackfill` (DVR→live re-entry) + the stale-closure `isLiveRef` guard into one call. Reduces the 30-line MiniChart boilerplate to ~5 lines. |
+| `useRecordingSession(opts)` | `{ error, isRecording }` — encapsulates the start/stop recording lifecycle, the StrictMode-safe ref guard, and optional per-channel tickers. Use when the page **is** the recording. |
 | `useVideoReplayer(opts)` | `{ ref, isReady }` — drives a `<video>` element from a video-channel `ReplayPlayer`. |
 | `useStorageInfo(session, opts?)` | `{ usedBytes, quotaBytes, percentUsed, idbFrameCount }` — periodic IDB + OPFS quota inspector. |
 | `useDisplayMedia()` | `{ stream, start, stop }` — thin wrapper around `navigator.mediaDevices.getDisplayMedia` used by the screen-capture demos. |
@@ -404,61 +406,103 @@ What you get:
 
 ## Chart-replay pattern
 
-`useChartReplay` + `useChartLiveBackfill` bridge a `ReplayPlayer` into a `fluxion-render` line layer without you having to write the IDB queries or worker-message orchestration:
+The recommended path is `useChartReplayBridge` — it bundles the live pump, the DVR hydrate, the live-re-entry backfill, and the stale-closure ref guard so a chart wires up in one call:
 
 ```tsx
-import { useFluxionStream } from "@heojeongbo/fluxion-render/react";
-import { useChartReplay, useChartLiveBackfill } from "@heojeongbo/fluxion-replay/react";
+import { FluxionCanvas, useMiniChart } from "@heojeongbo/fluxion-render/react";
+import { useChartReplayBridge } from "@heojeongbo/fluxion-replay/react";
 
-// Live pump — keeps recording during DVR. Use a ref for `isLive` to avoid
-// stale closures during the async `dvr.enter()` await.
-const isLiveRef = useRef(isLive);
-isLiveRef.current = isLive;
+function MiniChart({ spec, isLive, session, dvr, timeOrigin }) {
+  const [host, setHost] = useState<FluxionHost | null>(null);
 
-useFluxionStream({
-  host,
-  intervalMs: 1000 / 20,
-  setup: (h) => h.line("line"),
-  tick: (_t, handle) => {
-    const wallT = Date.now();
-    const y = sample(wallT);
-    if (isLiveRef.current) handle.push({ t: wallT - timeOrigin, y });
-    record("signal", { name: "signal", value: y }, wallT);
-    return 1;
-  },
-});
+  const { layers } = useMiniChart({
+    color: spec.color,
+    timeWindowMs: 5_000,
+    timeOrigin,
+    sampleHz: 20,
+  });
 
-// DVR path — backfills the trailing window on enter/seek and streams onFrame.
-useChartReplay<MetricSample>({
-  host: isLive ? null : host,
-  player: isLive ? null : dvr.player,
-  store: isLive ? null : session?.store ?? null,
-  channel: signalChannel,
-  layerId: "line",
-  windowMs: 5_000,
-  timeOrigin,
-  pickValue: (d) => d.value,
-});
+  useChartReplayBridge<MetricSample>({
+    host,
+    session,
+    dvr,
+    isLive,
+    channel: spec.channel,
+    layerId: "line",
+    windowMs: 5_000,
+    liveHz: 20,
+    timeOrigin,
+    produce: (wallT) => ({ name: spec.id, value: sampleAt(wallT) }),
+    pickValue: (d) => d.value,
+  });
 
-// Live re-entry — wipes the chart and rewrites the most recent window so
-// "Go Live" shows the data that accumulated during DVR.
-useChartLiveBackfill<MetricSample>({
-  host,
-  store: session?.store ?? null,
-  channel: signalChannel,
-  layerId: "line",
-  windowMs: 5_000,
-  timeOrigin,
-  pickValue: (d) => d.value,
-  active: isLive,
+  return <FluxionCanvas layers={layers} onReady={setHost} />;
+}
+```
+
+What the bridge takes care of internally:
+
+- **Live pump** (`useFluxionStream`) — pushes `produce(wallT)` to the chart layer while `isLive`, and records into the session **every** tick (so the store keeps growing during DVR).
+- **DVR hydrate** (`useChartReplay`) — backfills `[currentT - windowMs, currentT]` on enter/seek, then streams `onFrame` events. Sequential queue + microtask yield defeat seek-burst and exit races.
+- **Live re-entry** (`useChartLiveBackfill`) — synchronously `handle.reset(now)` plus an async batch refill so the chart never goes blank on Go-Live.
+- **Stale-closure guard** — reads `isLive` through a ref so the 50 ms tick that fires mid-`dvr.enter()` doesn't leak live samples into a DVR hydrate.
+
+### Manual wiring (advanced)
+
+If you need finer control — e.g. multiple channels per chart, custom live pump, or no live recording — call `useChartReplay`, `useChartLiveBackfill`, and `useFluxionStream` individually. The bridge has no special access; it's a thin composition you can re-implement when the defaults don't fit. Match the `timeOrigin` between `axisGridLayer`, the bridge / underlying hooks, and `useMiniChart` so the Float32 wire-format quantisation stays consistent.
+
+---
+
+## Snap-to-segment utility
+
+`snapTimeToSegment(t, segments, latest)` forward-snaps a scrubber target into the next recorded segment when `t` falls in a gap. Pure function; pair with `useLiveTimeRange(session).segments`:
+
+```ts
+import { snapTimeToSegment } from "@heojeongbo/fluxion-replay";
+
+const snapped = snapTimeToSegment(scrubT, segments, liveTimeRange.latest);
+dvr.player?.seek(snapped);
+```
+
+---
+
+## Recording-session helper
+
+When the page **is** the recording (start on mount, stop on unmount, optional per-channel tickers), reach for `useRecordingSession`:
+
+```tsx
+import { useRecordingSession } from "@heojeongbo/fluxion-replay/react";
+
+useRecordingSession({
+  session,
+  enabled: isReady,
+  seedTimeRange,
+  channels: [
+    { channelId: "cpu", intervalMs: 200, produce: () => ({ name: "cpu", value: Math.random() }) },
+    { channelId: "events", intervalMs: 2000, produce: () => ({ level: "info", message: "tick" }) },
+  ],
 });
 ```
 
-Notes:
+The hook guards against StrictMode double-mount, cancels half-finished async starts, and surfaces `error` separately from the `isRecording` boolean.
 
-- `timeOrigin` is a per-page constant (`useMemo(() => Date.now(), [])`) that keeps wire-format timestamps inside `Float32`'s safe integer range. Pass the same value to `axisGridLayer({ timeOrigin })` so labels still show wall-clock time.
-- `useChartReplay` serialises hydrate work: at most one IDB query is in flight, and additional `seek()` bursts collapse into a single "latest t" — drags settle in one or two visible updates, not dozens.
-- `useChartLiveBackfill` calls `handle.reset(now)` synchronously when `active` flips true, then asynchronously refills from `store.getFramesByChannel`. The sync reset wins the FIFO race against any DVR hydrate that's still in flight, so the live chart never appears blank after a Go-Live.
+---
+
+## Channel typo detection — `UnknownChannelError`
+
+`session.record(channelId, ...)` throws `UnknownChannelError` when `channelId` isn't registered. Catch the class to detect typos without parsing the message:
+
+```ts
+import { UnknownChannelError } from "@heojeongbo/fluxion-replay";
+
+try {
+  session.record("cpuu", { name: "cpuu", value: 1 }); // typo
+} catch (e) {
+  if (e instanceof UnknownChannelError) {
+    console.warn(`Unknown channel "${e.channelId}". Available: ${e.availableChannelIds}`);
+  } else throw e;
+}
+```
 
 ---
 

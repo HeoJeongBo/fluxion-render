@@ -1,0 +1,170 @@
+import { act, renderHook } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { ReplaySession } from "../../../features/session/model/replay-session";
+import { useRecordingSession } from "./use-recording-session";
+
+/** Minimal ReplaySession stub — only the methods the hook touches. */
+function makeSessionStub() {
+  return {
+    clearRecording: vi.fn(async () => {}),
+    startRecording: vi.fn(async () => {}),
+    stopRecording: vi.fn(() => {}),
+    record: vi.fn(),
+  };
+}
+
+function stubAsSession(stub: ReturnType<typeof makeSessionStub>): ReplaySession {
+  return stub as unknown as ReplaySession;
+}
+
+describe("useRecordingSession", () => {
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => vi.useRealTimers());
+
+  it("no-op while session is null or disabled", async () => {
+    const { result, rerender } = renderHook(
+      ({ session, enabled }: { session: ReplaySession | null; enabled: boolean }) =>
+        useRecordingSession({ session, enabled }),
+      { initialProps: { session: null as ReplaySession | null, enabled: true } },
+    );
+    await act(async () => { await Promise.resolve(); });
+    expect(result.current.isRecording).toBe(false);
+    expect(result.current.error).toBeNull();
+
+    // enabled=false with a real session — still idle.
+    const stub = makeSessionStub();
+    rerender({ session: stubAsSession(stub), enabled: false });
+    await act(async () => { await Promise.resolve(); });
+    expect(stub.startRecording).not.toHaveBeenCalled();
+    expect(result.current.isRecording).toBe(false);
+  });
+
+  it("starts the session and reaches isRecording=true", async () => {
+    const stub = makeSessionStub();
+    const { result } = renderHook(() =>
+      useRecordingSession({ session: stubAsSession(stub), enabled: true }),
+    );
+    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+    expect(stub.clearRecording).toHaveBeenCalledTimes(1);
+    expect(stub.startRecording).toHaveBeenCalledTimes(1);
+    expect(result.current.isRecording).toBe(true);
+    expect(result.current.error).toBeNull();
+  });
+
+  it("clearOnStart: false skips clearRecording", async () => {
+    const stub = makeSessionStub();
+    renderHook(() =>
+      useRecordingSession({
+        session: stubAsSession(stub),
+        enabled: true,
+        clearOnStart: false,
+      }),
+    );
+    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+    expect(stub.clearRecording).not.toHaveBeenCalled();
+    expect(stub.startRecording).toHaveBeenCalledTimes(1);
+  });
+
+  it("seedTimeRange fires once after startRecording succeeds", async () => {
+    const stub = makeSessionStub();
+    const seed = vi.fn();
+    const fixedNow = 1_700_000_000_000;
+    vi.spyOn(Date, "now").mockReturnValue(fixedNow);
+    renderHook(() =>
+      useRecordingSession({
+        session: stubAsSession(stub),
+        enabled: true,
+        seedTimeRange: seed,
+      }),
+    );
+    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+    expect(seed).toHaveBeenCalledWith({ earliest: fixedNow, latest: fixedNow });
+    vi.restoreAllMocks();
+  });
+
+  it("channels: spins up one ticker per spec and records on each interval", async () => {
+    const stub = makeSessionStub();
+    const cpuProduce = vi.fn(() => ({ name: "cpu", value: 0.5 }));
+    const memProduce = vi.fn(() => ({ name: "mem", value: 0.7 }));
+    renderHook(() =>
+      useRecordingSession({
+        session: stubAsSession(stub),
+        enabled: true,
+        channels: [
+          { channelId: "cpu", intervalMs: 100, produce: cpuProduce },
+          { channelId: "mem", intervalMs: 200, produce: memProduce },
+        ],
+      }),
+    );
+    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+
+    // Advance ~250ms — cpu should fire ~2 times, mem ~1.
+    act(() => { vi.advanceTimersByTime(250); });
+
+    expect(cpuProduce).toHaveBeenCalled();
+    expect(memProduce).toHaveBeenCalled();
+    // First record args: (channelId, value, wallT).
+    expect(stub.record).toHaveBeenCalledWith(
+      "cpu",
+      { name: "cpu", value: 0.5 },
+      expect.any(Number),
+    );
+    expect(stub.record).toHaveBeenCalledWith(
+      "mem",
+      { name: "mem", value: 0.7 },
+      expect.any(Number),
+    );
+  });
+
+  it("cleanup stops every ticker — no further records after unmount", async () => {
+    const stub = makeSessionStub();
+    const produce = vi.fn(() => 1);
+    const { unmount } = renderHook(() =>
+      useRecordingSession({
+        session: stubAsSession(stub),
+        enabled: true,
+        channels: [{ channelId: "x", intervalMs: 100, produce }],
+      }),
+    );
+    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+
+    act(() => { vi.advanceTimersByTime(150); });
+    const recordsBefore = stub.record.mock.calls.length;
+    expect(recordsBefore).toBeGreaterThan(0);
+
+    unmount();
+    act(() => { vi.advanceTimersByTime(500); });
+    // No new ticks fired after unmount.
+    expect(stub.record.mock.calls.length).toBe(recordsBefore);
+  });
+
+  it("surfaces an Error when startRecording rejects", async () => {
+    const stub = makeSessionStub();
+    const failure = new Error("idb quota exceeded");
+    stub.startRecording.mockRejectedValueOnce(failure);
+    const { result } = renderHook(() =>
+      useRecordingSession({ session: stubAsSession(stub), enabled: true }),
+    );
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(result.current.error).toBe(failure);
+    expect(result.current.isRecording).toBe(false);
+  });
+
+  it("StrictMode-style double-mount on same session doesn't restart recording", async () => {
+    const stub = makeSessionStub();
+    const { rerender } = renderHook(
+      ({ session }: { session: ReplaySession }) =>
+        useRecordingSession({ session, enabled: true }),
+      { initialProps: { session: stubAsSession(stub) } },
+    );
+    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+    rerender({ session: stubAsSession(stub) }); // same instance
+    await act(async () => { await Promise.resolve(); });
+    expect(stub.clearRecording).toHaveBeenCalledTimes(1);
+    expect(stub.startRecording).toHaveBeenCalledTimes(1);
+  });
+});

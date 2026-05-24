@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MetricChannel } from "../../../entities/metric-channel/metric-channel";
+import type { BaseChannel } from "../../../shared/model/base-channel";
 import { ReplayStore } from "../../store/model/replay-store";
 import { ReplayPlayer } from "./replay-player";
 
@@ -511,6 +512,86 @@ describe("ReplayPlayer", () => {
       // seek past latest gets clamped down to latest
       player.seek(99_999);
       expect(player.currentT).toBe(player.timeRange.latest);
+    });
+  });
+
+  // Phase 20-B-1: typed onFrame overload — `frame.data` no longer needs
+  // `as T` cast at the call site when a channel is provided.
+  describe("onFrame typed overload", () => {
+    it("filters by channelId and yields a typed frame", async () => {
+      const channels = new Map<string, BaseChannel<unknown>>();
+      const cpu = new MetricChannel("cpu");
+      const mem = new MetricChannel("mem");
+      channels.set("cpu", cpu);
+      channels.set("mem", mem);
+      const store = new ReplayStore({ batchIntervalMs: 9999 });
+      const player = new ReplayPlayer({
+        store,
+        channels,
+        timeRange: { earliest: 0, latest: 10_000 },
+        prefetchMs: 1000,
+      });
+
+      type Sample = { name: string; value: number };
+      const received: Array<{ t: number; v: number }> = [];
+      // Typed overload — `frame.data` is `Sample`, NOT `unknown`.
+      const off = player.onFrame<Sample>(cpu, (frame) => {
+        // TypeScript-only assertion: `frame.data.value` typechecks because
+        // of the generic overload. If the overload regressed, this would
+        // be `unknown.value` and TS would refuse to compile.
+        received.push({ t: frame.t, v: frame.data.value });
+      });
+
+      // Simulate both channels emitting; only `cpu` should reach the listener.
+      const cpuPayload = cpu.encode({ name: "cpu", value: 0.5 });
+      const memPayload = mem.encode({ name: "mem", value: 0.7 });
+
+      // Stub the prefetch buffer + drive a tick manually.
+      // biome-ignore lint/suspicious/noExplicitAny: testing internals
+      (player as any)._prefetchBuffer = [
+        { t: 100, channelId: "cpu", payload: cpuPayload },
+        { t: 100, channelId: "mem", payload: memPayload },
+      ];
+      // biome-ignore lint/suspicious/noExplicitAny: testing internals
+      (player as any)._prefetchedUpTo = 5_000;
+      // biome-ignore lint/suspicious/noExplicitAny: testing internals
+      (player as any)._onTick(200);
+
+      expect(received).toEqual([{ t: 100, v: 0.5 }]); // mem skipped
+      off();
+      player.dispose();
+    });
+
+    it("regression: the bare-listener overload still gets every channel", async () => {
+      const channels = new Map<string, BaseChannel<unknown>>();
+      const cpu = new MetricChannel("cpu");
+      const mem = new MetricChannel("mem");
+      channels.set("cpu", cpu);
+      channels.set("mem", mem);
+      const store = new ReplayStore({ batchIntervalMs: 9999 });
+      const player = new ReplayPlayer({
+        store,
+        channels,
+        timeRange: { earliest: 0, latest: 10_000 },
+        prefetchMs: 1000,
+      });
+
+      const seenChannels: string[] = [];
+      const off = player.onFrame((frame) => seenChannels.push(frame.channelId));
+
+      // biome-ignore lint/suspicious/noExplicitAny: testing internals
+      (player as any)._prefetchBuffer = [
+        { t: 100, channelId: "cpu", payload: cpu.encode({ name: "cpu", value: 0 }) },
+        { t: 100, channelId: "mem", payload: mem.encode({ name: "mem", value: 0 }) },
+      ];
+      // biome-ignore lint/suspicious/noExplicitAny: testing internals
+      (player as any)._prefetchedUpTo = 5_000;
+      // biome-ignore lint/suspicious/noExplicitAny: testing internals
+      (player as any)._onTick(200);
+
+      expect(seenChannels).toEqual(["cpu", "mem"]);
+      off();
+      player.dispose();
     });
   });
 });

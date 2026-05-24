@@ -1,11 +1,16 @@
 import { describe, expect, it, vi } from "vitest";
 import {
+  AreaLayerHandle,
+  CandlestickLayerHandle,
   type FluxionDataSink,
   LidarLayerHandle,
   LineLayerHandle,
   LineStaticLayerHandle,
   PoseArrowHandle,
   ReferenceLineHandle,
+  ScatterColoredHandle,
+  ScatterLayerHandle,
+  StepLayerHandle,
 } from "./layer-handles";
 
 function makeFakeSink() {
@@ -207,4 +212,36 @@ describe("PoseArrowHandle", () => {
     h.pushRaw(raw);
     expect(pushes[0].data).toBe(raw);
   });
+});
+
+// Phase 20 — all ring-based streaming handles must expose reset(latestT?)
+// symmetrically with LineLayerHandle so consumers can rewind any chart for
+// time-travel without dropping down to host.clearLayer().
+describe("Ring-based handles: reset()", () => {
+  const handlesUnderTest = [
+    ["ScatterLayerHandle", ScatterLayerHandle],
+    ["AreaLayerHandle", AreaLayerHandle],
+    ["StepLayerHandle", StepLayerHandle],
+    ["CandlestickLayerHandle", CandlestickLayerHandle],
+    ["ScatterColoredHandle", ScatterColoredHandle],
+    ["PoseArrowHandle", PoseArrowHandle],
+  ] as const;
+
+  for (const [name, Ctor] of handlesUnderTest) {
+    it(`${name}.reset(latestT) forwards the rewind to clearLayer`, () => {
+      const { sink, clears } = makeFakeSink();
+      const h = new Ctor(sink, "x");
+      h.reset(7777);
+      expect(clears).toEqual([{ id: "x", opts: { latestT: 7777 } }]);
+    });
+
+    it(`${name}.reset() without an argument leaves latestT untouched`, () => {
+      const { sink, clears } = makeFakeSink();
+      const h = new Ctor(sink, "x");
+      h.reset();
+      expect(clears).toHaveLength(1);
+      expect(clears[0].id).toBe("x");
+      expect(clears[0].opts?.latestT).toBeUndefined();
+    });
+  }
 });

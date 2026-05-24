@@ -4,6 +4,36 @@ import { GenericRingBuffer } from "../../../shared/model/generic-ring-buffer";
 import type { ReplayStore } from "../../store/model/replay-store";
 import { TimelineIndex } from "../../timeline/model/timeline-index";
 
+/**
+ * Thrown by `ReplayRecorder.record()` (and `ReplaySession.record()`) when
+ * the supplied channelId wasn't registered in the session's `channels`
+ * option. Catch this specific class to detect channel typos with
+ * `instanceof` rather than parsing the message.
+ *
+ * ```ts
+ * try {
+ *   session.record("cpuu", { ... });   // typo
+ * } catch (e) {
+ *   if (e instanceof UnknownChannelError) {
+ *     console.warn(`Channel "${e.channelId}" not registered`);
+ *   } else throw e;
+ * }
+ * ```
+ */
+export class UnknownChannelError extends Error {
+  readonly channelId: string;
+  readonly availableChannelIds: readonly string[];
+
+  constructor(channelId: string, availableChannelIds: readonly string[]) {
+    super(
+      `Unknown channel "${channelId}". Available channels: [${availableChannelIds.join(", ")}]`,
+    );
+    this.name = "UnknownChannelError";
+    this.channelId = channelId;
+    this.availableChannelIds = availableChannelIds;
+  }
+}
+
 export interface ReplayRecorderOptions {
   channels: BaseChannel<unknown>[];
   store: ReplayStore;
@@ -59,8 +89,7 @@ export class ReplayRecorder {
 
     const channel = this._channels.get(channelId) as BaseChannel<T> | undefined;
     if (!channel) {
-      const available = [...this._channels.keys()].join(", ");
-      throw new Error(`Unknown channel: "${channelId}". Available channels: [${available}]`);
+      throw new UnknownChannelError(channelId, [...this._channels.keys()]);
     }
 
     const t = timestamp ?? Date.now();

@@ -1,17 +1,17 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import type { FluxionHost } from "@heojeongbo/fluxion-render";
+import { FluxionCanvas, useMiniChart } from "@heojeongbo/fluxion-render/react";
 import {
-  axisGridLayer,
-  FluxionCanvas,
-  lineLayer,
-  useFluxionStream,
-} from "@heojeongbo/fluxion-render/react";
-import { MetricChannel, type MetricSample } from "@heojeongbo/fluxion-replay";
+  MetricChannel,
+  type MetricSample,
+  type ReplaySession,
+} from "@heojeongbo/fluxion-replay";
 import {
-  useChartLiveBackfill,
-  useChartReplay,
+  useChartReplayBridge,
   useLiveTimeRange,
+  useRecordingSession,
   useReplayDvr,
+  type UseReplayDvrResult,
   useReplayPlayer,
   useReplayScrubber,
   useReplaySession,
@@ -97,7 +97,6 @@ const T = {
 
 const HZ = 20; // samples per chart per second
 const WINDOW_MS = 5_000; // matches pool-demo's 5s window
-const RING_CAPACITY = Math.ceil((WINDOW_MS / 1000) * HZ * 1.5);
 
 function btn(active: boolean, danger = false): React.CSSProperties {
   return {
@@ -123,101 +122,55 @@ function btn(active: boolean, danger = false): React.CSSProperties {
 interface MiniChartProps {
   spec: ChartSpec;
   isLive: boolean;
-  player: ReturnType<typeof useReplayPlayer>["player"];
-  store: import("@heojeongbo/fluxion-replay").ReplayStore | null;
-  record: (channelId: string, data: MetricSample, t?: number) => void;
+  session: ReplaySession | null;
+  dvr: UseReplayDvrResult;
   /** Shared origin so the chart's Float32 wire format doesn't quantise samples. */
   timeOrigin: number;
 }
 
-function MiniChart({
-  spec,
-  isLive,
-  player,
-  store,
-  record,
-  timeOrigin,
-}: MiniChartProps) {
+function MiniChart({ spec, isLive, session, dvr, timeOrigin }: MiniChartProps) {
   const [host, setHost] = useState<FluxionHost | null>(null);
 
-  // Time axis: host-relative ms anchored at `timeOrigin` so the chart wire
-  // format stays inside Float32's safe range. `axisGridLayer.timeOrigin`
-  // re-adds the offset for wall-clock labels.
-  const layers = useMemo(
-    () => [
-      axisGridLayer("axis", {
-        xMode: "time",
-        timeWindowMs: WINDOW_MS,
-        timeOrigin,
-        yMode: "auto",
-        showXGrid: true,
-        showYGrid: true,
-        showXLabels: false,
-        showYLabels: false,
-        gridColor: "rgba(80,90,110,0.18)",
-        gridDashArray: [3, 3],
-        axisColor: T.textMuted,
-        yPadPx: 6,
-      }),
-      lineLayer("line", { color: spec.color, lineWidth: 1.25, capacity: RING_CAPACITY }),
-    ],
-    [spec.color, timeOrigin],
-  );
-
-  // 20Hz pump per chart. Recording is decoupled from chart-push so it keeps
-  // running while the user time-travels (DVR mode). Without this, the store
-  // freezes during DVR — exit would show no new data despite real wall time
-  // having passed.
-  //   - record(): always fires (live + DVR)
-  //   - handle.push(): only in live mode (DVR mode is owned by useChartReplay,
-  //     which writes the chart layer from store frames + onFrame events)
-  //
-  // Phase 18: read `isLive` through a ref to defeat the stale-closure window
-  // during an in-flight `dvr.enter()`. The interval tick fires every 50 ms;
-  // if it captured `isLive=true` from the pre-click render, it would keep
-  // pushing live samples into the chart while useChartReplay's hydrate is
-  // mid-await, racing the worker's CLEAR_DATA from the hydrate.
-  const isLiveRef = useRef(isLive);
-  isLiveRef.current = isLive;
-  useFluxionStream({
-    host,
-    intervalMs: 1000 / HZ,
-    setup: (h) => h.line("line"),
-    tick: (_t, handle) => {
-      const wallT = Date.now();
-      const y = sampleAt(wallT, spec.freqHz, spec.offset);
-      if (isLiveRef.current) handle.push({ t: wallT - timeOrigin, y });
-      record(spec.id, { name: spec.id, value: y }, wallT);
-      return 1;
+  // useMiniChart bundles the axis-grid + line factory the demo used to
+  // inline. The remaining demo-specific styling (hide labels, dashed grid,
+  // muted axis colour) goes into the `axis` override.
+  const { layers } = useMiniChart({
+    color: spec.color,
+    lineWidth: 1.25,
+    timeWindowMs: WINDOW_MS,
+    timeOrigin,
+    sampleHz: HZ,
+    axis: {
+      showXGrid: true,
+      showYGrid: true,
+      showXLabels: false,
+      showYLabels: false,
+      gridColor: "rgba(80,90,110,0.18)",
+      gridDashArray: [3, 3],
+      axisColor: T.textMuted,
+      yPadPx: 6,
     },
   });
 
-  // REPLAY: bridge the same chart to the player. The hook re-applies the same
-  // timeOrigin shift to backfill + onFrame pushes.
-  useChartReplay<MetricSample>({
-    host: isLive ? null : host,
-    player: isLive ? null : player,
-    store: isLive ? null : store,
-    channel: spec.channel,
-    layerId: "line",
-    windowMs: WINDOW_MS,
-    timeOrigin,
-    pickValue: (d) => d.value,
-  });
-
-  // LIVE BACKFILL: fires on mount + every DVR→Live transition. Resets the
-  // chart layer and rehydrates with the most recent WINDOW_MS of data from
-  // the store, so the user sees the data that accumulated during DVR
-  // immediately instead of waiting for live push() to refill the window.
-  useChartLiveBackfill<MetricSample>({
+  // useChartReplayBridge replaces the three-hook chain the demo used to
+  // wire by hand (useFluxionStream + useChartReplay + useChartLiveBackfill
+  // + isLiveRef closure guard). All four concerns now live inside the
+  // bridge — the demo just supplies the live producer and the y-picker.
+  useChartReplayBridge<MetricSample>({
     host,
-    store,
+    session,
+    dvr,
+    isLive,
     channel: spec.channel,
     layerId: "line",
     windowMs: WINDOW_MS,
+    liveHz: HZ,
     timeOrigin,
+    produce: (wallT) => ({
+      name: spec.id,
+      value: sampleAt(wallT, spec.freqHz, spec.offset),
+    }),
     pickValue: (d) => d.value,
-    active: isLive,
   });
 
   return (
@@ -265,7 +218,7 @@ function MiniChart({
 const LIVE_EDGE_EPS_MS = 250;
 
 export function ChartReplayApp() {
-  const { session, isReady, enterReplay, exitReplay, record } =
+  const { session, isReady, enterReplay, exitReplay } =
     useReplaySession(SESSION_OPTS);
 
   // Shared timeOrigin across every chart on the page. Established once at
@@ -281,46 +234,17 @@ export function ChartReplayApp() {
   const { timeRange: liveTimeRange, seed: seedTimeRange } = useLiveTimeRange(session);
 
   // The page IS the recording — no manual start/stop. On mount: wipe any
-  // stale frames from a previous visit, then start a fresh session and
-  // immediately seed the scrubber time range. Without the seed, the LIVE
-  // cursor stays blank for up to ~500 ms (until the first poll sees frames
-  // in IDB) and the user reads it as "live isn't running".
-  //
-  // Belt-and-suspenders: even though useLiveTimeRange's `seed` is stable
-  // (useCallback), we also guard with a ref so that any future regression
-  // in callback identity (e.g. a refactor that drops useCallback) can't
-  // make this effect re-fire and wipe the store on every render.
-  //
-  // We deliberately do NOT call session.stopRecording() on cleanup:
-  //   - StrictMode mounts twice in dev; calling stop in the first cleanup
-  //     can run AFTER the second mount's start, leaving recording=false and
-  //     a silently broken page.
-  //   - The session itself is disposed by useReplaySession on real unmount.
-  const startedSessionRef = useRef<typeof session | null>(null);
-  useEffect(() => {
-    if (!session || !isReady) return;
-    if (startedSessionRef.current === session) return; // already initialised
-    startedSessionRef.current = session;
-    let cancelled = false;
-    void (async () => {
-      try {
-        await session.clearRecording();
-        if (cancelled) return;
-        await session.startRecording();
-        if (cancelled) return;
-        const now = Date.now();
-        seedTimeRange({ earliest: now, latest: now });
-      } catch (e) {
-        // eslint-disable-next-line no-console
-        console.error("[chart-replay] auto-record startup failed:", e);
-        // Allow a retry on next render if startup failed.
-        startedSessionRef.current = null;
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [session, isReady, seedTimeRange]);
+  // The page IS the recording — clear stale frames + start fresh + seed
+  // the scrubber timeRange. `useRecordingSession` encapsulates the
+  // StrictMode-safe ref guard, the async cancellation, and the
+  // seed-after-start sequence the demo used to inline.
+  useRecordingSession({
+    session,
+    enabled: isReady,
+    seedTimeRange,
+    // No tickers — the per-chart MiniChart pumps record() itself via
+    // useChartReplayBridge's tick.
+  });
 
   // High-level DVR controller. Phase 18: `autoPlay: false` so the player
   // stays idle while the user scrubs — the chart can hold its backfill
@@ -522,9 +446,8 @@ export function ChartReplayApp() {
             key={spec.id}
             spec={spec}
             isLive={isLive}
-            player={dvr.player}
-            store={session?.store ?? null}
-            record={record}
+            session={session}
+            dvr={dvr}
             timeOrigin={timeOrigin}
           />
         ))}

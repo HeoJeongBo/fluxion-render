@@ -1,4 +1,4 @@
-import { act, render } from "@testing-library/react";
+import { act, render, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   buildRecording,
@@ -7,8 +7,10 @@ import {
   makeFakePlayer,
   makeFakeStore,
   metricFrame,
+  SIGNAL_CHANNEL,
 } from "./chart-replay-fixtures";
 import { MetricChannel } from "../../../entities/metric-channel/metric-channel";
+import { useChartReplay } from "./use-chart-replay";
 
 // ── Tests ───────────────────────────────────────────────────────────────────
 
@@ -34,7 +36,11 @@ describe("useChartReplay", () => {
       await Promise.resolve();
     });
 
-    expect(store.getFramesByChannel).toHaveBeenCalledWith("signal", 3000, 5000);
+    expect(store.getFramesByChannel).toHaveBeenCalledWith(
+      expect.objectContaining({ channelId: "signal" }),
+      3000,
+      5000,
+    );
     // Reset must fire BEFORE pushBatch so the worker axis rewinds first.
     expect(order[0]).toBe("reset:5000");
     expect(order[1]).toBe("pushBatch:3");
@@ -78,7 +84,11 @@ describe("useChartReplay", () => {
       await Promise.resolve();
     });
 
-    expect(store.getFramesByChannel).toHaveBeenLastCalledWith("signal", 7000, 9000);
+    expect(store.getFramesByChannel).toHaveBeenLastCalledWith(
+      expect.objectContaining({ channelId: "signal" }),
+      7000,
+      9000,
+    );
     expect(resets[initialResets]).toEqual({ id: "signal", latestT: 9000 });
     expect(batches[initialBatches].samples.map((s) => s.t)).toEqual([8500, 9000]);
   });
@@ -234,7 +244,7 @@ describe("useChartReplay", () => {
 
       // Store query stays in absolute t.
       expect(store.getFramesByChannel).toHaveBeenCalledWith(
-        "signal",
+        expect.objectContaining({ channelId: "signal" }),
         ORIGIN + 3000,
         ORIGIN + 5000,
       );
@@ -332,7 +342,7 @@ describe("useChartReplay", () => {
 
       // 1) Store queried with absolute t bounds [seekT - 5s, seekT].
       expect(store.getFramesByChannel).toHaveBeenCalledWith(
-        "signal",
+        expect.objectContaining({ channelId: "signal" }),
         seekT - WINDOW_MS,
         seekT,
       );
@@ -400,7 +410,7 @@ describe("useChartReplay", () => {
 
       // Fresh query at the new bounds.
       expect(store.getFramesByChannel).toHaveBeenLastCalledWith(
-        "signal",
+        expect.objectContaining({ channelId: "signal" }),
         newT - WINDOW_MS,
         newT,
       );
@@ -445,7 +455,7 @@ describe("useChartReplay", () => {
 
       // Store is queried with the underflow bound — IDB returns what exists.
       expect(store.getFramesByChannel).toHaveBeenLastCalledWith(
-        "signal",
+        expect.objectContaining({ channelId: "signal" }),
         seekT - WINDOW_MS,
         seekT,
       );
@@ -858,6 +868,64 @@ describe("useChartReplay", () => {
       // First sample at or after the 5s mark, last at or before 10s.
       expect(batch.samples[0]!.t).toBeGreaterThanOrEqual(5_000);
       expect(batch.samples[batch.samples.length - 1]!.t).toBeLessThanOrEqual(10_000);
+    });
+  });
+
+  // Phase 20-A-3: windowMs used to be passed straight into store queries.
+  // A missing / NaN / non-positive value silently produced empty backfill —
+  // chart looked broken with no error. Throw at mount so the typo is caught.
+  describe("Phase 20: windowMs validation", () => {
+    // React logs every render-time throw to console.error; silence it so
+    // the test output stays clean. We restore in afterEach.
+    let consoleErrorSpy: ReturnType<typeof vi.spyOn>;
+    beforeEach(() => {
+      consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    });
+    afterEach(() => {
+      consoleErrorSpy.mockRestore();
+    });
+
+    // Render the hook directly so the throw happens during the render
+    // (not inside a useEffect, where React would swallow it). Using
+    // renderHook keeps each case isolated from React's concurrent-root
+    // warning between mounts.
+    function tryHook(windowMs: number) {
+      try {
+        renderHook(() =>
+          useChartReplay({
+            host: makeFakeHost().host as never,
+            player: makeFakePlayer(0) as never,
+            store: makeFakeStore({ signal: [] }) as never,
+            channel: SIGNAL_CHANNEL,
+            windowMs,
+            pickValue: (d) => d.value,
+          }),
+        );
+        return null;
+      } catch (e) {
+        return e;
+      }
+    }
+
+    it("throws when windowMs is NaN", () => {
+      const err = tryHook(Number.NaN);
+      expect(err).toBeInstanceOf(Error);
+      expect((err as Error).message).toMatch(/windowMs/);
+    });
+
+    it("throws when windowMs is undefined", () => {
+      const err = tryHook(undefined as unknown as number);
+      expect(err).toBeInstanceOf(Error);
+      expect((err as Error).message).toMatch(/windowMs/);
+    });
+
+    it("throws when windowMs is zero or negative", () => {
+      expect(tryHook(0)).toBeInstanceOf(Error);
+      expect(tryHook(-100)).toBeInstanceOf(Error);
+    });
+
+    it("does NOT throw for a positive finite value", () => {
+      expect(tryHook(5_000)).toBeNull();
     });
   });
 });

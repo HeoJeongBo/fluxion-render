@@ -86,6 +86,17 @@ export function useChartReplay<T>(
     [host, layerId],
   );
 
+  // Phase 20-A-3: validate up-front so the mistake surfaces at the
+  // component that introduced it, not silently as a blank chart from a
+  // `[t - NaN, t]` store query. Runs during render so it doesn't get
+  // swallowed by React's effect-error handling.
+  if (!Number.isFinite(windowMs) || windowMs <= 0) {
+    throw new Error(
+      `useChartReplay: windowMs must be a positive finite number (got ${String(windowMs)}). ` +
+        "Match it to your axisGridLayer({ timeWindowMs }) value.",
+    );
+  }
+
   useEffect(() => {
     if (!handle || !player || !store) return;
 
@@ -105,14 +116,14 @@ export function useChartReplay<T>(
     // Without this gate, a frame that arrives BEFORE handle.reset() would
     // get wiped by the reset, leaving the chart with a stutter.
     let hydratingT: number | null = null;
-    const pending: ReplayPlayerFrame[] = [];
+    const pending: ReplayPlayerFrame<T>[] = [];
 
     const flushPending = (cutoff: number) => {
       if (pending.length === 0) return;
       const drained = pending.splice(0, pending.length);
       for (const f of drained) {
         if (f.t <= cutoff) continue; // backfill already covers this t
-        handle.push({ t: f.t - timeOrigin, y: pickRef.current(f.data as T) });
+        handle.push({ t: f.t - timeOrigin, y: pickRef.current(f.data) });
       }
     };
 
@@ -125,12 +136,10 @@ export function useChartReplay<T>(
           pending.length = 0;
           setIsHydrating(true);
 
-          // Store keeps absolute t; query in that space.
-          const frames = await store.getFramesByChannel(
-            channel.channelId,
-            t - windowMs,
-            t,
-          );
+          // Store keeps absolute t; query in that space. Pass the channel
+          // (not the channelId) so the store decodes payloads up-front and
+          // we don't need to `as T` the result. Phase 20-B-3.
+          const frames = await store.getFramesByChannel(channel, t - windowMs, t);
           // Yield once so a React cleanup that sets `cancelled = true` has a
           // chance to run before we touch the chart. Without this yield, a
           // fast-resolving IDB query (cache hit / fake-IDB microtask) lets a
@@ -143,7 +152,7 @@ export function useChartReplay<T>(
           // format doesn't quantise away the resolution.
           const batch: LineSample[] = frames.map((f) => ({
             t: f.t - timeOrigin,
-            y: pickRef.current(channel.decode(f.payload) as T),
+            y: pickRef.current(f.data),
           }));
           // 1) Drop stale data + force the worker-side axis to rewind to the
           //    seek point in host-relative space.
@@ -187,15 +196,16 @@ export function useChartReplay<T>(
       hydrate(t);
     });
 
-    const offFrame = player.onFrame((frame) => {
-      if (frame.channelId !== channel.channelId) return;
+    // Typed overload: only this channel's frames reach the listener, and
+    // `frame.data` is `T` without a cast (Phase 20-B-1).
+    const offFrame = player.onFrame<T>(channel, (frame) => {
       if (hydratingT !== null) {
         // Park until the in-flight hydrate finishes — it'll decide whether
         // to flush or drop based on the seek point.
         pending.push(frame);
         return;
       }
-      handle.push({ t: frame.t - timeOrigin, y: pickRef.current(frame.data as T) });
+      handle.push({ t: frame.t - timeOrigin, y: pickRef.current(frame.data) });
     });
 
     return () => {

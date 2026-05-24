@@ -2,6 +2,7 @@ import { vi } from "vitest";
 import { MetricChannel } from "../../../entities/metric-channel/metric-channel";
 import type { ReplayPlayer, ReplayPlayerFrame } from "../../../features/player/model/replay-player";
 import type { ReplaySession } from "../../../features/session/model/replay-session";
+import type { BaseChannel } from "../../../shared/model/base-channel";
 import type { SerializedFrame } from "../../../shared/model/frame";
 import { useChartReplay } from "./use-chart-replay";
 
@@ -54,10 +55,29 @@ export function makeFakePlayer(initialT = 1000) {
   return {
     get currentT() { return currentT; },
     setCurrentT(t: number) { currentT = t; },
-    onFrame: vi.fn((l: FrameListener) => {
-      frameListeners.add(l);
-      return () => frameListeners.delete(l);
-    }),
+    // Supports both `onFrame(listener)` and
+    // `onFrame(channel, listener)` (Phase 20-B-1 overloads). When called
+    // with a channel, wraps the listener with a channelId filter so the
+    // real player's behaviour is faithfully mirrored.
+    onFrame: vi.fn(
+      (
+        channelOrListener: BaseChannel<unknown> | FrameListener,
+        maybeListener?: FrameListener,
+      ) => {
+        if (typeof channelOrListener === "function") {
+          const l = channelOrListener;
+          frameListeners.add(l);
+          return () => frameListeners.delete(l);
+        }
+        const targetId = channelOrListener.channelId;
+        const wrapper: FrameListener = (frame) => {
+          if (frame.channelId !== targetId) return;
+          maybeListener?.(frame);
+        };
+        frameListeners.add(wrapper);
+        return () => frameListeners.delete(wrapper);
+      },
+    ),
     onSeek: vi.fn((l: SeekListener) => {
       seekListeners.add(l);
       return () => seekListeners.delete(l);
@@ -174,14 +194,30 @@ export function makeFakeStore(framesByChannel: Record<string, SerializedFrame[]>
   let pendingResolvers: Array<() => void> = [];
   let isHeld = false;
 
+  // Supports both `getFramesByChannel(channelId, ...)` and the typed
+  // `getFramesByChannel(channel, ...)` overload (Phase 20-B-2). When a
+  // channel is passed, payloads are decoded into `{ t, channelId, data }`.
   const getFramesByChannel = vi.fn(
-    async (channelId: string, fromMs: number, toMs: number): Promise<SerializedFrame[]> => {
+    async (
+      channelOrId: string | BaseChannel<unknown>,
+      fromMs: number,
+      toMs: number,
+    ): Promise<
+      SerializedFrame[] | Array<{ t: number; channelId: string; data: unknown }>
+    > => {
+      const channelId =
+        typeof channelOrId === "string" ? channelOrId : channelOrId.channelId;
       const all = framesByChannel[channelId] ?? [];
       const filtered = all.filter((f) => f.t >= fromMs && f.t <= toMs);
       if (isHeld) {
         await new Promise<void>((resolve) => pendingResolvers.push(resolve));
       }
-      return filtered;
+      if (typeof channelOrId === "string") return filtered;
+      return filtered.map((f) => ({
+        t: f.t,
+        channelId: f.channelId,
+        data: channelOrId.decode(f.payload),
+      }));
     },
   );
 

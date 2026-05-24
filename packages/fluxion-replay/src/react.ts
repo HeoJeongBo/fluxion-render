@@ -5,7 +5,10 @@ export type {
 } from "./widgets/replay-timeline/lib/use-replay-session";
 
 export { useReplayPlayer } from "./widgets/replay-timeline/lib/use-replay-player";
-export type { UseReplayPlayerResult } from "./widgets/replay-timeline/lib/use-replay-player";
+export type {
+  UseReplayPlayerOptions,
+  UseReplayPlayerResult,
+} from "./widgets/replay-timeline/lib/use-replay-player";
 
 export { useReplayScrubber } from "./widgets/replay-timeline/lib/use-replay-scrubber";
 export type {
@@ -46,6 +49,16 @@ export type {
 
 export { useChartLiveBackfill } from "./widgets/chart-replay/lib/use-chart-live-backfill";
 export type { UseChartLiveBackfillOptions } from "./widgets/chart-replay/lib/use-chart-live-backfill";
+
+export { useChartReplayBridge } from "./widgets/chart-replay/lib/use-chart-replay-bridge";
+export type { UseChartReplayBridgeOptions } from "./widgets/chart-replay/lib/use-chart-replay-bridge";
+
+export { useRecordingSession } from "./widgets/recording/lib/use-recording-session";
+export type {
+  RecordingTickerSpec,
+  UseRecordingSessionOptions,
+  UseRecordingSessionResult,
+} from "./widgets/recording/lib/use-recording-session";
 
 export { useReplayDvr } from "./widgets/dvr/lib/use-replay-dvr";
 export type {

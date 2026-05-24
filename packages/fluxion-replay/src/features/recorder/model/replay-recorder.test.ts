@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { LogChannel } from "../../../entities/log-channel/log-channel";
 import { MetricChannel } from "../../../entities/metric-channel/metric-channel";
 import { ReplayStore } from "../../store/model/replay-store";
-import { ReplayRecorder } from "./replay-recorder";
+import { ReplayRecorder, UnknownChannelError } from "./replay-recorder";
 
 function makeStore(): ReplayStore {
   const store = new ReplayStore({ batchIntervalMs: 9999 });
@@ -53,6 +53,29 @@ describe("ReplayRecorder", () => {
     const recorder = new ReplayRecorder({ channels: [], store });
     recorder.start();
     expect(() => recorder.record("nonexistent", {})).toThrow("Unknown channel");
+  });
+
+  // Phase 20-A-4: typed error class so callers can `instanceof` rather than
+  // grep the message.
+  it("throws UnknownChannelError with channelId + availableChannelIds populated", () => {
+    const store = makeStore();
+    const recorder = new ReplayRecorder({
+      channels: [new MetricChannel("cpu"), new MetricChannel("mem")],
+      store,
+    });
+    recorder.start();
+    let caught: unknown = null;
+    try {
+      recorder.record("cpuu", { name: "cpuu", value: 1 });
+    } catch (e) {
+      caught = e;
+    }
+    expect(caught).toBeInstanceOf(UnknownChannelError);
+    const err = caught as UnknownChannelError;
+    expect(err.channelId).toBe("cpuu");
+    expect(err.availableChannelIds).toEqual(["cpu", "mem"]);
+    expect(err.message).toContain("cpuu");
+    expect(err.message).toContain("cpu, mem");
   });
 
   it("uses provided timestamp", () => {

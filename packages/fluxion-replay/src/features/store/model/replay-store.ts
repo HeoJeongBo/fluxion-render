@@ -1,4 +1,16 @@
+import type { BaseChannel } from "../../../shared/model/base-channel";
 import type { SerializedFrame } from "../../../shared/model/frame";
+
+/**
+ * Result of a typed `getFramesByChannel(channel, ...)` query. The payload
+ * has already been decoded by the channel, so consumers don't have to
+ * `channel.decode(payload) as T` themselves.
+ */
+export interface DecodedFrame<T> {
+  t: number;
+  channelId: string;
+  data: T;
+}
 
 export interface ReplayStoreOptions {
   dbName?: string;
@@ -100,14 +112,35 @@ export class ReplayStore {
    * than `getFrames(...).filter(...)` once the store has many channels.
    *
    * Returned frames are sorted ascending by `t`.
+   *
+   * Two call forms:
+   *
+   * - `getFramesByChannel(channelId, from, to)` — returns raw
+   *   `SerializedFrame[]`. Callers decode payloads themselves.
+   * - `getFramesByChannel(channel, from, to)` — passes the `BaseChannel`
+   *   instance; the store decodes every payload up-front and returns
+   *   typed `DecodedFrame<T>[]`. Removes the `channel.decode(payload) as T`
+   *   cast from consumer code.
    */
-  async getFramesByChannel(
+  getFramesByChannel(
     channelId: string,
     fromMs: number,
     toMs: number,
-  ): Promise<SerializedFrame[]> {
+  ): Promise<SerializedFrame[]>;
+  getFramesByChannel<T>(
+    channel: BaseChannel<T>,
+    fromMs: number,
+    toMs: number,
+  ): Promise<DecodedFrame<T>[]>;
+  async getFramesByChannel<T>(
+    channelOrId: string | BaseChannel<T>,
+    fromMs: number,
+    toMs: number,
+  ): Promise<SerializedFrame[] | DecodedFrame<T>[]> {
+    const channelId =
+      typeof channelOrId === "string" ? channelOrId : channelOrId.channelId;
     const db = this._assertOpen();
-    return new Promise((resolve, reject) => {
+    const raw = await new Promise<SerializedFrame[]>((resolve, reject) => {
       const tx = db.transaction("frames", "readonly");
       const index = tx.objectStore("frames").index("by_channel_t");
       const range = IDBKeyRange.bound([channelId, fromMs], [channelId, toMs]);
@@ -124,6 +157,12 @@ export class ReplayStore {
       };
       req.onerror = () => reject(req.error);
     });
+    if (typeof channelOrId === "string") return raw;
+    return raw.map((f) => ({
+      t: f.t,
+      channelId: f.channelId,
+      data: channelOrId.decode(f.payload),
+    }));
   }
 
   async deleteFramesBefore(cutoffMs: number): Promise<void> {

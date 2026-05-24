@@ -230,6 +230,11 @@ export class ScatterLayerHandle {
   pushRaw(data: Float32Array): void {
     this.sink.pushData(this.id, data);
   }
+
+  /** Drop the ring buffer and (optionally) rewind `viewport.latestT`. */
+  reset(latestT?: number): void {
+    this.sink.clearLayer(this.id, { latestT });
+  }
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -263,6 +268,11 @@ export class AreaLayerHandle {
   pushRaw(data: Float32Array): void {
     this.sink.pushData(this.id, data);
   }
+
+  /** Drop the ring buffer and (optionally) rewind `viewport.latestT`. */
+  reset(latestT?: number): void {
+    this.sink.clearLayer(this.id, { latestT });
+  }
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -295,6 +305,11 @@ export class StepLayerHandle {
 
   pushRaw(data: Float32Array): void {
     this.sink.pushData(this.id, data);
+  }
+
+  /** Drop the ring buffer and (optionally) rewind `viewport.latestT`. */
+  reset(latestT?: number): void {
+    this.sink.clearLayer(this.id, { latestT });
   }
 }
 
@@ -375,6 +390,11 @@ export class CandlestickLayerHandle {
 
   pushRaw(data: Float32Array): void {
     this.sink.pushData(this.id, data);
+  }
+
+  /** Drop the ring buffer and (optionally) rewind `viewport.latestT`. */
+  reset(latestT?: number): void {
+    this.sink.clearLayer(this.id, { latestT });
   }
 }
 
@@ -503,6 +523,11 @@ export class ScatterColoredHandle {
   pushRaw(data: Float32Array): void {
     this.sink.pushData(this.id, data);
   }
+
+  /** Drop the ring buffer and (optionally) rewind `viewport.latestT`. */
+  reset(latestT?: number): void {
+    this.sink.clearLayer(this.id, { latestT });
+  }
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -599,5 +624,10 @@ export class PoseArrowHandle {
 
   pushRaw(data: Float32Array): void {
     this.sink.pushData(this.id, data);
+  }
+
+  /** Drop the ring buffer and (optionally) rewind `viewport.latestT`. */
+  reset(latestT?: number): void {
+    this.sink.clearLayer(this.id, { latestT });
   }
 }

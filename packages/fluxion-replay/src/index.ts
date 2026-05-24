@@ -23,10 +23,18 @@ export type { Thumbnail } from "./features/timeline/model/thumbnail-store";
 
 // Storage
 export { ReplayStore } from "./features/store/model/replay-store";
-export type { ReplayStoreOptions, StorageInfo, RecordingSegment } from "./features/store/model/replay-store";
+export type {
+  DecodedFrame,
+  RecordingSegment,
+  ReplayStoreOptions,
+  StorageInfo,
+} from "./features/store/model/replay-store";
 
 // Recorder
-export { ReplayRecorder } from "./features/recorder/model/replay-recorder";
+export {
+  ReplayRecorder,
+  UnknownChannelError,
+} from "./features/recorder/model/replay-recorder";
 export type { ReplayRecorderOptions } from "./features/recorder/model/replay-recorder";
 
 // Player
@@ -45,6 +53,7 @@ export type {
 // Session (main orchestrator)
 export { ReplaySession } from "./features/session/model/replay-session";
 export { createReplaySession } from "./features/session/lib/create-replay-session";
+export { snapTimeToSegment } from "./features/session/lib/snap-time-to-segment";
 export type { ReplaySessionOptions, ReplaySessionMode } from "./features/session/model/replay-session";
 
 // Video subsystem

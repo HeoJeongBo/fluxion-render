@@ -5,13 +5,13 @@ import type { ReplayStore } from "../../store/model/replay-store";
 
 export type ReplayPlayerState = "idle" | "playing" | "paused" | "stopped";
 
-export interface ReplayPlayerFrame {
+export interface ReplayPlayerFrame<T = unknown> {
   readonly channelId: string;
-  readonly data: unknown;
+  readonly data: T;
   readonly t: number;
 }
 
-export type FrameListener = (frame: ReplayPlayerFrame) => void;
+export type FrameListener<T = unknown> = (frame: ReplayPlayerFrame<T>) => void;
 export type TickListener = (currentT: number) => void;
 export type StateListener = (state: ReplayPlayerState) => void;
 export type EndListener = () => void;
@@ -157,9 +157,36 @@ export class ReplayPlayer {
     this._setState("stopped");
   }
 
-  onFrame(listener: FrameListener): () => void {
-    this._frameListeners.add(listener);
-    return () => this._frameListeners.delete(listener);
+  /**
+   * Subscribe to decoded frames. Two call forms:
+   *
+   * - `onFrame(listener)` — fires for every channel; `frame.data` is `unknown`.
+   * - `onFrame(channel, listener)` — fires only for frames whose `channelId`
+   *   matches `channel.channelId`; `frame.data` is typed as `T` so consumers
+   *   don't have to cast. Internally still one shared listener set; the
+   *   filter + cast happen at delivery time.
+   */
+  onFrame(listener: FrameListener<unknown>): () => void;
+  onFrame<T>(channel: BaseChannel<T>, listener: FrameListener<T>): () => void;
+  onFrame<T>(
+    channelOrListener: BaseChannel<T> | FrameListener<unknown>,
+    maybeListener?: FrameListener<T>,
+  ): () => void {
+    if (typeof channelOrListener === "function") {
+      const l = channelOrListener as FrameListener;
+      this._frameListeners.add(l);
+      return () => this._frameListeners.delete(l);
+    }
+    // Channel-scoped overload — filter by channelId; the channel argument's
+    // generic is the only reason we know `data` is `T`, so we cast inside.
+    const targetId = channelOrListener.channelId;
+    const typedListener = maybeListener as FrameListener<T>;
+    const wrapper: FrameListener<unknown> = (frame) => {
+      if (frame.channelId !== targetId) return;
+      typedListener(frame as ReplayPlayerFrame<T>);
+    };
+    this._frameListeners.add(wrapper);
+    return () => this._frameListeners.delete(wrapper);
   }
 
   onTick(listener: TickListener): () => void {

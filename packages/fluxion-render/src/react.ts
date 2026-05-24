@@ -96,3 +96,8 @@ export {
   type UseFluxionExportOptions,
   type UseFluxionExportResult,
 } from "./features/export";
+export {
+  useMiniChart,
+  type UseMiniChartOptions,
+  type UseMiniChartResult,
+} from "./widgets/mini-chart/lib/use-mini-chart";

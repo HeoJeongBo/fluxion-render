@@ -1,6 +1,24 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ReplayPlayer, type ReplayPlayerState } from "../../../features/player/model/replay-player";
 
+export interface UseReplayPlayerOptions {
+  /**
+   * Quantum applied to `currentT` before it lands in React state. Default
+   * `1000` so a 40-chart page's scrubber thumb advances in discrete 1-Hz
+   * ticks (heavy chart traffic was starving rAF-driven updates). Pass `0`
+   * to disable snapping — `currentT` then mirrors `player.currentT` at
+   * `pollMs` resolution.
+   */
+  snapMs?: number;
+  /**
+   * How often the hook polls `player.currentT` to detect a snap-boundary
+   * cross. Default `250` ms (~125 ms average detection lag for a 1 Hz
+   * snap). Lower values give snappier updates at the cost of more React
+   * state writes; higher values lighten React work but lag.
+   */
+  pollMs?: number;
+}
+
 export interface UseReplayPlayerResult {
   player: ReplayPlayer | null;
   state: ReplayPlayerState;
@@ -11,35 +29,38 @@ export interface UseReplayPlayerResult {
   seek: (t: number) => void;
 }
 
-/**
- * Time-travel cursor resolution. We expose `currentT` rounded down to the
- * nearest second so the scrubber thumb advances in discrete 1-Hz ticks
- * instead of smearing at rAF rate — Phase 14 user requirement. The internal
- * `player.currentT` (and `onTick` callbacks) still fire at rAF rate; only
- * the React-state mirror is snapped.
- */
-const CURSOR_SNAP_MS = 1000;
-/**
- * Polling interval for the cursor mirror. Phase 15: replaced the rAF-driven
- * `player.onTick` subscription with this interval because the parent
- * component (chart-replay) processes 40 charts × N samples per rAF, which
- * can queue React batches deep enough that the scrubber's `setCurrentT`
- * effectively never flushes. A 250-ms interval is independent of rAF jank
- * and the React render queue, and detects a second boundary cross within
- * ~125 ms on average.
- */
-const CURSOR_POLL_MS = 250;
+const DEFAULT_SNAP_MS = 1000;
+const DEFAULT_POLL_MS = 250;
 
-function snapDown(t: number): number {
-  return Math.floor(t / CURSOR_SNAP_MS) * CURSOR_SNAP_MS;
+function makeSnap(snapMs: number) {
+  if (snapMs <= 0) return (t: number) => t;
+  return (t: number) => Math.floor(t / snapMs) * snapMs;
 }
 
-export function useReplayPlayer(player: ReplayPlayer | null): UseReplayPlayerResult {
+/**
+ * Mirrors a `ReplayPlayer` into React state. The `currentT` returned here
+ * is **snapped** to whole-second boundaries by default (see Phase 14/15
+ * rationale on cursor snap + interval polling). Both behaviours are
+ * customisable via the options object.
+ */
+export function useReplayPlayer(
+  player: ReplayPlayer | null,
+  opts?: UseReplayPlayerOptions,
+): UseReplayPlayerResult {
+  const snapMs = opts?.snapMs ?? DEFAULT_SNAP_MS;
+  const pollMs = opts?.pollMs ?? DEFAULT_POLL_MS;
+
   const [state, setState] = useState<ReplayPlayerState>("idle");
   const [currentT, setCurrentT] = useState(0);
   // Tracks the most recent SNAPPED currentT so we only fire setCurrentT when
-  // the second boundary actually changes.
+  // the snap boundary actually changes.
   const lastSnappedRef = useRef(0);
+  // Read options through a ref so changing snapMs / pollMs at runtime
+  // doesn't tear down the player subscription effect.
+  const snapRef = useRef(makeSnap(snapMs));
+  snapRef.current = makeSnap(snapMs);
+  const pollMsRef = useRef(pollMs);
+  pollMsRef.current = pollMs;
 
   useEffect(() => {
     if (!player) {
@@ -50,7 +71,7 @@ export function useReplayPlayer(player: ReplayPlayer | null): UseReplayPlayerRes
     }
 
     setState(player.state);
-    const initialSnapped = snapDown(player.currentT);
+    const initialSnapped = snapRef.current(player.currentT);
     setCurrentT(initialSnapped);
     lastSnappedRef.current = initialSnapped;
 
@@ -61,11 +82,11 @@ export function useReplayPlayer(player: ReplayPlayer | null): UseReplayPlayerRes
     // a "data flows but cursor is stuck" symptom. Polling decouples cursor
     // updates from rAF scheduling.
     const tickInterval = setInterval(() => {
-      const snapped = snapDown(player.currentT);
+      const snapped = snapRef.current(player.currentT);
       if (snapped === lastSnappedRef.current) return;
       lastSnappedRef.current = snapped;
       setCurrentT(snapped);
-    }, CURSOR_POLL_MS);
+    }, pollMsRef.current);
 
     const offState = player.onStateChange((s) => setState(s));
 
@@ -84,7 +105,7 @@ export function useReplayPlayer(player: ReplayPlayer | null): UseReplayPlayerRes
     // Mirror the seek in React state right away so the timeline scrubber
     // moves even while paused. Snap to the same boundary used by tick
     // updates so a subsequent tick doesn't undo it.
-    const snapped = snapDown(t);
+    const snapped = snapRef.current(t);
     lastSnappedRef.current = snapped;
     setCurrentT(snapped);
   }, [player]);

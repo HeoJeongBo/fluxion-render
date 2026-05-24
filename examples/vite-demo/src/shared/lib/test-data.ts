@@ -8,24 +8,25 @@
  *
  * Keep these generators deterministic-with-noise so the visual output is
  * still interesting frame-to-frame without being unreproducible.
+ *
+ * The PRNG + sine-synth primitives now live in the library at
+ * `@heojeongbo/fluxion-render/testing` — this file re-exports them as
+ * `rng` for backwards compatibility and uses them internally.
  */
 
+import {
+  mulberry32,
+  createSineSynth,
+} from "@heojeongbo/fluxion-render/testing";
+
 // ────────────────────────────────────────────────────────────────────────
-// Deterministic PRNG (Mulberry32)
+// Deterministic PRNG (Mulberry32) — re-exported from library for callers
+// that still import `rng` from this file.
 // ────────────────────────────────────────────────────────────────────────
 
-export function rng(seed: number): () => number {
-  let state = seed >>> 0;
-  return () => {
-    state = (state + 0x6d2b79f5) >>> 0;
-    let t = state;
-    t = Math.imul(t ^ (t >>> 15), t | 1);
-    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
+export const rng = mulberry32;
 
-const globalNoise = rng(0x9e3779b9);
+const globalNoise = mulberry32(0x9e3779b9);
 
 // ────────────────────────────────────────────────────────────────────────
 // ROS2-style message shapes
@@ -84,15 +85,24 @@ export interface StreamSignalOpts {
   seriesOffset?: number;
 }
 
+/**
+ * Per-(freq, amplitude, seriesOffset) synth cache — `createSineSynth`
+ * builds the closure once per unique opts shape. Most demo callers pass
+ * the same opts in a hot loop, so this is essentially "one synth ever".
+ */
+const synthCache = new Map<string, (tMs: number) => number>();
 function signalValue(tMs: number, opts: StreamSignalOpts = {}): number {
   const { freqHz = 0.8, amplitude = 1, seriesOffset = 0 } = opts;
-  const ts = tMs / 1000;
-  const carrier = Math.sin(2 * Math.PI * freqHz * ts + seriesOffset) * amplitude;
-  const harmonic =
-    Math.sin(2 * Math.PI * freqHz * 2.7 * ts + seriesOffset) * amplitude * 0.4;
-  const drift = Math.sin(2 * Math.PI * 0.07 * ts + seriesOffset * 0.5) * 0.3;
-  const noise = (globalNoise() - 0.5) * 0.2;
-  return carrier + harmonic + drift + noise;
+  const key = `${freqHz}|${amplitude}|${seriesOffset}`;
+  let synth = synthCache.get(key);
+  if (!synth) {
+    // Disable the synth's own noise — historically the demos share a
+    // single global PRNG so every chart's jitter advances in lock-step
+    // (visual coherence). Apply that global noise term ourselves.
+    synth = createSineSynth({ freqHz, amplitude, seriesOffset, noise: 0 });
+    synthCache.set(key, synth);
+  }
+  return synth(tMs) + (globalNoise() - 0.5) * 0.2;
 }
 
 /**

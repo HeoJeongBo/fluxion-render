@@ -4,12 +4,12 @@ import { ReplayPlayer } from "../../../features/player/model/replay-player";
 import { ReplayStore } from "../../../features/store/model/replay-store";
 import { useReplayPlayer } from "./use-replay-player";
 
-function makePlayer() {
+function makePlayer(earliest = 0, latest = 10_000) {
   const store = new ReplayStore({ batchIntervalMs: 9999 });
   const player = new ReplayPlayer({
     store,
     channels: new Map(),
-    timeRange: { earliest: 0, latest: 10_000 },
+    timeRange: { earliest, latest },
   });
   return player;
 }
@@ -356,6 +356,63 @@ describe("useReplayPlayer", () => {
 
       onTickSpy.mockRestore();
       player.stop();
+      player.dispose();
+    });
+  });
+
+  // Phase 20-A-5: snapMs / pollMs are configurable so consumers can tune
+  // cursor resolution + freshness without forking the hook.
+  describe("Phase 20: snapMs / pollMs options", () => {
+    it("snapMs: 0 disables snapping — currentT mirrors raw player.currentT", () => {
+      const player = makePlayer();
+      const { result } = renderHook(() => useReplayPlayer(player, { snapMs: 0 }));
+      act(() => { result.current.seek(3_217); });
+      // No snap → React-state value is the exact seek target.
+      expect(result.current.currentT).toBe(3_217);
+      player.dispose();
+    });
+
+    it("snapMs: 100 snaps to 100 ms boundaries", () => {
+      const player = makePlayer();
+      const { result } = renderHook(() => useReplayPlayer(player, { snapMs: 100 }));
+      act(() => { result.current.seek(3_217); });
+      expect(result.current.currentT).toBe(3_200); // floor(3217 / 100) * 100
+      act(() => { result.current.seek(7_999); });
+      expect(result.current.currentT).toBe(7_900);
+      player.dispose();
+    });
+
+    it("snapMs: 5000 snaps to 5-second boundaries", () => {
+      const player = makePlayer(0, 30_000);
+      const { result } = renderHook(() => useReplayPlayer(player, { snapMs: 5_000 }));
+      act(() => { result.current.seek(12_345); });
+      expect(result.current.currentT).toBe(10_000);
+      act(() => { result.current.seek(17_999); });
+      expect(result.current.currentT).toBe(15_000);
+      player.dispose();
+    });
+
+    it("pollMs: faster polling detects boundary cross sooner", () => {
+      const player = makePlayer(0, 10_000);
+      const { result } = renderHook(() =>
+        useReplayPlayer(player, { snapMs: 1000, pollMs: 50 }),
+      );
+      act(() => { result.current.seek(4_000); });
+      act(() => { result.current.play(1); });
+      // 1100 ms wall → at pollMs=50 we get ~22 polls; one of them sees the
+      // 5000 boundary cross.
+      act(() => { vi.advanceTimersByTime(1_100); });
+      expect(result.current.currentT).toBeGreaterThanOrEqual(5_000);
+      player.stop();
+      player.dispose();
+    });
+
+    it("default options stay backwards-compatible (snapMs=1000, pollMs=250)", () => {
+      const player = makePlayer();
+      const { result } = renderHook(() => useReplayPlayer(player));
+      act(() => { result.current.seek(3_217); });
+      // Default snap → 3000.
+      expect(result.current.currentT).toBe(3_000);
       player.dispose();
     });
   });

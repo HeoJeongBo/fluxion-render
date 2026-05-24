@@ -9,6 +9,14 @@ export interface UseReplaySessionOptions extends ReplaySessionOptions {
 export interface UseReplaySessionResult {
   session: ReplaySession | null;
   isReady: boolean;
+  /**
+   * Surfaces any error thrown by `session.open()` (IDB quota, OPFS blocked,
+   * `SecurityError`, …). `null` while opening is in flight or succeeded.
+   * Without this, mount-time failures were swallowed into `console.error`
+   * and `isReady` silently stayed `false` — UIs had no signal to render an
+   * error state. Read it as the canonical "did initialisation fail?" flag.
+   */
+  error: Error | null;
   mode: ReplaySessionMode;
   timeRange: { earliest: number; latest: number } | null;
   record: <T>(channelId: string, data: T, t?: number) => void;
@@ -25,6 +33,7 @@ export function useReplaySession(opts: UseReplaySessionOptions): UseReplaySessio
 
   const [session, setSession] = useState<ReplaySession | null>(null);
   const [isReady, setIsReady] = useState(false);
+  const [error, setError] = useState<Error | null>(null);
   const [mode, setMode] = useState<ReplaySessionMode>("live");
   const [timeRange, setTimeRange] = useState<{ earliest: number; latest: number } | null>(null);
 
@@ -32,15 +41,19 @@ export function useReplaySession(opts: UseReplaySessionOptions): UseReplaySessio
     const { autoOpen = true, ...sessionOpts } = optsRef.current;
     const s = new ReplaySession(sessionOpts);
     setSession(s);
+    setError(null);
 
     if (autoOpen) {
-      s.open().then(() => setIsReady(true)).catch(console.error);
+      s.open()
+        .then(() => setIsReady(true))
+        .catch((e) => setError(e instanceof Error ? e : new Error(String(e))));
     }
 
     return () => {
       s.dispose();
       setSession(null);
       setIsReady(false);
+      setError(null);
     };
   }, []);
 
@@ -70,5 +83,5 @@ export function useReplaySession(opts: UseReplaySessionOptions): UseReplaySessio
     setMode("live");
   }, [session]);
 
-  return { session, isReady, mode, timeRange, record, enterReplay, exitReplay };
+  return { session, isReady, error, mode, timeRange, record, enterReplay, exitReplay };
 }

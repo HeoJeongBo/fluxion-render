@@ -6,6 +6,7 @@ import {
   VideoRecorder,
   type ReplayPlayerFrame,
 } from "@heojeongbo/fluxion-replay";
+import { snapTimeToSegment } from "@heojeongbo/fluxion-replay";
 import {
   useDisplayMedia,
   useLiveTimeRange,
@@ -14,25 +15,7 @@ import {
   useReplayTimeline,
   useStorageInfo,
   useVideoReplayer,
-  type RecordingSegment,
 } from "@heojeongbo/fluxion-replay/react";
-
-// ─── Helpers ─────────────────────────────────────────────────────────────────
-
-/** Snap t into the nearest recorded segment. If t falls in a gap, jumps to the
- *  start of the next segment (forward snap). */
-function snapToSegment(t: number, segments: RecordingSegment[], latest: number): number {
-  if (segments.length === 0) return t;
-  for (const seg of segments) {
-    const end = seg.end ?? latest;
-    if (t >= seg.start && t <= end) return t;
-  }
-  for (const seg of segments) {
-    if (seg.start > t) return seg.start;
-  }
-  const last = segments[segments.length - 1];
-  return last.end ?? latest;
-}
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -339,7 +322,7 @@ export function DvrApp() {
     if (!timeRange) return;
     const effectiveLatest = (isDvr && frozenLatest != null) ? frozenLatest : timeRange.latest;
     const raw = timeRange.earliest + fraction * (effectiveLatest - timeRange.earliest);
-    const t = snapToSegment(raw, segments, effectiveLatest);
+    const t = snapTimeToSegment(raw, segments, effectiveLatest);
     if (!isDvr) {
       void enterDvr(t);
     } else if (fraction >= 0.9999) {

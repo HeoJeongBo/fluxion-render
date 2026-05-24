@@ -460,6 +460,27 @@ const [windowMs, setWindowMs] = useState(5000);
 useLayerConfig(host, axisGridLayer('axis', { timeWindowMs: windowMs }));
 ```
 
+### `useMiniChart(options)`
+
+The `axis-grid + line` factory every "small chart in a grid" demo kept rewriting. Returns a memoised `layers` array ready for `<FluxionCanvas>`; sets up time-mode axis + ring-sized line layer from a single options object.
+
+```tsx
+import { FluxionCanvas, useMiniChart } from '@heojeongbo/fluxion-render/react';
+
+function MiniChart({ color }: { color: string }) {
+  const [host, setHost] = useState<FluxionHost | null>(null);
+  const { layers } = useMiniChart({
+    color,
+    timeWindowMs: 5000,
+    timeOrigin,   // shared per-page anchor for Float32 timestamps
+    sampleHz: 60, // derives capacity = ceil(5 * 60 * 1.5) = 450
+  });
+  return <FluxionCanvas layers={layers} onReady={setHost} />;
+}
+```
+
+Override the axis or line config with the optional `axis` / `line` fields when you need labels, custom grid colours, etc.
+
 ### `<FluxionCanvas>`
 
 Declarative wrapper around `useFluxionCanvas`.
@@ -505,9 +526,11 @@ host.setBgColor(color)
 host.dispose()
 ```
 
-`host.clearLayer(id, { latestT })` sends an `Op.CLEAR_DATA` message that empties the layer's ring buffer and (optionally) rewinds `viewport.latestT`. This is the worker-side primitive behind replay backfill: the time axis can rewind to a past seek point, and a fresh `pushData` repopulates the visible window. `LineLayerHandle.reset(latestT?)` is the same call exposed on the handle (`scatter` / `area` / `step` etc. use `host.clearLayer` directly).
+`host.clearLayer(id, { latestT })` sends an `Op.CLEAR_DATA` message that empties the layer's ring buffer and (optionally) rewinds `viewport.latestT`. This is the worker-side primitive behind replay backfill: the time axis can rewind to a past seek point, and a fresh `pushData` repopulates the visible window.
 
-Custom layers can opt into `Op.CLEAR_DATA` by implementing the optional `clearData()` method on the `Layer` interface — ring-based built-ins (`line`, `area`, `scatter`, `step`, `candlestick`, `pose-arrow`) already do.
+**All ring-based streaming handles expose `.reset(latestT?)`** as a typed alternative — `LineLayerHandle`, `AreaLayerHandle`, `ScatterLayerHandle`, `StepLayerHandle`, `CandlestickLayerHandle`, `ScatterColoredHandle`, and `PoseArrowHandle`. They all delegate to `host.clearLayer` internally so the worker-side semantics are identical.
+
+Custom layers can opt into `Op.CLEAR_DATA` by implementing the optional `clearData()` method on the `Layer` interface — the built-ins listed above already do.
 
 ### `FluxionWorkerPool`
 
@@ -562,6 +585,29 @@ FluxionHost                          FluxionWorkerPool
 - `ArrayBuffer` is transferred (not copied) on every `pushData` call
 - The Scheduler only renders when data changes (`markDirty()`)
 - Multiple engines share one worker via `hostId` routing
+
+---
+
+## `/testing` sub-path
+
+Deterministic signal generators + PRNG helpers used by the demos, exported from a sub-path so they don't bloat the production bundle:
+
+```ts
+import {
+  mulberry32,
+  createSineSynth,
+  createLinearRamp,
+} from '@heojeongbo/fluxion-render/testing';
+
+const rand = mulberry32(42);           // deterministic [0, 1) PRNG
+const sine = createSineSynth({ freqHz: 0.5, amplitude: 0.8 });
+sine(performance.now());                // multi-harmonic sine + drift + noise
+
+const ramp = createLinearRamp({ slope: 0.5, baseT: Date.now() });
+ramp(Date.now() + 1000);                // 0.5 — perfect "is data flowing?" smoke signal
+```
+
+Use these to drive integration tests, Storybook stories, or your own demos with the same fixtures the monorepo's demos use.
 
 ---
 

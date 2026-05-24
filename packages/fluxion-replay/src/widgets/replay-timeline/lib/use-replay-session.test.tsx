@@ -160,4 +160,47 @@ describe("useReplaySession", () => {
     expect(result.current.enterReplay).toBe(r0.enterReplay);
     expect(result.current.exitReplay).toBe(r0.exitReplay);
   });
+
+  // Phase 20-A-2: open() failures used to go to console.error and leave
+  // isReady=false with no signal. They now surface on `result.current.error`.
+  describe("Phase 20: error state", () => {
+    it("starts with error === null", () => {
+      const { result } = renderHook(() =>
+        useReplaySession({ channels: [], autoOpen: false }),
+      );
+      expect(result.current.error).toBeNull();
+    });
+
+    it("isReady becomes true and error stays null on successful open", async () => {
+      const { result } = renderHook(() => useReplaySession({ channels: [] }));
+      await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+      expect(result.current.isReady).toBe(true);
+      expect(result.current.error).toBeNull();
+    });
+
+    it("surfaces an Error on open() rejection", async () => {
+      const failure = new Error("idb blocked");
+      // Mock indexedDB.open to fire its onerror handler.
+      const orig = globalThis.indexedDB.open;
+      globalThis.indexedDB.open = (() => {
+        const req: { onerror?: (e: unknown) => void; onsuccess?: unknown; error: Error } = {
+          error: failure,
+        };
+        Promise.resolve().then(() => req.onerror?.({ target: req }));
+        return req as unknown as IDBOpenDBRequest;
+      }) as unknown as typeof globalThis.indexedDB.open;
+
+      const { result } = renderHook(() => useReplaySession({ channels: [] }));
+      await act(async () => {
+        await Promise.resolve();
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+      expect(result.current.error).toBeInstanceOf(Error);
+      expect(result.current.error?.message).toContain("idb blocked");
+      expect(result.current.isReady).toBe(false);
+
+      globalThis.indexedDB.open = orig;
+    });
+  });
 });
