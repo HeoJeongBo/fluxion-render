@@ -1,5 +1,12 @@
 # Changelog
 
+# [0.10.0](https://github.com/HeoJeongBo/fluxion-render/compare/fluxion-render-v0.9.0...fluxion-render-v0.10.0) (2026-05-24)
+
+
+### Features
+
+* **render,replay,examples:** DX overhaul + bridge hook + testing utils ([48e5185](https://github.com/HeoJeongBo/fluxion-render/commit/48e5185f26c2139d7b6ebfe928e6694a24ce5a4d))
+
 # [0.9.0](https://github.com/HeoJeongBo/fluxion-render/compare/fluxion-render-v0.8.2...fluxion-render-v0.9.0) (2026-05-24)
 
 
