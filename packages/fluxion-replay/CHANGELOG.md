@@ -1,5 +1,13 @@
 # Changelog
 
+# [0.4.0](https://github.com/HeoJeongBo/fluxion-render/compare/fluxion-replay-v0.3.0...fluxion-replay-v0.4.0) (2026-05-24)
+
+
+### Features
+
+* **render,replay,examples:** add useChartReplay for time-travel line charts ([6993fa9](https://github.com/HeoJeongBo/fluxion-render/commit/6993fa9f2cdec01783e54a61569c2810a748ba10))
+* **replay,examples,render:** chart-replay DVR with scrub-then-play UX ([98e4544](https://github.com/HeoJeongBo/fluxion-render/commit/98e45444567349ec36049d13e6212c9f5546bd16))
+
 # [0.3.0](https://github-personal/HeoJeongBo/fluxion-render/compare/fluxion-replay-v0.2.1...fluxion-replay-v0.3.0) (2026-05-22)
 
 
