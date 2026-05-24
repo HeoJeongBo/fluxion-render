@@ -14,9 +14,9 @@ Built for robotics and sensor systems: streaming line charts, LiDAR point clouds
 |---------|---------|-------------|
 | [`packages/fluxion-worker`](packages/fluxion-worker) | `0.3.0` | Generic worker pool infrastructure — [`@heojeongbo/fluxion-worker`](https://www.npmjs.com/package/@heojeongbo/fluxion-worker) |
 | [`packages/fluxion-render`](packages/fluxion-render) | `0.8.2` | Core rendering library — [`@heojeongbo/fluxion-render`](https://www.npmjs.com/package/@heojeongbo/fluxion-render) |
-| [`packages/fluxion-replay`](packages/fluxion-replay) | `0.2.0` | Time-travel replay engine — [`@heojeongbo/fluxion-replay`](https://www.npmjs.com/package/@heojeongbo/fluxion-replay) |
+| [`packages/fluxion-replay`](packages/fluxion-replay) | `0.3.0` | Time-travel replay engine — [`@heojeongbo/fluxion-replay`](https://www.npmjs.com/package/@heojeongbo/fluxion-replay) |
 | [`examples/vite-demo`](examples/vite-demo) | — | Rendering demo — Stream, Multi-stream, Static XY, LiDAR, Pool |
-| [`examples/fluxion-replay-demo`](examples/fluxion-replay-demo) | — | Replay demo — screen capture, metrics, logs, time-travel scrubber |
+| [`examples/fluxion-replay-demo`](examples/fluxion-replay-demo) | — | Replay demo — DVR/screen capture, metrics, logs, time-travel scrubber, plus a 40-chart DVR route with scrub-then-play UX |
 
 ---
 

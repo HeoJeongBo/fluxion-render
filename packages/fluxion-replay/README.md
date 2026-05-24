@@ -311,11 +311,22 @@ function Dashboard() {
 
 ### Hooks
 
-| Hook | Returns |
+All hooks live under `@heojeongbo/fluxion-replay/react`.
+
+| Hook | What it gives you |
 |---|---|
-| `useReplaySession(opts)` | `{ session, isReady, mode, record, enterReplay, exitReplay }` |
-| `useReplayPlayer(player)` | `{ state, currentT }` — subscribes to player state changes |
-| `useReplayTimeline(player, timeRange)` | `{ fraction, buffered, seekTo }` — normalized 0–1 position |
+| `useReplaySession(opts)` | `{ session, isReady, mode, timeRange, record, enterReplay, exitReplay }` — owns IDB/OPFS lifecycle and toggles between live and replay modes. |
+| `useReplayPlayer(player)` | `{ state, currentT, play, pause, stop, seek }` — mirrors the player into React state. `currentT` is **snapped to whole seconds** (1-Hz cursor) and refreshed via a 250 ms `setInterval` so heavy chart traffic can't starve the scrubber. |
+| `useReplayScrubber(opts)` | `{ min, max, value, disabled }` — derives `<input type="range">` props snapped to 1 s, with a `recordingStartMs` anchor that pins the left edge and a `minSpanMs` floor that keeps the bar from collapsing at mount. |
+| `useReplayTimeline(player, timeRange)` | `{ fraction, buffered, seekTo }` — normalized 0–1 position for low-level scrubber UIs. Used internally by `<ReplayTimeline>`. |
+| `useReplayDvr(opts)` | `{ isDvr, player, frozenLatest, effectiveTimeRange, enter, exit }` — high-level DVR controller. Captures a "frozen latest" on entry so the scrubber stops drifting forward, optionally auto-plays on enter, and auto-exits to live when playback reaches the frozen edge. |
+| `useLiveTimeRange(session, opts?)` | `{ timeRange, segments, seed }` — polls `session.getTimeRange()` and exposes recording segments. `seed()` lets you avoid the first-poll empty state. |
+| `useChartReplay(opts)` | `{ isHydrating, hydratedCount }` — bridges a `ReplayPlayer` into a `fluxion-render` line layer. Backfills the trailing window on enter / seek and streams `onFrame` events into `handle.push`. Uses a sequential queue + microtask yield to defeat seek-burst and exit races. |
+| `useChartLiveBackfill(opts)` | `void` — when `active` flips true (mount, DVR→live), flushes the store and rewrites the chart with the most recent window so the live chart picks up where DVR left off. Pairs with `useFluxionStream` for ongoing pushes. |
+| `useVideoReplayer(opts)` | `{ ref, isReady }` — drives a `<video>` element from a video-channel `ReplayPlayer`. |
+| `useStorageInfo(session, opts?)` | `{ usedBytes, quotaBytes, percentUsed, idbFrameCount }` — periodic IDB + OPFS quota inspector. |
+| `useDisplayMedia()` | `{ stream, start, stop }` — thin wrapper around `navigator.mediaDevices.getDisplayMedia` used by the screen-capture demos. |
+| `<ReplayTimeline />` | Headless scrubber built on `<input type="range">`. Styleable; uses `useReplayTimeline` under the hood. |
 
 ### `<ReplayTimeline />`
 
@@ -331,6 +342,128 @@ Headless scrubber built on `<input type="range">`. Fully styleable.
 
 ---
 
+## DVR / Time-travel pattern
+
+`useReplayDvr` bundles the "freeze the live edge → seek → autoplay → auto-return to live" state machine that DVR-style UIs end up writing by hand. Combined with `useReplayScrubber` it gives you a video-timeline-style scrubber with 1-Hz cursor snap. The chart-replay demo wires it like this (paraphrased):
+
+```tsx
+const { session, isReady, enterReplay, exitReplay, record } = useReplaySession(SESSION_OPTS);
+const { timeRange: liveTimeRange, seed } = useLiveTimeRange(session);
+
+const dvr = useReplayDvr({
+  session, enterReplay, exitReplay, liveTimeRange,
+  rate: 1,
+  // Phase-18 UX: scrub-then-play. Don't autoplay on enter — release of the
+  // scrubber commits a play() so the user can hold the mouse to inspect any
+  // past moment without the chart sliding out from under them.
+  autoPlay: false,
+});
+
+const player = useReplayPlayer(dvr.player);
+
+const { min, max, value, disabled } = useReplayScrubber({
+  effectiveTimeRange: dvr.effectiveTimeRange,
+  liveTimeRange,
+  isDvr: dvr.isDvr,
+  replayPlayerT: player.currentT,
+  scrubT,                       // local "user is currently dragging" state
+  recordingStartMs: timeOrigin, // anchors the left edge for the whole session
+});
+
+<input
+  type="range"
+  min={min} max={max} value={value} step={1000}
+  disabled={disabled}
+  onChange={(e) => {
+    const t = Number(e.target.value);
+    setScrubT(t);
+    if (dvr.isDvr) dvr.player?.seek(t);          // mid-DVR live preview
+    else if (t < max - 250) void dvr.enter(t);   // first cross into DVR
+  }}
+  onMouseUp={() => {
+    if (dvr.isDvr) {
+      dvr.player?.seek(scrubT!);
+      dvr.player?.play(1);                       // release ⇒ play
+    } else {
+      void dvr.enter(scrubT!).then(() => dvr.player?.play(1));
+    }
+    setScrubT(null);
+  }}
+/>
+```
+
+What you get:
+
+- **Frozen right edge** — `dvr.effectiveTimeRange.latest` snapshots the live edge at the moment of `enter()` so the scrubber stops drifting forward while you scrub.
+- **Frozen left edge** — `useReplayScrubber.recordingStartMs` pins the bar's start to a wall-clock anchor (the page mount / session start), so the bar never "slides" as retention or polling moves the live earliest.
+- **1-Hz cursor** — `useReplayPlayer` polls `player.currentT` every 250 ms and exposes a whole-second value, so a 40-chart page won't starve scrubber updates.
+- **Scrub-then-play UX** — with `autoPlay: false`, the player stays idle while you drag; calling `play()` from `onMouseUp` resumes from the released point.
+- **Auto-return to live** — when `currentT` reaches `frozenLatest`, `useReplayDvr` calls `exitReplay()` and the UI snaps back to live without extra wiring.
+
+---
+
+## Chart-replay pattern
+
+`useChartReplay` + `useChartLiveBackfill` bridge a `ReplayPlayer` into a `fluxion-render` line layer without you having to write the IDB queries or worker-message orchestration:
+
+```tsx
+import { useFluxionStream } from "@heojeongbo/fluxion-render/react";
+import { useChartReplay, useChartLiveBackfill } from "@heojeongbo/fluxion-replay/react";
+
+// Live pump — keeps recording during DVR. Use a ref for `isLive` to avoid
+// stale closures during the async `dvr.enter()` await.
+const isLiveRef = useRef(isLive);
+isLiveRef.current = isLive;
+
+useFluxionStream({
+  host,
+  intervalMs: 1000 / 20,
+  setup: (h) => h.line("line"),
+  tick: (_t, handle) => {
+    const wallT = Date.now();
+    const y = sample(wallT);
+    if (isLiveRef.current) handle.push({ t: wallT - timeOrigin, y });
+    record("signal", { name: "signal", value: y }, wallT);
+    return 1;
+  },
+});
+
+// DVR path — backfills the trailing window on enter/seek and streams onFrame.
+useChartReplay<MetricSample>({
+  host: isLive ? null : host,
+  player: isLive ? null : dvr.player,
+  store: isLive ? null : session?.store ?? null,
+  channel: signalChannel,
+  layerId: "line",
+  windowMs: 5_000,
+  timeOrigin,
+  pickValue: (d) => d.value,
+});
+
+// Live re-entry — wipes the chart and rewrites the most recent window so
+// "Go Live" shows the data that accumulated during DVR.
+useChartLiveBackfill<MetricSample>({
+  host,
+  store: session?.store ?? null,
+  channel: signalChannel,
+  layerId: "line",
+  windowMs: 5_000,
+  timeOrigin,
+  pickValue: (d) => d.value,
+  active: isLive,
+});
+```
+
+Notes:
+
+- `timeOrigin` is a per-page constant (`useMemo(() => Date.now(), [])`) that keeps wire-format timestamps inside `Float32`'s safe integer range. Pass the same value to `axisGridLayer({ timeOrigin })` so labels still show wall-clock time.
+- `useChartReplay` serialises hydrate work: at most one IDB query is in flight, and additional `seek()` bursts collapse into a single "latest t" — drags settle in one or two visible updates, not dozens.
+- `useChartLiveBackfill` calls `handle.reset(now)` synchronously when `active` flips true, then asynchronously refills from `store.getFramesByChannel`. The sync reset wins the FIFO race against any DVR hydrate that's still in flight, so the live chart never appears blank after a Go-Live.
+
+---
+
+---
+
 ## Session API
 
 ```ts
@@ -338,14 +471,16 @@ const session = createReplaySession(opts);
 
 await session.open();               // opens IDB + OPFS
 await session.startRecording();     // starts the recorder flush timer
-session.record(channelId, data);    // encode + buffer a frame
+session.record(channelId, data, timestamp?); // encode + buffer a frame (defaults to Date.now())
 session.stopRecording();            // stops the flush timer
-const player = await session.enterReplay(startT?); // create a player
+const player = await session.enterReplay(startT?, { timeRange? }); // create a player
 session.exitReplay();               // dispose player, back to live mode
 await session.getTimeRange();       // { earliest, latest } or null
 await session.clearRecording();     // wipe all stored data, restart recorder
 session.dispose();                  // cleanup everything
 ```
+
+`enterReplay` accepts an optional `opts.timeRange` so callers can freeze the player's `latest` bound to the live edge the user actually saw at click time (`useReplayDvr` uses this). Inside, the session also calls `store.flush()` before reading `getTimeRange()` so the recorder's pending batch is visible to the new player — without that flush the last ~500 ms of frames would be a tail gap in the chart.
 
 ### `ReplaySession` options
 
@@ -364,16 +499,20 @@ session.dispose();                  // cleanup everything
 
 ```ts
 player.play(rate?)     // start or resume; rate defaults to 1.0
+                       // ("idle" / "stopped" → resumes from the prior seek
+                       //  target, not from earliest)
 player.pause()
 player.stop()          // resets to beginning
-player.seek(t)         // jump to absolute timestamp (ms)
+player.seek(t)         // jump to absolute timestamp (ms) — clamps into timeRange
 
 player.onFrame(fn)     // ({ channelId, data, t }) => void
 player.onTick(fn)      // (currentT: number) => void  — fires every RAF tick
 player.onStateChange(fn) // ("idle" | "playing" | "paused" | "stopped") => void
 player.onEnd(fn)       // fires when currentT >= timeRange.latest
+player.onSeek(fn)      // (clampedT: number) => void  — fires after every seek
 
 player.currentT        // current virtual timestamp (ms)
+player.timeRange       // { earliest, latest } — read-only window captured at construction
 player.state           // current playback state
 player.dispose()
 ```

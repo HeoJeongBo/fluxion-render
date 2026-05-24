@@ -488,6 +488,7 @@ const host = new FluxionHost(canvas, opts?: FluxionHostOptions);
 host.addLayer(id, kind, config?)
 host.removeLayer(id)
 host.configLayer(id, config)
+host.clearLayer(id, { latestT? })   // drop ring data; optionally rewind viewport.latestT
 
 // Typed helpers — add layer and return a handle
 const line   = host.addLineLayer(id, config?)      // → LineLayerHandle
@@ -503,6 +504,10 @@ host.resize(width, height, dpr)
 host.setBgColor(color)
 host.dispose()
 ```
+
+`host.clearLayer(id, { latestT })` sends an `Op.CLEAR_DATA` message that empties the layer's ring buffer and (optionally) rewinds `viewport.latestT`. This is the worker-side primitive behind replay backfill: the time axis can rewind to a past seek point, and a fresh `pushData` repopulates the visible window. `LineLayerHandle.reset(latestT?)` is the same call exposed on the handle (`scatter` / `area` / `step` etc. use `host.clearLayer` directly).
+
+Custom layers can opt into `Op.CLEAR_DATA` by implementing the optional `clearData()` method on the `Layer` interface — ring-based built-ins (`line`, `area`, `scatter`, `step`, `candlestick`, `pose-arrow`) already do.
 
 ### `FluxionWorkerPool`
 
