@@ -1,5 +1,8 @@
 # Changelog
 
+* chore: release @heojeongbo/fluxion-render v0.10.0 (48cbe4e)
+* feat(render,replay,examples): DX overhaul + bridge hook + testing utils (48e5185)
+
 # [0.4.0](https://github.com/HeoJeongBo/fluxion-render/compare/fluxion-replay-v0.3.0...fluxion-replay-v0.4.0) (2026-05-24)
 
 
