@@ -76,4 +76,76 @@ describe("useLiveTimeRange", () => {
     expect(setIntervalSpy.mock.calls.length).toBe(before);
     setIntervalSpy.mockRestore();
   });
+
+  // ── Callback identity (regression for chart-replay's "B~B / scrubMin===scrubMax" bug)
+  // If `seed` (or any returned callback) is a new reference each render,
+  // consumers that put it in useEffect deps will re-fire forever — in
+  // chart-replay that meant clearRecording() ran every render, wiping the
+  // store and pinning the scrubber to seed(now, now). This describe lives
+  // here as a permanent guard for that whole class of regression.
+
+  describe("callback identity stability", () => {
+    it("seed is the same reference across re-renders", () => {
+      const { result, rerender } = renderHook(() => useLiveTimeRange(null));
+      const seedFirst = result.current.seed;
+      rerender();
+      rerender();
+      rerender();
+      expect(result.current.seed).toBe(seedFirst);
+    });
+
+    it("seed identity is also stable across timeRange state changes", () => {
+      const { result } = renderHook(() => useLiveTimeRange(null));
+      const seedBefore = result.current.seed;
+      act(() => {
+        result.current.seed({ earliest: 1, latest: 2 });
+      });
+      // Even after setState causes a re-render, the seed function reference
+      // must NOT change — otherwise any useEffect with `seed` in deps fires
+      // on every state change in this hook.
+      expect(result.current.seed).toBe(seedBefore);
+      expect(result.current.timeRange).toEqual({ earliest: 1, latest: 2 });
+    });
+  });
+
+  // ── Scenario: empty session at mount → seed() bridges the polling gap ───
+  // Reproduces the chart-replay demo flow: page enters, session opens, but
+  // the store is empty so the first poll returns null. Without an explicit
+  // seed() the scrubber stays disabled for ~500ms before frames land. The
+  // demo seeds right after startRecording — this verifies that seed wins
+  // over the (null-returning) first poll and that a subsequent poll with
+  // real frames then overwrites the seed cleanly.
+  it("seed() bridges the empty-store window then polling overwrites with real range", async () => {
+    const session = new ReplaySession({ channels: [] });
+    await session.open();
+
+    // First polls return null (empty store); later polls return real range.
+    let pollResult: { earliest: number; latest: number } | null = null;
+    const spy = vi.spyOn(session, "getTimeRange").mockImplementation(async () => pollResult);
+
+    const { result } = renderHook(() => useLiveTimeRange(session, { intervalMs: 200 }));
+
+    // First poll resolves to null → timeRange stays null.
+    await act(async () => { await Promise.resolve(); });
+    expect(result.current.timeRange).toBeNull();
+
+    // App seeds right after startRecording — scrubber becomes live IMMEDIATELY.
+    const seedNow = 1_700_000_000_000;
+    act(() => {
+      result.current.seed({ earliest: seedNow, latest: seedNow });
+    });
+    expect(result.current.timeRange).toEqual({ earliest: seedNow, latest: seedNow });
+
+    // Frames start landing — next poll picks up real bounds. The seed is
+    // overwritten cleanly by the polling result (no flicker back to null).
+    pollResult = { earliest: seedNow, latest: seedNow + 1_500 };
+    await act(async () => {
+      vi.advanceTimersByTime(200);
+      await Promise.resolve();
+    });
+    expect(result.current.timeRange).toEqual({ earliest: seedNow, latest: seedNow + 1_500 });
+
+    session.dispose();
+    spy.mockRestore();
+  });
 });

@@ -7,6 +7,12 @@ export type {
 export { useReplayPlayer } from "./widgets/replay-timeline/lib/use-replay-player";
 export type { UseReplayPlayerResult } from "./widgets/replay-timeline/lib/use-replay-player";
 
+export { useReplayScrubber } from "./widgets/replay-timeline/lib/use-replay-scrubber";
+export type {
+  UseReplayScrubberOptions,
+  UseReplayScrubberResult,
+} from "./widgets/replay-timeline/lib/use-replay-scrubber";
+
 export { useReplayTimeline } from "./widgets/replay-timeline/lib/use-replay-timeline";
 export type {
   UseReplayTimelineResult,
@@ -37,3 +43,12 @@ export type {
   UseChartReplayOptions,
   UseChartReplayResult,
 } from "./widgets/chart-replay/lib/use-chart-replay";
+
+export { useChartLiveBackfill } from "./widgets/chart-replay/lib/use-chart-live-backfill";
+export type { UseChartLiveBackfillOptions } from "./widgets/chart-replay/lib/use-chart-live-backfill";
+
+export { useReplayDvr } from "./widgets/dvr/lib/use-replay-dvr";
+export type {
+  UseReplayDvrOptions,
+  UseReplayDvrResult,
+} from "./widgets/dvr/lib/use-replay-dvr";

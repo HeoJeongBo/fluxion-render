@@ -125,4 +125,110 @@ describe("ReplaySession", () => {
     expect(typeof info.idbFrameCount).toBe("number");
     session.dispose();
   });
+
+  // Phase 13: enterReplay must flush the recorder's pending batch before
+  // computing the player's timeRange — otherwise the last ~500ms of just-
+  // recorded frames are invisible to the player and the chart shows a tail
+  // gap right at the moment the user entered DVR.
+  describe("Phase 13: enterReplay flush + opts.timeRange", () => {
+    it("flushes the store before reading getTimeRange", async () => {
+      const session = new ReplaySession({
+        channels: [new MetricChannel("cpu")],
+        // Big interval so the auto-flush timer doesn't race us — we want to
+        // assert the explicit flush enterReplay performs.
+        storeOptions: { batchIntervalMs: 99_999 },
+      });
+      await session.open();
+      await session.startRecording();
+      // Record some frames; they live in store._pending only until flushed.
+      session.record("cpu", { name: "cpu", value: 1 }, 1_000);
+      session.record("cpu", { name: "cpu", value: 2 }, 2_000);
+      session.record("cpu", { name: "cpu", value: 3 }, 3_000);
+
+      // Before enterReplay, IDB is empty (pending hasn't flushed).
+      expect(await session.getTimeRange()).toBeNull();
+
+      const flushSpy = vi.spyOn(session.store, "flush");
+      await session.enterReplay();
+      expect(flushSpy).toHaveBeenCalled();
+
+      // After enterReplay, frames are in IDB and the time range is queryable.
+      const range = await session.getTimeRange();
+      expect(range).toEqual({ earliest: 1_000, latest: 3_000 });
+
+      session.dispose();
+    });
+
+    it("uses opts.timeRange when provided (clamped into IDB's actual range)", async () => {
+      const session = new ReplaySession({
+        channels: [new MetricChannel("cpu")],
+        storeOptions: { batchIntervalMs: 99_999 },
+      });
+      await session.open();
+      await session.startRecording();
+      session.record("cpu", { name: "cpu", value: 0 }, 1_000);
+      session.record("cpu", { name: "cpu", value: 1 }, 5_000);
+
+      // Caller asks for a frozen latest at 4_000 (mid-recording).
+      const player = await session.enterReplay(undefined, {
+        timeRange: { earliest: 1_500, latest: 4_000 },
+      });
+      // earliest clamped up to caller's 1_500 (>= IDB 1_000),
+      // latest clamped down to caller's 4_000 (<= IDB 5_000).
+      expect(player.timeRange).toEqual({ earliest: 1_500, latest: 4_000 });
+
+      session.dispose();
+    });
+
+    it("falls back to IDB range when opts.timeRange is zero-width", async () => {
+      const session = new ReplaySession({
+        channels: [new MetricChannel("cpu")],
+        storeOptions: { batchIntervalMs: 99_999 },
+      });
+      await session.open();
+      await session.startRecording();
+      session.record("cpu", { name: "cpu", value: 0 }, 1_000);
+      session.record("cpu", { name: "cpu", value: 1 }, 3_000);
+
+      // Mimic a freshly-seeded liveTimeRange — { now, now } before first poll.
+      const seededT = 2_500;
+      const player = await session.enterReplay(undefined, {
+        timeRange: { earliest: seededT, latest: seededT },
+      });
+      // Should fall back to IDB range so the player has something to play.
+      expect(player.timeRange).toEqual({ earliest: 1_000, latest: 3_000 });
+
+      session.dispose();
+    });
+
+    it("falls back to IDB range when opts.timeRange does not overlap IDB", async () => {
+      const session = new ReplaySession({
+        channels: [new MetricChannel("cpu")],
+        storeOptions: { batchIntervalMs: 99_999 },
+      });
+      await session.open();
+      await session.startRecording();
+      session.record("cpu", { name: "cpu", value: 0 }, 10_000);
+      session.record("cpu", { name: "cpu", value: 1 }, 20_000);
+
+      // Caller's range is entirely below IDB's earliest — clamp collapses.
+      const player = await session.enterReplay(undefined, {
+        timeRange: { earliest: 1, latest: 100 },
+      });
+      expect(player.timeRange).toEqual({ earliest: 10_000, latest: 20_000 });
+
+      session.dispose();
+    });
+
+    it("falls back to fabricated range when IDB is empty AND opts.timeRange is invalid", async () => {
+      const session = new ReplaySession({ channels: [new MetricChannel("cpu")] });
+      await session.open();
+      // No frames recorded → IDB empty.
+      const player = await session.enterReplay(undefined, {
+        timeRange: { earliest: 100, latest: 100 }, // zero-width
+      });
+      expect(player.timeRange.latest).toBeGreaterThan(player.timeRange.earliest);
+      session.dispose();
+    });
+  });
 });

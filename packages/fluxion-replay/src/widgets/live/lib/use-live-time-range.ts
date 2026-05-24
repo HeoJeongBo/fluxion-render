@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { RecordingSegment } from "../../../features/store/model/replay-store";
 import type { ReplaySession } from "../../../features/session/model/replay-session";
 
@@ -60,7 +60,14 @@ export function useLiveTimeRange(
     };
   }, [session, intervalMs]);
 
-  const seed = (range: { earliest: number; latest: number }) => setTimeRange(range);
+  // MUST be stable across re-renders. Consumers (e.g. chart-replay's
+  // auto-record effect) put `seed` in useEffect deps — an unstable identity
+  // would re-fire that effect every render, which in production was wiping
+  // the store on every paint and pinning the scrubber to seed(now, now).
+  const seed = useCallback(
+    (range: { earliest: number; latest: number }) => setTimeRange(range),
+    [],
+  );
 
   return { timeRange, segments, seed };
 }

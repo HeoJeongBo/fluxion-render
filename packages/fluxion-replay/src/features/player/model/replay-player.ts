@@ -89,6 +89,18 @@ export class ReplayPlayer {
     return this._state;
   }
 
+  /**
+   * The `{ earliest, latest }` window the player operates over — captured at
+   * construction and never mutated. `latest` doubles as the playback end
+   * condition: `_onTick` fires `onEnd` once `currentT >= timeRange.latest`,
+   * and `seek()` clamps targets into this range.
+   *
+   * Returned reference is the internal object; treat as read-only.
+   */
+  get timeRange(): { readonly earliest: number; readonly latest: number } {
+    return this._timeRange;
+  }
+
   seek(t: number): void {
     const clamped = Math.max(this._timeRange.earliest, Math.min(this._timeRange.latest, t));
     this._clock.seek(clamped);
@@ -103,12 +115,21 @@ export class ReplayPlayer {
 
   play(rate = 1.0): void {
     if (this._state === "idle" || this._state === "stopped") {
-      this._prefetchedUpTo = this._timeRange.earliest;
+      // Preserve a prior `seek()` target. Without this, `play()` would
+      // silently rewind back to `timeRange.earliest`, breaking the
+      // "seek then play" pattern every video player follows. Clamp into
+      // range so a stale clock state (e.g. `stop()` zeroes it) still
+      // lands at a sane starting point.
+      const startT = Math.max(
+        this._timeRange.earliest,
+        Math.min(this._timeRange.latest, this._clock.currentT),
+      );
+      this._prefetchedUpTo = Math.max(startT - 3_000, this._timeRange.earliest);
       this._prefetchBuffer = [];
       this._ended = false;
       this._offTick?.();
       this._offTick = null;
-      this._clock.start(this._timeRange.earliest, rate);
+      this._clock.start(startT, rate);
       this._offTick = this._clock.onTick((t) => this._onTick(t));
     } else if (this._state === "paused") {
       this._clock.setRate(rate);

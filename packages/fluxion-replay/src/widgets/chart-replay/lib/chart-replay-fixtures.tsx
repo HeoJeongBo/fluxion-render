@@ -1,6 +1,7 @@
 import { vi } from "vitest";
 import { MetricChannel } from "../../../entities/metric-channel/metric-channel";
-import type { ReplayPlayerFrame } from "../../../features/player/model/replay-player";
+import type { ReplayPlayer, ReplayPlayerFrame } from "../../../features/player/model/replay-player";
+import type { ReplaySession } from "../../../features/session/model/replay-session";
 import type { SerializedFrame } from "../../../shared/model/frame";
 import { useChartReplay } from "./use-chart-replay";
 
@@ -42,10 +43,12 @@ export function makeFakeHost() {
 
 export type FrameListener = (frame: ReplayPlayerFrame) => void;
 export type SeekListener = (t: number) => void;
+export type EndListener = () => void;
 
 export function makeFakePlayer(initialT = 1000) {
   const frameListeners = new Set<FrameListener>();
   const seekListeners = new Set<SeekListener>();
+  const endListeners = new Set<EndListener>();
   let currentT = initialT;
 
   return {
@@ -59,25 +62,149 @@ export function makeFakePlayer(initialT = 1000) {
       seekListeners.add(l);
       return () => seekListeners.delete(l);
     }),
+    onEnd: vi.fn((l: EndListener) => {
+      endListeners.add(l);
+      return () => endListeners.delete(l);
+    }),
+    play: vi.fn((_rate?: number) => {}),
+    pause: vi.fn(() => {}),
+    stop: vi.fn(() => {}),
+    dispose: vi.fn(() => {
+      frameListeners.clear();
+      seekListeners.clear();
+      endListeners.clear();
+    }),
     emitFrame(frame: ReplayPlayerFrame) {
       for (const l of frameListeners) l(frame);
     },
     emitSeek(t: number) {
       for (const l of seekListeners) l(t);
     },
+    emitEnd() {
+      for (const l of endListeners) l();
+    },
     frameListenerCount() { return frameListeners.size; },
     seekListenerCount() { return seekListeners.size; },
+    endListenerCount() { return endListeners.size; },
   };
 }
 
-export function makeFakeStore(framesByChannel: Record<string, SerializedFrame[]>) {
+export type FakePlayer = ReturnType<typeof makeFakePlayer>;
+
+/**
+ * Mock the slice of `ReplaySession` that `useReplayDvr` touches:
+ * `enterReplay` / `exitReplay`. Holds a fake player so successive
+ * `enterReplay` calls return either the same player or a fresh one
+ * (`fresh: true` opt-in).
+ */
+export interface MakeFakeSessionOpts {
+  /** Player returned by enterReplay. Defaults to a new makeFakePlayer(0). */
+  player?: FakePlayer;
+  /** If true, enterReplay creates a fresh fake player each call. */
+  fresh?: boolean;
+}
+
+export function makeFakeSession(opts: MakeFakeSessionOpts = {}) {
+  let activePlayer = opts.player ?? makeFakePlayer(0);
+  const enterCalls: number[] = [];
+  const exitCalls: number[] = [];
+  // When pendingResolvers is non-null, enterReplay parks each call's resolve
+  // here and the test drives ordering with releaseEnter(n) / releaseEnterReverse().
+  let pendingEnterResolvers: Array<() => void> | null = null;
+
+  const enterReplay = vi.fn(async (t?: number): Promise<FakePlayer | null> => {
+    enterCalls.push(t ?? Number.NaN);
+    // Capture the player snapshot at call time so each call returns its own.
+    const player = opts.fresh ? makeFakePlayer(t ?? 0) : activePlayer;
+    if (opts.fresh) activePlayer = player;
+    else if (t !== undefined) activePlayer.setCurrentT(t);
+
+    if (pendingEnterResolvers) {
+      await new Promise<void>((resolve) => pendingEnterResolvers!.push(resolve));
+    }
+    return player;
+  });
+
+  const exitReplay = vi.fn(() => {
+    exitCalls.push(performance.now());
+  });
+
+  // useReplayDvr only uses session as a truthy gate; supplying an object
+  // typed as ReplaySession (with no methods called) is enough.
+  const session = { __fake: true } as unknown as ReplaySession;
+
   return {
-    getFramesByChannel: vi.fn(
-      async (channelId: string, fromMs: number, toMs: number): Promise<SerializedFrame[]> => {
-        const all = framesByChannel[channelId] ?? [];
-        return all.filter((f) => f.t >= fromMs && f.t <= toMs);
-      },
-    ),
+    session,
+    enterReplay: enterReplay as unknown as (t?: number) => Promise<ReplayPlayer | null>,
+    exitReplay,
+    enterCalls,
+    exitCalls,
+    get player() { return activePlayer; },
+    /** Park subsequent enterReplay calls until releaseEnter*. */
+    holdEnter(): void {
+      pendingEnterResolvers = [];
+    },
+    /** Resolve all parked enters in arrival order. */
+    async releaseEnter(): Promise<void> {
+      const resolvers = pendingEnterResolvers ?? [];
+      pendingEnterResolvers = null;
+      for (const r of resolvers) r();
+      await Promise.resolve();
+    },
+    /** Resolve parked enters in REVERSE order — stale enter wins the race. */
+    async releaseEnterReverse(): Promise<void> {
+      const resolvers = pendingEnterResolvers ?? [];
+      pendingEnterResolvers = null;
+      for (let i = resolvers.length - 1; i >= 0; i--) resolvers[i]!();
+      await Promise.resolve();
+    },
+    pendingEnterCount(): number {
+      return pendingEnterResolvers?.length ?? 0;
+    },
+  };
+}
+
+/**
+ * Fake store with optional pending-promise hold. Tests can call `hold()` to
+ * pause new `getFramesByChannel` resolutions, fire other events (like
+ * `player.emitFrame`), then `release()` to let the pending hydrate complete.
+ * Lets us reliably reproduce hydrate-vs-onFrame races.
+ */
+export function makeFakeStore(framesByChannel: Record<string, SerializedFrame[]>) {
+  let pendingResolvers: Array<() => void> = [];
+  let isHeld = false;
+
+  const getFramesByChannel = vi.fn(
+    async (channelId: string, fromMs: number, toMs: number): Promise<SerializedFrame[]> => {
+      const all = framesByChannel[channelId] ?? [];
+      const filtered = all.filter((f) => f.t >= fromMs && f.t <= toMs);
+      if (isHeld) {
+        await new Promise<void>((resolve) => pendingResolvers.push(resolve));
+      }
+      return filtered;
+    },
+  );
+
+  // No-op spy — callers (e.g. useChartLiveBackfill) await this before
+  // querying so they observe the recorder's just-committed batch. The fake
+  // has nothing to flush, but exposing the spy lets tests assert order.
+  const flush = vi.fn(async () => {});
+
+  return {
+    getFramesByChannel,
+    flush,
+    /** Hold subsequent getFramesByChannel calls until release(). */
+    hold(): void { isHeld = true; },
+    /** Resolve every currently-pending getFramesByChannel call. */
+    async release(): Promise<void> {
+      const resolvers = pendingResolvers;
+      pendingResolvers = [];
+      isHeld = false;
+      for (const r of resolvers) r();
+      // One microtask hop so awaiting code can advance.
+      await Promise.resolve();
+    },
+    pendingCount(): number { return pendingResolvers.length; },
   };
 }
 

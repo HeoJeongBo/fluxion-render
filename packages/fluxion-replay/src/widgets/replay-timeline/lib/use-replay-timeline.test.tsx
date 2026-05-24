@@ -189,4 +189,11 @@ describe("useReplayTimeline", () => {
     expect(result.current.isAtLiveEdge).toBe(true);
     player.dispose();
   });
+
+  // Note: seek* callbacks intentionally close over `currentT` / `timeRange`
+  // and update with them. That's correct useCallback semantics for this
+  // hook — consumers should NOT put these in useEffect deps for the
+  // identity-stability reasons that bit chart-replay (Phase 10). The seek-by-
+  // value contract (seekTo(0.5) always seeks to the midpoint) is what matters
+  // and is covered by the tests above.
 });

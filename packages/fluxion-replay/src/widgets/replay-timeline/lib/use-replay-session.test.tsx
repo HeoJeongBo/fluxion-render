@@ -144,4 +144,20 @@ describe("useReplaySession", () => {
       expect(recordSpy).toHaveBeenCalledWith("test-channel", { value: 42 }, undefined);
     }
   });
+
+  // Guard against the class of bug Phase 10 chased: an unstable callback
+  // identity here would cascade through every effect in the consumer that
+  // puts these in deps (see auto-record-pattern.test.tsx).
+  it("returned callbacks (record, enterReplay, exitReplay) have stable identity across re-renders", async () => {
+    const { result, rerender } = renderHook(() =>
+      useReplaySession({ channels: [], autoOpen: false })
+    );
+    await act(async () => { await Promise.resolve(); });
+    const r0 = { record: result.current.record, enterReplay: result.current.enterReplay, exitReplay: result.current.exitReplay };
+    rerender();
+    rerender();
+    expect(result.current.record).toBe(r0.record);
+    expect(result.current.enterReplay).toBe(r0.enterReplay);
+    expect(result.current.exitReplay).toBe(r0.exitReplay);
+  });
 });

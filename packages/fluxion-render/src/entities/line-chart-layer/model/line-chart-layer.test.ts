@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { AxisGridLayer } from "../../axis-grid-layer/model/axis-grid-layer";
 import { Viewport } from "../../../shared/model/viewport";
 import { createFakeCtx } from "../../../test/setup";
 import { LineChartLayer } from "./line-chart-layer";
@@ -294,6 +295,103 @@ describe("LineChartLayer (streaming)", () => {
       expect(ctx.calls.filter((c) => c.name === "moveTo").length).toBe(1);
       expect(ctx.calls.filter((c) => c.name === "lineTo").length).toBe(2);
       expect(ctx.strokeStyle).toBe("#abc");
+    });
+  });
+
+  // Phase 17 — Bug 2 e2e: when a DVR hydrate does
+  // `clearData(latestT = seekT)` then `setData(samples in [seekT - windowMs, seekT])`,
+  // the line + axis combination MUST render those samples (not "start fresh").
+  // This is the worker-side equivalent of `useChartReplay.hydrate`. The user
+  // reported the chart looked empty after going to past; this test pins down
+  // the exact pipeline so that bug can't silently regress.
+  describe("DVR hydrate integration (line + axis)", () => {
+    it("clearData(seekT) + setData([seekT-windowMs, seekT]) renders all backfill samples", () => {
+      const SEEK_T = 10_000; // host-relative ms
+      const WINDOW_MS = 5_000;
+
+      const axis = new AxisGridLayer("axis");
+      axis.setConfig({
+        xMode: "time",
+        timeWindowMs: WINDOW_MS,
+        yMode: "auto",
+        applyToViewport: true,
+      });
+      const line = new LineChartLayer("line");
+      line.setConfig({ capacity: 200 });
+
+      const v = new Viewport();
+      v.setSize(1000, 100, 1);
+
+      // The hydrate flow: reset wipes the ring AND rewinds latestT, then
+      // setData pushes the backfill samples (each t <= SEEK_T).
+      line.clearData();
+      v.latestT = SEEK_T; // CLEAR_DATA op also sets viewport.latestT
+
+      // 100 samples at 50 ms intervals covering [5000, 9950].
+      const buf = new Float32Array(200);
+      for (let i = 0; i < 100; i++) {
+        const t = SEEK_T - WINDOW_MS + i * 50;
+        buf[i * 2] = t;
+        buf[i * 2 + 1] = i / 10;
+      }
+      line.setData(buf.buffer, buf.length, v);
+
+      // The axis scan computes the visible window from viewport.latestT.
+      v.beginScan();
+      axis.scan?.(v);
+      // The line scan filters by xMin (= latestT - windowMs).
+      line.scan?.(v);
+
+      // The axis must have anchored the visible range at [SEEK_T - WINDOW_MS, SEEK_T].
+      expect(v.bounds.xMin).toBe(SEEK_T - WINDOW_MS);
+      expect(v.bounds.xMax).toBe(SEEK_T);
+
+      // The line must actually draw — 100 samples in range → 1 moveTo + 99 lineTos.
+      const ctx = createFakeCtx();
+      line.draw(ctx as unknown as OffscreenCanvasRenderingContext2D, v);
+      const moves = ctx.calls.filter((c) => c.name === "moveTo").length;
+      const lines = ctx.calls.filter((c) => c.name === "lineTo").length;
+      expect(moves).toBe(1);
+      expect(lines).toBe(99);
+      expect(ctx.calls.some((c) => c.name === "stroke")).toBe(true);
+    });
+
+    it("the boundary sample at t === seekT is NOT silently dropped", () => {
+      // Specifically guards against an off-by-one in xMax / latestT logic
+      // that would clip the most recent backfill point.
+      const SEEK_T = 20_000;
+      const WINDOW_MS = 5_000;
+
+      const axis = new AxisGridLayer("axis");
+      axis.setConfig({
+        xMode: "time",
+        timeWindowMs: WINDOW_MS,
+        applyToViewport: true,
+      });
+      const line = new LineChartLayer("line");
+      line.setConfig({ capacity: 16 });
+      const v = new Viewport();
+      v.setSize(500, 100, 1);
+
+      line.clearData();
+      v.latestT = SEEK_T;
+      // Two samples, the second exactly at SEEK_T.
+      line.setData(
+        new Float32Array([SEEK_T - 1_000, 0.1, SEEK_T, 0.2]).buffer,
+        4,
+        v,
+      );
+
+      v.beginScan();
+      axis.scan?.(v);
+      line.scan?.(v);
+      const ctx = createFakeCtx();
+      line.draw(ctx as unknown as OffscreenCanvasRenderingContext2D, v);
+
+      // Two samples → 1 moveTo + 1 lineTo. If the boundary sample were
+      // dropped we'd get 0 lineTos.
+      expect(ctx.calls.filter((c) => c.name === "moveTo").length).toBe(1);
+      expect(ctx.calls.filter((c) => c.name === "lineTo").length).toBe(1);
     });
   });
 });

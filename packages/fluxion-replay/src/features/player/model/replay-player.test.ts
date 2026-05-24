@@ -359,6 +359,81 @@ describe("ReplayPlayer", () => {
     getFramesSpy.mockRestore();
   });
 
+  // ── seek + play: regression guard for "play() silently rewinds" bug ─────
+  // play() used to call clock.start(timeRange.earliest, rate) unconditionally,
+  // throwing away a prior seek() target. The fix clamps clock.currentT into
+  // range and uses that as the start point.
+
+  describe("seek + play", () => {
+    it("REGRESSION: seek(t) then play() keeps currentT at t (not earliest)", () => {
+      const { player } = makePlayer(1_000, 5_000);
+      player.seek(3_000);
+      expect(player.currentT).toBe(3_000);
+
+      player.play(1);
+      // Immediately after play(): clock.start should have used 3_000 as the
+      // virtual start, not the timeRange's earliest of 1_000.
+      expect(player.currentT).toBe(3_000);
+
+      player.stop();
+      player.dispose();
+    });
+
+    it("seek + play advances forward from the seek point", () => {
+      const { player } = makePlayer(0, 10_000);
+      player.seek(2_000);
+      player.play(1);
+      // RAF fires every 16ms; advance 32ms wall ≈ 32ms virtual at 1x.
+      vi.advanceTimersByTime(32);
+      // currentT should be near 2_032, definitely > 2_000 and well under 5_000.
+      expect(player.currentT).toBeGreaterThanOrEqual(2_000);
+      expect(player.currentT).toBeLessThan(2_500);
+      player.stop();
+      player.dispose();
+    });
+
+    it("play() on a fresh player (no prior seek) starts at timeRange.earliest", () => {
+      const { player } = makePlayer(1_500, 5_000);
+      // No seek — clock.currentT defaults to 0, which gets clamped up to 1_500.
+      player.play(1);
+      expect(player.currentT).toBe(1_500);
+      player.stop();
+      player.dispose();
+    });
+
+    it("stop() then play() restarts from timeRange.earliest", () => {
+      const { player } = makePlayer(500, 5_000);
+      player.seek(3_000);
+      player.play(1);
+      vi.advanceTimersByTime(32);
+      player.stop();
+      // After stop(), clock.currentT resets to 0 → clamped up to earliest.
+      player.play(1);
+      expect(player.currentT).toBe(500);
+      player.stop();
+      player.dispose();
+    });
+
+    it("pause() then play() resumes from where it was paused (preserves currentT)", () => {
+      const { player } = makePlayer(0, 10_000);
+      player.seek(2_000);
+      player.play(1);
+      vi.advanceTimersByTime(32);
+      const beforePause = player.currentT;
+      player.pause();
+      expect(player.currentT).toBe(beforePause);
+      // Some wall time passes while paused — virtual t should not advance.
+      vi.advanceTimersByTime(100);
+      expect(player.currentT).toBe(beforePause);
+      // Resume picks up from beforePause and keeps advancing.
+      player.play(1);
+      vi.advanceTimersByTime(32);
+      expect(player.currentT).toBeGreaterThan(beforePause);
+      player.stop();
+      player.dispose();
+    });
+  });
+
   describe("onSeek", () => {
     it("fires with the clamped target on seek()", () => {
       const { player } = makePlayer(1000, 5000);
@@ -409,6 +484,33 @@ describe("ReplayPlayer", () => {
       // dispose stops the clock; further seeks should not invoke listeners.
       player.seek(500);
       expect(events).toEqual([]);
+    });
+  });
+
+  // Phase 13: the getter is what useReplayDvr / scenario tests rely on to
+  // assert "player.end matches the UI's frozen right-edge". A regression
+  // here would silently desync the DVR auto-exit from the scrubber max.
+  describe("timeRange getter", () => {
+    it("returns the exact range passed at construction", () => {
+      const { player } = makePlayer(1_000, 4_000);
+      expect(player.timeRange).toEqual({ earliest: 1_000, latest: 4_000 });
+    });
+
+    it("is stable across seek / play / pause", () => {
+      const { player } = makePlayer(0, 10_000);
+      const before = player.timeRange;
+      player.seek(3_000);
+      player.play();
+      player.pause();
+      expect(player.timeRange).toBe(before); // same reference
+      expect(player.timeRange).toEqual({ earliest: 0, latest: 10_000 });
+    });
+
+    it("upper bound matches the seek clamp and the end condition", () => {
+      const { player } = makePlayer(0, 5_000);
+      // seek past latest gets clamped down to latest
+      player.seek(99_999);
+      expect(player.currentT).toBe(player.timeRange.latest);
     });
   });
 });

@@ -55,14 +55,43 @@ export class ReplaySession {
     this._recorder.record(channelId, data, timestamp);
   }
 
-  async enterReplay(timestamp?: number): Promise<ReplayPlayer> {
+  async enterReplay(
+    timestamp?: number,
+    opts?: { timeRange?: { earliest: number; latest: number } },
+  ): Promise<ReplayPlayer> {
     this._player?.dispose();
 
-    const timeRange = await this._store.getTimeRange();
-    const range = timeRange ?? {
+    // Commit the recorder's pending batch before anyone reads the IDB time
+    // range — otherwise the last ~500ms of frames (still in the in-memory
+    // queue) are invisible to both `getTimeRange()` and the player's
+    // prefetch, leaving a tail gap right where the user just entered.
+    await this._store.flush();
+
+    const idbRange = await this._store.getTimeRange();
+    const fallback = idbRange ?? {
       earliest: Date.now() - (10 * 60 * 1000),
       latest: Date.now(),
     };
+
+    let range: { earliest: number; latest: number };
+    // Only honour caller-supplied bounds when they describe a real interval.
+    // A zero-width or inverted range (e.g. a freshly-seeded liveTimeRange
+    // before the first poll) collapses the player to its start point —
+    // onEnd fires on the first tick. Fall back to the IDB range instead.
+    if (opts?.timeRange && opts.timeRange.latest > opts.timeRange.earliest) {
+      const clamped = idbRange
+        ? {
+            earliest: Math.max(opts.timeRange.earliest, idbRange.earliest),
+            latest: Math.min(opts.timeRange.latest, idbRange.latest),
+          }
+        : opts.timeRange;
+      // Belt-and-suspenders: if the intersection collapsed (caller's range
+      // doesn't overlap what IDB actually has), fall back to IDB so the
+      // player has something to play.
+      range = clamped.latest > clamped.earliest ? clamped : fallback;
+    } else {
+      range = fallback;
+    }
 
     this._player = new ReplayPlayer({
       store: this._store,

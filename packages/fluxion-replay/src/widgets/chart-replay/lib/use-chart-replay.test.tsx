@@ -494,4 +494,370 @@ describe("useChartReplay", () => {
       expect(pushes[0].sample).toEqual({ t: 30_050, y: 0.123 });
     });
   });
+
+  // ── Race: onFrame fires while hydrate's getFramesByChannel is still pending
+  // This is exactly what happens when useReplayDvr calls player.play() right
+  // after enterReplay — the rAF loop starts immediately and onFrame callbacks
+  // arrive during hydrate's await. Without protection, those frames are
+  // pushed first, then wiped by handle.reset() inside hydrate.
+
+  describe("race: onFrame during hydrate", () => {
+    it("frame that arrives during hydrate await does NOT get wiped by the reset", async () => {
+      const { host, pushes, batches, resets, order } = makeFakeHost();
+      const ORIGIN = 1_000_000;
+      const player = makeFakePlayer(ORIGIN + 30_000);
+      const store = makeFakeStore({
+        signal: [
+          metricFrame("signal", ORIGIN + 28_000, 0.1),
+          metricFrame("signal", ORIGIN + 29_500, 0.2),
+        ],
+      });
+
+      // Block the first getFramesByChannel so we can fire an onFrame mid-await.
+      store.hold();
+
+      await act(async () => {
+        render(
+          <ChartReplayProbe
+            host={host}
+            player={player}
+            store={store}
+            windowMs={5_000}
+            timeOrigin={ORIGIN}
+          />,
+        );
+        // Let the effect register onFrame listener (synchronous part), but
+        // keep hydrate suspended at the await.
+        await Promise.resolve();
+      });
+      // Hydrate is pending.
+      expect(store.pendingCount()).toBe(1);
+
+      // Player emits a live frame WHILE hydrate is mid-await.
+      const ch = new MetricChannel("signal");
+      await act(async () => {
+        player.emitFrame({
+          channelId: "signal",
+          data: ch.decode(ch.encode({ name: "signal", value: 0.7 })),
+          t: ORIGIN + 30_050,
+        });
+      });
+
+      // Now release the hydrate — backfill should land, AND the live frame
+      // that arrived during the await must be preserved (not lost to reset).
+      await act(async () => {
+        await store.release();
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+
+      // Expected event order: reset(30_000) → pushBatch(backfill) → push(30_050)
+      // No naked push BEFORE the reset (that'd be wiped).
+      const resetIdx = order.findIndex((s) => s.startsWith("reset:"));
+      const batchIdx = order.findIndex((s) => s.startsWith("pushBatch:"));
+      const liveIdx = order.findIndex((s) => s.startsWith("push:30050:"));
+
+      expect(resetIdx).toBeGreaterThanOrEqual(0);
+      expect(batchIdx).toBeGreaterThan(resetIdx);
+      expect(liveIdx).toBeGreaterThan(batchIdx);
+
+      // Concrete values for each phase.
+      expect(resets[0]).toEqual({ id: "signal", latestT: 30_000 });
+      expect(batches[0].samples).toEqual([
+        { t: 28_000, y: 0.1 },
+        { t: 29_500, y: 0.2 },
+      ]);
+      expect(pushes).toEqual([{ id: "signal", sample: { t: 30_050, y: 0.7 } }]);
+    });
+
+    it("frame at or before the seek point during hydrate is dropped (backfill already covers it)", async () => {
+      const { host, pushes, batches } = makeFakeHost();
+      const ORIGIN = 1_000_000;
+      const player = makeFakePlayer(ORIGIN + 30_000);
+      const store = makeFakeStore({
+        signal: [metricFrame("signal", ORIGIN + 29_000, 0.1)],
+      });
+
+      store.hold();
+
+      await act(async () => {
+        render(
+          <ChartReplayProbe
+            host={host}
+            player={player}
+            store={store}
+            windowMs={5_000}
+            timeOrigin={ORIGIN}
+          />,
+        );
+        await Promise.resolve();
+      });
+
+      // A frame whose t falls inside the backfill range — backfill will
+      // include it, so the live push would duplicate it. Hook should skip.
+      const ch = new MetricChannel("signal");
+      await act(async () => {
+        player.emitFrame({
+          channelId: "signal",
+          data: ch.decode(ch.encode({ name: "signal", value: 0.5 })),
+          t: ORIGIN + 29_000,
+        });
+      });
+
+      await act(async () => {
+        await store.release();
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+
+      expect(batches[0].samples).toEqual([{ t: 29_000, y: 0.1 }]);
+      // No push — the in-range frame was deduped against the backfill.
+      expect(pushes).toEqual([]);
+    });
+
+    it("multiple frames during hydrate: all post-seek frames flush after backfill in order", async () => {
+      const { host, pushes, order } = makeFakeHost();
+      const ORIGIN = 1_000_000;
+      const player = makeFakePlayer(ORIGIN + 30_000);
+      const store = makeFakeStore({ signal: [] });
+      store.hold();
+
+      await act(async () => {
+        render(
+          <ChartReplayProbe
+            host={host}
+            player={player}
+            store={store}
+            windowMs={5_000}
+            timeOrigin={ORIGIN}
+          />,
+        );
+        await Promise.resolve();
+      });
+
+      const ch = new MetricChannel("signal");
+      const enc = (v: number) => ch.decode(ch.encode({ name: "signal", value: v }));
+      await act(async () => {
+        // Three frames arrive while hydrate is suspended, out of order isn't
+        // expected from a real player but the buffer must at least preserve
+        // arrival order.
+        player.emitFrame({ channelId: "signal", data: enc(0.1), t: ORIGIN + 30_050 });
+        player.emitFrame({ channelId: "signal", data: enc(0.2), t: ORIGIN + 30_100 });
+        player.emitFrame({ channelId: "signal", data: enc(0.3), t: ORIGIN + 30_150 });
+      });
+
+      await act(async () => {
+        await store.release();
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+
+      const resetIdx = order.findIndex((s) => s.startsWith("reset:"));
+      const firstPushIdx = order.findIndex((s) => s.startsWith("push:"));
+      expect(firstPushIdx).toBeGreaterThan(resetIdx);
+      expect(pushes.map((p) => p.sample.t)).toEqual([30_050, 30_100, 30_150]);
+    });
+
+    it("onSeek triggers a fresh hydrate that supersedes the in-flight one", async () => {
+      const { host, batches, resets } = makeFakeHost();
+      const ORIGIN = 1_000_000;
+      const player = makeFakePlayer(ORIGIN + 30_000);
+      const store = makeFakeStore({
+        signal: [
+          metricFrame("signal", ORIGIN + 9_500, 0.9),
+          metricFrame("signal", ORIGIN + 28_000, 0.1),
+        ],
+      });
+
+      // Hold the FIRST hydrate from mount.
+      store.hold();
+
+      await act(async () => {
+        render(
+          <ChartReplayProbe
+            host={host}
+            player={player}
+            store={store}
+            windowMs={5_000}
+            timeOrigin={ORIGIN}
+          />,
+        );
+        await Promise.resolve();
+      });
+      expect(store.pendingCount()).toBe(1);
+
+      // Phase 16: the sequential queue keeps only ONE IDB query in flight.
+      // A seek while in-flight queues the new t (collapsing intermediates);
+      // the next iteration of the loop will fire its own query.
+      await act(async () => {
+        player.emitSeek(ORIGIN + 10_000);
+      });
+      // Still just the original (held) query — queued seek hasn't dispatched.
+      expect(store.pendingCount()).toBe(1);
+
+      // Release the mount query → it processes, sees queuedT=10_000, fires
+      // a 2nd IDB query (which resolves immediately since hold was released).
+      await act(async () => {
+        await store.release();
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+
+      // The final reset should be at the latest seek point (10_000), and the
+      // final batch should be the seek-window data, not the mount-window.
+      const lastReset = resets[resets.length - 1];
+      expect(lastReset.latestT).toBe(10_000);
+      const lastBatch = batches[batches.length - 1];
+      expect(lastBatch.samples).toEqual([{ t: 9_500, y: 0.9 }]);
+    });
+
+    // ── Phase 16 — sequential queue + microtask yield ────────────────────
+    it("Phase 16: rapid seek burst collapses to LAST t, both queries fire and chart updates twice", async () => {
+      const { host, resets } = makeFakeHost();
+      const ORIGIN = 1_000_000;
+      const player = makeFakePlayer(ORIGIN + 30_000);
+      const store = makeFakeStore({
+        signal: [
+          metricFrame("signal", ORIGIN + 4_500, 0.45),
+          metricFrame("signal", ORIGIN + 9_500, 0.95),
+          metricFrame("signal", ORIGIN + 14_500, 1.45),
+          metricFrame("signal", ORIGIN + 19_500, 1.95),
+          metricFrame("signal", ORIGIN + 28_000, 2.80),
+        ],
+      });
+
+      // Hold the first hydrate so the burst lands while it's in flight.
+      store.hold();
+      await act(async () => {
+        render(
+          <ChartReplayProbe
+            host={host}
+            player={player}
+            store={store}
+            windowMs={5_000}
+            timeOrigin={ORIGIN}
+          />,
+        );
+        await Promise.resolve();
+      });
+      expect(store.pendingCount()).toBe(1);
+
+      // Burst of 5 seeks — all collapsed into queuedT.
+      await act(async () => {
+        player.emitSeek(ORIGIN + 25_000);
+        player.emitSeek(ORIGIN + 20_000);
+        player.emitSeek(ORIGIN + 15_000);
+        player.emitSeek(ORIGIN + 10_000);
+        player.emitSeek(ORIGIN + 5_000);
+      });
+      // Still only the held mount query.
+      expect(store.pendingCount()).toBe(1);
+
+      // Release: mount query resolves → processes → fires 2nd query for the
+      // queued LAST seek (5_000). Only TWO total reset() calls.
+      await act(async () => {
+        await store.release();
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+
+      expect(resets.length).toBe(2);
+      expect(resets[0].latestT).toBe(30_000); // mount
+      expect(resets[1].latestT).toBe(5_000);  // last seek wins
+    });
+
+    it("Phase 16: cleanup during in-flight hydrate prevents the chart write", async () => {
+      const { host, resets, batches } = makeFakeHost();
+      const ORIGIN = 1_000_000;
+      const player = makeFakePlayer(ORIGIN + 30_000);
+      const store = makeFakeStore({
+        signal: [metricFrame("signal", ORIGIN + 29_500, 2.95)],
+      });
+
+      // Hold the IDB query so runHydrate is suspended mid-await when we
+      // unmount. Without this, runHydrate finishes before the unmount has
+      // any chance to flip `cancelled`.
+      store.hold();
+
+      let unmount: (() => void) | null = null;
+      await act(async () => {
+        const result = render(
+          <ChartReplayProbe
+            host={host}
+            player={player}
+            store={store}
+            windowMs={5_000}
+            timeOrigin={ORIGIN}
+          />,
+        );
+        unmount = result.unmount;
+        await Promise.resolve();
+      });
+      // Mount fired one hydrate that's now sitting on a held promise.
+      expect(store.pendingCount()).toBe(1);
+
+      // Unmount → cleanup synchronously sets cancelled=true. Then release
+      // the IDB query so runHydrate's `await` resumes. The post-await
+      // `await Promise.resolve()` yields one more microtask, then the
+      // cancelled-check fires → bail. No reset / pushBatch.
+      await act(async () => {
+        unmount?.();
+        await store.release();
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+
+      expect(resets.length).toBe(0);
+      expect(batches.length).toBe(0);
+    });
+
+    // Phase 16 — Bug 1 scenario: user records 30s, time-travels back 20s
+    // (to the 10s mark). The chart MUST show the trailing 5s of data
+    // ([5s, 10s]) — that data exists in the store, so the user reported
+    // "chart starts fresh" was a bug, not expected behavior.
+    it("Phase 16: enter at t=10s of a 30s recording → chart receives 100 backfill samples in [5s, 10s]", async () => {
+      const { host, resets, batches } = makeFakeHost();
+      const ORIGIN = 1_000_000;
+      // 20 Hz over 30s = 600 frames in [ORIGIN, ORIGIN + 30s].
+      const frames = Array.from({ length: 600 }, (_, i) =>
+        metricFrame("signal", ORIGIN + i * 50, i / 10),
+      );
+      // Player.currentT starts at the seek point (10s into the recording).
+      const player = makeFakePlayer(ORIGIN + 10_000);
+      const store = makeFakeStore({ signal: frames });
+
+      await act(async () => {
+        render(
+          <ChartReplayProbe
+            host={host}
+            player={player}
+            store={store}
+            windowMs={5_000}
+            timeOrigin={ORIGIN}
+          />,
+        );
+        await Promise.resolve();
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+
+      // The hydrate query targeted [10s - 5s, 10s] = [5s, 10s] in absolute
+      // store time. At 20 Hz that's 100 frames (5_000ms / 50ms + 1 inclusive
+      // = 101 frames; the boundary inclusion depends on the filter, but we
+      // require AT LEAST 100 in this range and ZERO loss).
+      expect(resets.length).toBe(1);
+      expect(resets[0]?.latestT).toBe(10_000); // host-relative (= 10_000 - ORIGIN shifted, ORIGIN==timeOrigin)
+      expect(batches.length).toBe(1);
+      const batch = batches[0]!;
+      expect(batch.samples.length).toBeGreaterThanOrEqual(100);
+      // All samples lie inside the host-relative window [5_000, 10_000].
+      for (const s of batch.samples) {
+        expect(s.t).toBeGreaterThanOrEqual(5_000);
+        expect(s.t).toBeLessThanOrEqual(10_000);
+      }
+      // First sample at or after the 5s mark, last at or before 10s.
+      expect(batch.samples[0]!.t).toBeGreaterThanOrEqual(5_000);
+      expect(batch.samples[batch.samples.length - 1]!.t).toBeLessThanOrEqual(10_000);
+    });
+  });
 });

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { FluxionHost, LineLayerHandle, LineSample } from "@heojeongbo/fluxion-render";
-import type { ReplayPlayer } from "../../../features/player/model/replay-player";
+import type { ReplayPlayer, ReplayPlayerFrame } from "../../../features/player/model/replay-player";
 import type { ReplayStore } from "../../../features/store/model/replay-store";
 import type { BaseChannel } from "../../../shared/model/base-channel";
 
@@ -90,46 +90,118 @@ export function useChartReplay<T>(
     if (!handle || !player || !store) return;
 
     let cancelled = false;
+    // Sequential hydrate queue. At most one IDB query in flight at a time.
+    // Additional seek bursts collapse into `queuedT` — the last requested
+    // t replaces any earlier queued value. After the current hydrate
+    // finishes, we immediately re-run with `queuedT` if non-null. This
+    // gives the user 2-3 visible chart updates during a fast drag instead
+    // of just the final one (the prior generation-counter pattern silently
+    // discarded every intermediate hydrate).
+    let inFlight = false;
+    let queuedT: number | null = null;
+    // While a hydrate is in flight, every onFrame is parked here. After the
+    // backfill lands, the buffer is drained: in-range frames (covered by
+    // the backfill) are dropped, post-seek frames flush in arrival order.
+    // Without this gate, a frame that arrives BEFORE handle.reset() would
+    // get wiped by the reset, leaving the chart with a stutter.
+    let hydratingT: number | null = null;
+    const pending: ReplayPlayerFrame[] = [];
 
-    const hydrate = async (t: number) => {
-      setIsHydrating(true);
+    const flushPending = (cutoff: number) => {
+      if (pending.length === 0) return;
+      const drained = pending.splice(0, pending.length);
+      for (const f of drained) {
+        if (f.t <= cutoff) continue; // backfill already covers this t
+        handle.push({ t: f.t - timeOrigin, y: pickRef.current(f.data as T) });
+      }
+    };
+
+    const runHydrate = async (firstT: number): Promise<void> => {
+      inFlight = true;
+      let t = firstT;
       try {
-        // Store keeps absolute t; query in that space.
-        const frames = await store.getFramesByChannel(channel.channelId, t - windowMs, t);
-        if (cancelled) return;
-        // Shift into the chart's host-relative timeline so the Float32 wire
-        // format doesn't quantise away the resolution.
-        const batch: LineSample[] = frames.map((f) => ({
-          t: f.t - timeOrigin,
-          y: pickRef.current(channel.decode(f.payload) as T),
-        }));
-        // 1) Drop stale data + force the worker-side axis to rewind to the
-        //    seek point in host-relative space.
-        // 2) Re-push backfill. The newest sample's t (≤ t - timeOrigin) bumps
-        //    latestT back up via the layer's monotonic guard, settling the
-        //    window at [t - windowMs - timeOrigin, t - timeOrigin] which
-        //    exactly matches the visible range.
-        handle.reset(t - timeOrigin);
-        if (batch.length > 0) handle.pushBatch(batch);
-        setHydratedCount(batch.length);
+        while (!cancelled) {
+          hydratingT = t;
+          pending.length = 0;
+          setIsHydrating(true);
+
+          // Store keeps absolute t; query in that space.
+          const frames = await store.getFramesByChannel(
+            channel.channelId,
+            t - windowMs,
+            t,
+          );
+          // Yield once so a React cleanup that sets `cancelled = true` has a
+          // chance to run before we touch the chart. Without this yield, a
+          // fast-resolving IDB query (cache hit / fake-IDB microtask) lets a
+          // stale hydrate's reset+pushBatch land AFTER the next phase
+          // (useChartLiveBackfill) already wrote live data — wiping it.
+          await Promise.resolve();
+          if (cancelled) return;
+
+          // Shift into the chart's host-relative timeline so the Float32 wire
+          // format doesn't quantise away the resolution.
+          const batch: LineSample[] = frames.map((f) => ({
+            t: f.t - timeOrigin,
+            y: pickRef.current(channel.decode(f.payload) as T),
+          }));
+          // 1) Drop stale data + force the worker-side axis to rewind to the
+          //    seek point in host-relative space.
+          // 2) Re-push backfill — settles the window at
+          //    [t - windowMs - timeOrigin, t - timeOrigin].
+          handle.reset(t - timeOrigin);
+          if (batch.length > 0) handle.pushBatch(batch);
+          setHydratedCount(batch.length);
+          // Replay any onFrame events that landed during the await — only
+          // those past the seek point, in arrival order.
+          flushPending(t);
+          hydratingT = null;
+
+          // Drain queue: jump to the most-recent seek if user kept firing
+          // during the await. Intermediate t values are intentionally
+          // skipped so we don't fall behind a rapid drag.
+          if (queuedT === null) break;
+          t = queuedT;
+          queuedT = null;
+        }
       } finally {
+        inFlight = false;
+        hydratingT = null;
         if (!cancelled) setIsHydrating(false);
       }
     };
 
-    void hydrate(player.currentT);
+    const hydrate = (t: number): void => {
+      if (inFlight) {
+        // Collapse intermediate seeks; only the LAST t wins. Memory bound is
+        // a single number regardless of drag length.
+        queuedT = t;
+        return;
+      }
+      void runHydrate(t);
+    };
+
+    hydrate(player.currentT);
 
     const offSeek = player.onSeek((t) => {
-      void hydrate(t);
+      hydrate(t);
     });
 
     const offFrame = player.onFrame((frame) => {
       if (frame.channelId !== channel.channelId) return;
+      if (hydratingT !== null) {
+        // Park until the in-flight hydrate finishes — it'll decide whether
+        // to flush or drop based on the seek point.
+        pending.push(frame);
+        return;
+      }
       handle.push({ t: frame.t - timeOrigin, y: pickRef.current(frame.data as T) });
     });
 
     return () => {
       cancelled = true;
+      pending.length = 0;
+      queuedT = null;
       offSeek();
       offFrame();
     };

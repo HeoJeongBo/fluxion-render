@@ -12,7 +12,10 @@ export interface UseReplaySessionResult {
   mode: ReplaySessionMode;
   timeRange: { earliest: number; latest: number } | null;
   record: <T>(channelId: string, data: T, t?: number) => void;
-  enterReplay: (t?: number) => Promise<ReplayPlayer | null>;
+  enterReplay: (
+    t?: number,
+    opts?: { timeRange?: { earliest: number; latest: number } },
+  ) => Promise<ReplayPlayer | null>;
   exitReplay: () => void;
 }
 
@@ -45,16 +48,22 @@ export function useReplaySession(opts: UseReplaySessionOptions): UseReplaySessio
     session?.record(channelId, data, t);
   }, [session]);
 
-  const enterReplay = useCallback(async (t?: number): Promise<ReplayPlayer | null> => {
-    if (!session) return null;
-    const player = await session.enterReplay(t);
-    setMode("replay");
+  const enterReplay = useCallback(
+    async (
+      t?: number,
+      opts?: { timeRange?: { earliest: number; latest: number } },
+    ): Promise<ReplayPlayer | null> => {
+      if (!session) return null;
+      const player = await session.enterReplay(t, opts);
+      setMode("replay");
 
-    const range = await session.getTimeRange();
-    setTimeRange(range);
+      const range = await session.getTimeRange();
+      setTimeRange(range);
 
-    return player;
-  }, [session]);
+      return player;
+    },
+    [session],
+  );
 
   const exitReplay = useCallback(() => {
     session?.exitReplay();
