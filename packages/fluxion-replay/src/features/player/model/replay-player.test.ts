@@ -155,6 +155,27 @@ describe("ReplayPlayer", () => {
     player.dispose();
   });
 
+  it("pause() before play() is a no-op (line 145)", () => {
+    const { player } = makePlayer();
+    // state is "idle", not "playing" → early return without state change
+    player.pause();
+    expect(player.state).toBe("idle");
+    player.dispose();
+  });
+
+  it("_onTick after player already ended returns early (line 241)", () => {
+    const { player } = makePlayer(0, 100);
+    // biome-ignore lint/suspicious/noExplicitAny: testing internals
+    (player as any)._ended = true;
+    const endSpy = vi.fn();
+    player.onEnd(endSpy);
+    // Call _onTick after _ended=true — should return immediately without firing onEnd again
+    // biome-ignore lint/suspicious/noExplicitAny: testing internals
+    (player as any)._onTick(200);
+    expect(endSpy).not.toHaveBeenCalled();
+    player.dispose();
+  });
+
   it("onFrame emits decoded frames from prefetch buffer", async () => {
     const { player, store, ch } = makePlayer();
 

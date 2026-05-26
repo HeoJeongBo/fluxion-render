@@ -928,4 +928,21 @@ describe("useChartReplay", () => {
       expect(tryHook(5_000)).toBeNull();
     });
   });
+
+  // ── chart-replay-fixtures coverage ─────────────────────────────────────────
+  // makeFakePlayer.onFrame has two overloads: bare listener (lines 67-70 in
+  // chart-replay-fixtures.tsx) and channel-filtered. use-chart-replay only uses
+  // the channel-filtered overload. This test drives the bare-listener path so
+  // the fixture's branch coverage doesn't create a Lines gap.
+  it("makeFakePlayer bare-listener onFrame path receives emitted frames (fixtures lines 67-70)", () => {
+    const player = makeFakePlayer(0);
+    const received: string[] = [];
+    // Bare listener overload → typeof channelOrListener === "function" → lines 68-70
+    const off = player.onFrame((frame) => { received.push(frame.channelId); });
+    player.emitFrame({ channelId: "signal", data: {}, t: 100 });
+    expect(received).toEqual(["signal"]);
+    off();
+    player.emitFrame({ channelId: "signal", data: {}, t: 200 });
+    expect(received).toHaveLength(1); // unsubscribed
+  });
 });

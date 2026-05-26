@@ -2,7 +2,11 @@
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
     "outDir": "dist",
-    "rootDir": "src"
+    "rootDir": "src",
+    "paths": {
+      "@heojeongbo/fluxion-render": ["../fluxion-render/dist/index.d.ts"],
+      "@heojeongbo/fluxion-render/react": ["../fluxion-render/dist/react.d.ts"]
+    }
   },
   "include": ["src"]
 }

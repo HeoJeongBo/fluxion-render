@@ -17,7 +17,7 @@ export interface UseVideoReplayerOptions {
 export function useVideoReplayer(
   player: ReplayPlayer | null,
   canvasRef: RefObject<HTMLCanvasElement | null>,
-  store: ReplayStore,
+  store: ReplayStore | null,
   channelId: string,
   options?: UseVideoReplayerOptions,
 ): void {
@@ -27,7 +27,7 @@ export function useVideoReplayer(
     replayerRef.current?.dispose();
     replayerRef.current = null;
 
-    if (!player || !canvasRef.current) return;
+    if (!player || !canvasRef.current || !store) return;
 
     const vr = new VideoReplayer({
       channelId,
@@ -48,6 +48,7 @@ export function useVideoReplayer(
       vr.dispose();
       replayerRef.current = null;
     };
+  // canvasRef: ref 객체 자체가 아닌 .current 값을 사용하므로 의도적으로 제외 — player 교체 시 effect가 재실행되어 최신 canvas를 반영함
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [player, channelId, store]);
 }

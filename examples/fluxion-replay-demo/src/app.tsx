@@ -173,6 +173,7 @@ export function App() {
   const recTickRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [liveLogs, setLiveLogs] = useState<LiveLogEntry[]>([]);
   const logIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const stopRecordingRef = useRef<() => Promise<void>>(async () => {});
 
   // ── Replay state ──────────────────────────────────────────────────────────
   const [player, setPlayer] =
@@ -184,6 +185,7 @@ export function App() {
   const [replayLogs, setReplayLogs] = useState<ReplayPlayerFrame[]>([]);
   const replayCanvasRef = useRef<HTMLCanvasElement>(null);
   const videoReplayerRef = useRef<VideoReplayer | null>(null);
+  const offFrameRef = useRef<(() => void) | null>(null);
 
   const replayPlayer = useReplayPlayer(player);
   const timeline = useReplayTimeline(player, timeRange);
@@ -283,12 +285,12 @@ export function App() {
         setRecElapsedSec(Math.floor((Date.now() - startMs) / 1000));
       }, 1000);
 
-      // Auto-stop when user closes screen share
+      // Auto-stop when user closes screen share via browser UI.
+      // Uses a ref so the handler always calls the latest stopRecording
+      // without needing to be re-registered on every render.
       videoTrack.addEventListener(
         "ended",
-        () => {
-          void stopRecording();
-        },
+        () => void stopRecordingRef.current(),
         { once: true },
       );
 
@@ -298,6 +300,8 @@ export function App() {
     }
   }, [isReady, session, record]);
 
+  // Keep ref in sync so the "ended" event handler always calls the latest version
+  // without needing to be re-registered on every render.
   const stopRecording = useCallback(async () => {
     if (metricIntervalRef.current) {
       clearInterval(metricIntervalRef.current);
@@ -321,6 +325,7 @@ export function App() {
     session?.stopRecording();
     setIsRecording(false);
   }, [session]);
+  stopRecordingRef.current = stopRecording;
 
   // Cleanup on unmount
   useEffect(
@@ -358,7 +363,8 @@ export function App() {
       });
     }
 
-    p?.onFrame((frame) => {
+    offFrameRef.current?.();
+    offFrameRef.current = p?.onFrame((frame) => {
       // Video frames → VideoReplayer
       if (frame.channelId === VIDEO_CHANNEL_ID) {
         videoReplayerRef.current?.feedFrame(frame);
@@ -366,10 +372,12 @@ export function App() {
       }
       // Other frames → log panel
       setReplayLogs((prev) => [...prev.slice(-99), frame]);
-    });
+    }) ?? null;
   }, [session, enterReplay]);
 
   const handleExitReplay = useCallback(() => {
+    offFrameRef.current?.();
+    offFrameRef.current = null;
     player?.stop();
     videoReplayerRef.current?.dispose();
     videoReplayerRef.current = null;
@@ -382,6 +390,10 @@ export function App() {
     }
     exitReplay();
   }, [player, exitReplay]);
+
+  // ── Derived display lists ──────────────────────────────────────────────────
+  const reversedLiveLogs = useMemo(() => [...liveLogs].reverse(), [liveLogs]);
+  const reversedReplayLogs = useMemo(() => [...replayLogs].reverse(), [replayLogs]);
 
   // ── UI ────────────────────────────────────────────────────────────────────
   return (
@@ -664,7 +676,7 @@ export function App() {
                   No logs yet…
                 </div>
               )}
-              {[...liveLogs].reverse().map((log, i) => (
+              {reversedLiveLogs.map((log, i) => (
                 <LiveLogRow key={i} log={log} />
               ))}
             </div>
@@ -778,7 +790,7 @@ export function App() {
                   Press Play to decode frames…
                 </div>
               )}
-              {[...replayLogs].reverse().map((f, i) => (
+              {reversedReplayLogs.map((f, i) => (
                 <FrameRow key={i} frame={f} earliest={timeRange?.earliest ?? 0} />
               ))}
             </div>

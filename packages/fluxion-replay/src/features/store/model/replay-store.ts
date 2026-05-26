@@ -17,6 +17,18 @@ export interface ReplayStoreOptions {
   dbVersion?: number;
   retentionMs?: number;
   batchIntervalMs?: number;
+  /**
+   * Storage usage percentage (0–100) at which old frames are automatically
+   * evicted. When `percentUsed` exceeds this value after each flush, the
+   * oldest 10 % of the recorded time span is deleted from IDB.
+   * Set to 100 (or above) to disable automatic eviction. Default: 60.
+   */
+  evictThresholdPct?: number;
+  /**
+   * Interval in milliseconds at which current storage usage is logged to
+   * `console.log`. Set to 0 to disable. Default: 0.
+   */
+  storageLogIntervalMs?: number;
 }
 
 export interface StorageInfo {
@@ -58,12 +70,17 @@ export class ReplayStore {
   private _dbName: string;
   private _dbVersion: number;
   private _segments: RecordingSegment[] = [];
+  private _evictThresholdPct: number;
+  private _storageLogIntervalMs: number;
+  private _storageLogTimer: ReturnType<typeof setInterval> | null = null;
 
   constructor(opts?: ReplayStoreOptions) {
     this._dbName = opts?.dbName ?? DEFAULT_DB_NAME;
     this._dbVersion = opts?.dbVersion ?? DEFAULT_DB_VERSION;
     this._retentionMs = opts?.retentionMs ?? DEFAULT_RETENTION_MS;
     this._batchIntervalMs = opts?.batchIntervalMs ?? DEFAULT_BATCH_INTERVAL_MS;
+    this._evictThresholdPct = opts?.evictThresholdPct ?? 60;
+    this._storageLogIntervalMs = opts?.storageLogIntervalMs ?? 0;
   }
 
   async open(): Promise<void> {
@@ -75,6 +92,9 @@ export class ReplayStore {
       this._opfsRoot = null;
     }
     this._startFlushTimer();
+    if (this._storageLogIntervalMs > 0) {
+      this._startStorageLogTimer();
+    }
   }
 
   appendFrame(frame: SerializedFrame): void {
@@ -309,6 +329,7 @@ export class ReplayStore {
 
   dispose(): void {
     this._stopFlushTimer();
+    this._stopStorageLogTimer();
     this._db?.close();
     this._db = null;
     this._opfsRoot = null;
@@ -342,6 +363,49 @@ export class ReplayStore {
     if (this._pending.length === 0 || !this._db) return;
     const batch = this._pending.splice(0, this._pending.length);
     await this._writeBatch(batch);
+    await this._maybeEvict();
+  }
+
+  private async _maybeEvict(): Promise<void> {
+    if (this._evictThresholdPct >= 100) return;
+    try {
+      const info = await this.getStorageInfo();
+      if (info.percentUsed < this._evictThresholdPct) return;
+
+      const timeRange = await this.getTimeRange();
+      if (!timeRange) return;
+
+      const spanMs = timeRange.latest - timeRange.earliest;
+      if (spanMs <= 0) return;
+
+      // Delete the oldest 10 % of the recorded time span
+      const cutoffMs = timeRange.earliest + Math.floor(spanMs * 0.1);
+      await this.deleteFramesBefore(cutoffMs);
+    } catch {
+      // eviction failure must not crash the flush pipeline
+    }
+  }
+
+  private _startStorageLogTimer(): void {
+    this._storageLogTimer = setInterval(async () => {
+      try {
+        const info = await this.getStorageInfo();
+        console.log(
+          `[ReplayStore "${this._dbName}"] storage: ${info.percentUsed.toFixed(1)}% used` +
+          ` (${(info.usedBytes / 1024 / 1024).toFixed(1)} MB / ${(info.quotaBytes / 1024 / 1024).toFixed(1)} MB),` +
+          ` ${info.idbFrameCount} frames`,
+        );
+      } catch {
+        // ignore
+      }
+    }, this._storageLogIntervalMs);
+  }
+
+  private _stopStorageLogTimer(): void {
+    if (this._storageLogTimer != null) {
+      clearInterval(this._storageLogTimer);
+      this._storageLogTimer = null;
+    }
   }
 
   private async _writeBatch(records: FrameRecord[]): Promise<void> {

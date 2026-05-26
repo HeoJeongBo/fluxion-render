@@ -1,8 +1,15 @@
+import path from "path";
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vitest/config";
 
 export default defineConfig({
   plugins: [react()],
+  resolve: {
+    alias: [
+      { find: "@heojeongbo/fluxion-render/react", replacement: path.resolve(__dirname, "../fluxion-render/src/react.ts") },
+      { find: "@heojeongbo/fluxion-render", replacement: path.resolve(__dirname, "../fluxion-render/src/index.ts") },
+    ],
+  },
   test: {
     environment: "happy-dom",
     globals: false,
@@ -20,7 +27,9 @@ export default defineConfig({
       exclude: [
         "src/**/*.test.ts",
         "src/**/*.test.tsx",
+        "src/**/*.bench.{ts,tsx}",
         "src/test/**",
+        "src/scenarios/_helpers.ts",
         "src/index.ts",
         "src/react.ts",
       ],

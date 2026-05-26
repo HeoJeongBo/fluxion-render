@@ -548,4 +548,25 @@ describe("useReplayDvr", () => {
       });
     });
   });
+
+  // ── Unmount cleanup ────────────────────────────────────────────────────────
+  it("unmounting while DVR is active calls offEnd cleanup (lines 192-193)", async () => {
+    const ses = makeFakeSession();
+    const { result, unmount } = setup({
+      session: ses.session,
+      enterReplay: ses.enterReplay,
+      exitReplay: ses.exitReplay,
+      liveTimeRange: LIVE,
+      autoExitToLive: true,
+    });
+
+    // Enter DVR — this registers an onEnd listener (sets offEndRef.current)
+    await act(async () => { await result.current.enter(1_030_000); });
+    expect(ses.player.endListenerCount()).toBe(1);
+
+    // Unmount without calling exit() — the useEffect cleanup should call
+    // offEndRef.current?.() which removes the onEnd listener
+    unmount();
+    expect(ses.player.endListenerCount()).toBe(0);
+  });
 });

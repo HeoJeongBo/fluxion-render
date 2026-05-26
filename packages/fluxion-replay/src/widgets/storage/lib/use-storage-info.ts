@@ -5,6 +5,11 @@ import type { StorageInfo } from "../../../features/store/model/replay-store";
 export interface UseStorageInfoOptions {
   /** How often to poll in milliseconds. Default: 5000. */
   intervalMs?: number;
+  /**
+   * When true, logs storage usage to `console.log` after each successful
+   * fetch. Default: false.
+   */
+  logToConsole?: boolean;
 }
 
 /**
@@ -21,6 +26,7 @@ export function useStorageInfo(
   options?: UseStorageInfoOptions,
 ): StorageInfo | null {
   const intervalMs = options?.intervalMs ?? 5_000;
+  const logToConsole = options?.logToConsole ?? false;
   const [info, setInfo] = useState<StorageInfo | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -31,6 +37,14 @@ export function useStorageInfo(
       try {
         const result = await session.getStorageInfo();
         setInfo(result);
+        if (logToConsole) {
+          console.log(
+            `[useStorageInfo] ${result.percentUsed.toFixed(1)}% used` +
+            ` (${(result.usedBytes / 1024 / 1024).toFixed(1)} MB /` +
+            ` ${(result.quotaBytes / 1024 / 1024).toFixed(1)} MB),` +
+            ` ${result.idbFrameCount} frames`,
+          );
+        }
       } catch {
         // ignore
       }

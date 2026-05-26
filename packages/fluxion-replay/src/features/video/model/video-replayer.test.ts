@@ -268,7 +268,136 @@ describe("VideoReplayer", () => {
     });
   });
 
-  it("resizes canvas to match decoded frame dimensions", async () => {
+  it("canvas is initialized with codedWidth/codedHeight from first keyframe", async () => {
+    await store.writeVideoChunk("cam", "0.chunk", new Uint8Array([1, 2, 3]));
+
+    const origVideoDecoder = globalThis.VideoDecoder;
+    class SpyDecoder {
+      state = "unconfigured";
+      constructor(_init: unknown) {}
+      configure(_config: unknown) { this.state = "configured"; }
+      decode(_chunk: unknown) {}
+      async flush() {}
+      close() { this.state = "closed"; }
+    }
+    Object.defineProperty(globalThis, "VideoDecoder", {
+      value: SpyDecoder, writable: true, configurable: true,
+    });
+
+    const canvas = { getContext: () => ({ drawImage: vi.fn() }), width: 640, height: 480 } as unknown as HTMLCanvasElement;
+    const replayer = new VideoReplayer({ store, channelId: "cam", outputCanvas: canvas });
+    replayer.feedFrame({
+      channelId: "cam",
+      data: { opfsPath: "video/cam/0.chunk", isKeyframe: true, durationUs: 33333, byteLength: 3, codedWidth: 1920, codedHeight: 1080 },
+      t: 0,
+    });
+    for (let i = 0; i < 10; i++) await Promise.resolve();
+
+    expect((canvas as unknown as { width: number }).width).toBe(1920);
+    expect((canvas as unknown as { height: number }).height).toBe(1080);
+
+    replayer.dispose();
+    Object.defineProperty(globalThis, "VideoDecoder", {
+      value: origVideoDecoder, writable: true, configurable: true,
+    });
+  });
+
+  it("canvas is NOT resized on subsequent delta frames", async () => {
+    await store.writeVideoChunk("cam", "0.chunk", new Uint8Array([1, 2, 3]));
+    await store.writeVideoChunk("cam", "33.chunk", new Uint8Array([4, 5, 6]));
+
+    const origVideoDecoder = globalThis.VideoDecoder;
+    class SpyDecoder {
+      state = "unconfigured";
+      constructor(_init: unknown) {}
+      configure(_config: unknown) { this.state = "configured"; }
+      decode(_chunk: unknown) {}
+      async flush() {}
+      close() { this.state = "closed"; }
+    }
+    Object.defineProperty(globalThis, "VideoDecoder", {
+      value: SpyDecoder, writable: true, configurable: true,
+    });
+
+    const canvas = { getContext: () => ({ drawImage: vi.fn() }), width: 0, height: 0 } as unknown as HTMLCanvasElement;
+    const replayer = new VideoReplayer({ store, channelId: "cam", outputCanvas: canvas });
+
+    // First keyframe — canvas should be set to codedWidth/Height
+    replayer.feedFrame({
+      channelId: "cam",
+      data: { opfsPath: "video/cam/0.chunk", isKeyframe: true, durationUs: 33333, byteLength: 3, codedWidth: 640, codedHeight: 480 },
+      t: 0,
+    });
+    for (let i = 0; i < 10; i++) await Promise.resolve();
+    expect((canvas as unknown as { width: number }).width).toBe(640);
+
+    // Delta frame — canvas size must not change
+    replayer.feedFrame({
+      channelId: "cam",
+      data: { opfsPath: "video/cam/33.chunk", isKeyframe: false, durationUs: 33333, byteLength: 3, codedWidth: 640, codedHeight: 480 },
+      t: 33,
+    });
+    for (let i = 0; i < 10; i++) await Promise.resolve();
+    expect((canvas as unknown as { width: number }).width).toBe(640);
+    expect((canvas as unknown as { height: number }).height).toBe(480);
+
+    replayer.dispose();
+    Object.defineProperty(globalThis, "VideoDecoder", {
+      value: origVideoDecoder, writable: true, configurable: true,
+    });
+  });
+
+  it("canvas is re-initialized after seekTo resets the decoder", async () => {
+    const { TimelineIndex } = await import("../../timeline/model/timeline-index");
+    await store.writeVideoChunk("cam", "0.chunk", new Uint8Array([1, 2, 3]));
+    await store.writeVideoChunk("cam", "5000.chunk", new Uint8Array([4, 5, 6]));
+
+    const origVideoDecoder = globalThis.VideoDecoder;
+    class SpyDecoder {
+      state = "unconfigured";
+      constructor(_init: unknown) {}
+      configure(_config: unknown) { this.state = "configured"; }
+      decode(_chunk: unknown) {}
+      async flush() {}
+      close() { this.state = "closed"; }
+    }
+    Object.defineProperty(globalThis, "VideoDecoder", {
+      value: SpyDecoder, writable: true, configurable: true,
+    });
+
+    const canvas = { getContext: () => ({ drawImage: vi.fn() }), width: 0, height: 0 } as unknown as HTMLCanvasElement;
+    const replayer = new VideoReplayer({ store, channelId: "cam", outputCanvas: canvas });
+
+    // First keyframe at t=0 with 640×480
+    replayer.feedFrame({
+      channelId: "cam",
+      data: { opfsPath: "video/cam/0.chunk", isKeyframe: true, durationUs: 33333, byteLength: 3, codedWidth: 640, codedHeight: 480 },
+      t: 0,
+    });
+    for (let i = 0; i < 10; i++) await Promise.resolve();
+    expect((canvas as unknown as { width: number }).width).toBe(640);
+
+    // seekTo resets _canvasInitialized — next keyframe should re-initialize canvas
+    const idx = new TimelineIndex();
+    idx.insert(5000);
+    const frames = [{
+      channelId: "cam",
+      data: { opfsPath: "video/cam/5000.chunk", isKeyframe: true, durationUs: 33333, byteLength: 3, codedWidth: 1920, codedHeight: 1080 },
+      t: 5000,
+    }];
+    await replayer.seekTo(5000, idx, frames);
+    for (let i = 0; i < 10; i++) await Promise.resolve();
+
+    expect((canvas as unknown as { width: number }).width).toBe(1920);
+    expect((canvas as unknown as { height: number }).height).toBe(1080);
+
+    replayer.dispose();
+    Object.defineProperty(globalThis, "VideoDecoder", {
+      value: origVideoDecoder, writable: true, configurable: true,
+    });
+  });
+
+  it("_renderFrame draws into canvas at canvas dimensions without resizing", async () => {
     await store.writeVideoChunk("cam", "0.chunk", new Uint8Array([1, 2, 3]));
 
     const origVideoDecoder = globalThis.VideoDecoder;
@@ -289,7 +418,6 @@ describe("VideoReplayer", () => {
 
     const drawImage = vi.fn();
     const canvas = { getContext: () => ({ drawImage }), width: 640, height: 480 } as unknown as HTMLCanvasElement;
-
     const replayer = new VideoReplayer({ store, channelId: "cam", outputCanvas: canvas });
     replayer.feedFrame({
       channelId: "cam",
@@ -298,13 +426,12 @@ describe("VideoReplayer", () => {
     });
     for (let i = 0; i < 10; i++) await Promise.resolve();
 
-    // Fire output callback with a frame of different dimensions
+    // Manually fire output callback to exercise _renderFrame
     const frame = { timestamp: 0, duration: null, displayWidth: 1920, displayHeight: 1080, close: () => {} } as unknown as VideoFrame;
     capturedOutput!(frame);
 
-    expect((canvas as unknown as { width: number }).width).toBe(1920);
-    expect((canvas as unknown as { height: number }).height).toBe(1080);
-    expect(drawImage).toHaveBeenCalled();
+    // canvas.width was set by _decodeChunk to 1920; _renderFrame draws using that
+    expect(drawImage).toHaveBeenCalledWith(frame, 0, 0, 1920, 1080);
 
     replayer.dispose();
     Object.defineProperty(globalThis, "VideoDecoder", {

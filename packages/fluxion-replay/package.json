@@ -63,9 +63,6 @@
   "peerDependenciesMeta": {
     "react": {
       "optional": true
-    },
-    "@heojeongbo/fluxion-render": {
-      "optional": true
     }
   },
   "devDependencies": {

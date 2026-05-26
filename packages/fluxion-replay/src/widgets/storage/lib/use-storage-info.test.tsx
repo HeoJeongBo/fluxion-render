@@ -71,4 +71,50 @@ describe("useStorageInfo", () => {
     expect(result.current).toBeNull();
     session.dispose();
   });
+
+  it("logs to console when logToConsole is true", async () => {
+    const session = new ReplaySession({ channels: [] });
+    await session.open();
+    vi.spyOn(session, "getStorageInfo").mockResolvedValue({
+      usedBytes: 1_048_576,
+      quotaBytes: 10_485_760,
+      percentUsed: 10,
+      idbFrameCount: 42,
+    });
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+
+    const { unmount } = renderHook(() =>
+      useStorageInfo(session, { intervalMs: 5000, logToConsole: true }),
+    );
+    await act(async () => { await Promise.resolve(); });
+
+    expect(logSpy).toHaveBeenCalledWith(expect.stringContaining("[useStorageInfo]"));
+    expect(logSpy).toHaveBeenCalledWith(expect.stringContaining("10.0% used"));
+    expect(logSpy).toHaveBeenCalledWith(expect.stringContaining("42 frames"));
+
+    unmount();
+    session.dispose();
+    logSpy.mockRestore();
+  });
+
+  it("does not log to console when logToConsole is false (default)", async () => {
+    const session = new ReplaySession({ channels: [] });
+    await session.open();
+    vi.spyOn(session, "getStorageInfo").mockResolvedValue({
+      usedBytes: 100,
+      quotaBytes: 1000,
+      percentUsed: 10,
+      idbFrameCount: 1,
+    });
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+
+    const { unmount } = renderHook(() => useStorageInfo(session, { intervalMs: 5000 }));
+    await act(async () => { await Promise.resolve(); });
+
+    expect(logSpy).not.toHaveBeenCalled();
+
+    unmount();
+    session.dispose();
+    logSpy.mockRestore();
+  });
 });

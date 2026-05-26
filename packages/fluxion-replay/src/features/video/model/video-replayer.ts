@@ -23,6 +23,7 @@ export class VideoReplayer {
   private readonly _codec: string;
   private _decoder: VideoDecoder | null = null;
   private _lastFrame: VideoFrame | null = null;
+  private _canvasInitialized = false;
 
   constructor(opts: VideoReplayerOptions) {
     this._store = opts.store;
@@ -73,6 +74,7 @@ export class VideoReplayer {
     }
     this._lastFrame?.close();
     this._lastFrame = null;
+    this._canvasInitialized = false;
   }
 
   private _setupDecoder(): void {
@@ -100,6 +102,11 @@ export class VideoReplayer {
     // hardcoded-resolution mismatch that corrupts VP8 decode on Retina displays.
     if (this._decoder.state === "unconfigured") {
       if (!isKeyframe) return;
+      if (!this._canvasInitialized) {
+        this._canvas.width = info.codedWidth;
+        this._canvas.height = info.codedHeight;
+        this._canvasInitialized = true;
+      }
       this._decoder.configure({
         codec: this._codec,
         codedWidth: info.codedWidth,
@@ -125,14 +132,9 @@ export class VideoReplayer {
   }
 
   private _renderFrame(frame: VideoFrame): void {
-    // Resize canvas to match actual decoded frame dimensions so drawImage fills correctly
-    if (this._canvas.width !== frame.displayWidth || this._canvas.height !== frame.displayHeight) {
-      this._canvas.width = frame.displayWidth;
-      this._canvas.height = frame.displayHeight;
-    }
     const ctx = this._canvas.getContext("2d") as CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D | null;
     if (!ctx) return;
-    ctx.drawImage(frame as unknown as CanvasImageSource, 0, 0);
+    ctx.drawImage(frame as unknown as CanvasImageSource, 0, 0, this._canvas.width, this._canvas.height);
     frame.close();
   }
 }

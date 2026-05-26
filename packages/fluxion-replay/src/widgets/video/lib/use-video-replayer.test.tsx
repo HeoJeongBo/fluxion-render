@@ -1,10 +1,10 @@
-import { renderHook } from "@testing-library/react";
+import { act, renderHook } from "@testing-library/react";
+import { createRef } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ReplayPlayer } from "../../../features/player/model/replay-player";
 import { ReplayStore } from "../../../features/store/model/replay-store";
 import { VideoReplayer } from "../../../features/video/model/video-replayer";
 import { useVideoReplayer } from "./use-video-replayer";
-import { createRef } from "react";
 
 function makeStore() {
   return new ReplayStore({ batchIntervalMs: 9999 });
@@ -100,5 +100,38 @@ describe("useVideoReplayer", () => {
     }).not.toThrow();
 
     player.dispose();
+  });
+
+  it("feedFrame is called when player emits a frame with matching channelId (lines 41-42)", () => {
+    const feedSpy = vi.spyOn(VideoReplayer.prototype, "feedFrame").mockImplementation(() => {});
+
+    const store = makeStore();
+    const canvas = makeCanvas();
+    const canvasRef = { current: canvas };
+
+    // Use a simple fake player that lets us emit frames directly
+    const listeners: ((f: unknown) => void)[] = [];
+    const fakePlayer = {
+      onFrame: (l: (f: unknown) => void) => {
+        listeners.push(l);
+        return () => { const i = listeners.indexOf(l); if (i !== -1) listeners.splice(i, 1); };
+      },
+    } as unknown as import("../../../features/player/model/replay-player").ReplayPlayer;
+
+    renderHook(() => useVideoReplayer(fakePlayer, canvasRef, store, "screen"));
+
+    // Emit a frame with the MATCHING channelId → feedFrame should be called (lines 41-42)
+    act(() => {
+      for (const l of listeners) l({ channelId: "screen", t: 100 });
+    });
+    expect(feedSpy).toHaveBeenCalledTimes(1);
+
+    // Emit a frame with a NON-matching channelId → feedFrame should NOT be called
+    act(() => {
+      for (const l of listeners) l({ channelId: "camera", t: 200 });
+    });
+    expect(feedSpy).toHaveBeenCalledTimes(1); // still 1, not 2
+
+    feedSpy.mockRestore();
   });
 });

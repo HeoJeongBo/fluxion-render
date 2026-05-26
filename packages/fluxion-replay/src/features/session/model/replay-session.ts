@@ -11,6 +11,16 @@ export interface ReplaySessionOptions {
   memoryCapacity?: number;
   indexIntervalMs?: number;
   storeOptions?: ReplayStoreOptions;
+  /**
+   * Storage usage percentage (0–100) at which old IDB frames are automatically
+   * evicted after each flush. Set to 100 or above to disable. Default: 60.
+   */
+  evictThresholdPct?: number;
+  /**
+   * Interval in milliseconds at which current storage usage is logged to
+   * `console.log`. Set to 0 to disable. Default: 0.
+   */
+  storageLogIntervalMs?: number;
 }
 
 export class ReplaySession {
@@ -23,6 +33,8 @@ export class ReplaySession {
   constructor(opts: ReplaySessionOptions) {
     this._store = new ReplayStore({
       retentionMs: opts.retentionMs,
+      evictThresholdPct: opts.evictThresholdPct,
+      storageLogIntervalMs: opts.storageLogIntervalMs,
       ...opts.storeOptions,
     });
 

@@ -244,5 +244,116 @@ describe("ReplayStore", () => {
       const namedStore = new ReplayStore({ dbName: "my-custom-db" });
       expect(() => namedStore.getFrames(0, 1000)).rejects.toThrow("my-custom-db");
     });
+
+    it("startSegment closes any previously open segment before creating a new one (line 204)", () => {
+      store.startSegment(1000);
+      // Call startSegment again — should close the open segment at t=2000 before opening a new one
+      store.startSegment(2000);
+      const segs = store.getSegments();
+      expect(segs).toHaveLength(2);
+      expect(segs[0]!.start).toBe(1000);
+      expect(segs[0]!.end).toBe(2000);
+      expect(segs[1]!.start).toBe(2000);
+      expect(segs[1]!.end).toBeNull();
+    });
+
+    it("_maybeEvict does nothing when evictThresholdPct is 100", async () => {
+      const noEvictStore = new ReplayStore({ batchIntervalMs: 9999, evictThresholdPct: 100 });
+      await noEvictStore.open();
+      const deleteSpy = vi.spyOn(noEvictStore, "deleteFramesBefore");
+
+      for (const t of [100, 200, 300]) {
+        noEvictStore.appendFrame({ t, channelId: "ch", payload: new ArrayBuffer(4) });
+      }
+      await noEvictStore.flush();
+
+      expect(deleteSpy).not.toHaveBeenCalled();
+      noEvictStore.dispose();
+      deleteSpy.mockRestore();
+    });
+
+    it("_maybeEvict deletes oldest 10% when storage exceeds threshold", async () => {
+      const evictStore = new ReplayStore({ batchIntervalMs: 9999, evictThresholdPct: 0 });
+      await evictStore.open();
+      const deleteSpy = vi.spyOn(evictStore, "deleteFramesBefore");
+
+      vi.spyOn(evictStore, "getStorageInfo").mockResolvedValue({
+        usedBytes: 100,
+        quotaBytes: 100,
+        percentUsed: 50,
+        idbFrameCount: 3,
+      });
+
+      for (const t of [1000, 2000, 3000, 4000, 5000]) {
+        evictStore.appendFrame({ t, channelId: "ch", payload: new ArrayBuffer(4) });
+      }
+      await evictStore.flush();
+
+      // earliest=1000, latest=5000, span=4000, cutoff = 1000 + floor(4000 * 0.1) = 1400
+      expect(deleteSpy).toHaveBeenCalledWith(1400);
+      evictStore.dispose();
+      deleteSpy.mockRestore();
+    });
+
+    it("_maybeEvict does nothing when storage is below threshold", async () => {
+      const evictStore = new ReplayStore({ batchIntervalMs: 9999, evictThresholdPct: 80 });
+      await evictStore.open();
+      const deleteSpy = vi.spyOn(evictStore, "deleteFramesBefore");
+
+      vi.spyOn(evictStore, "getStorageInfo").mockResolvedValue({
+        usedBytes: 10,
+        quotaBytes: 100,
+        percentUsed: 10,
+        idbFrameCount: 3,
+      });
+
+      evictStore.appendFrame({ t: 1000, channelId: "ch", payload: new ArrayBuffer(4) });
+      await evictStore.flush();
+
+      expect(deleteSpy).not.toHaveBeenCalled();
+      evictStore.dispose();
+      deleteSpy.mockRestore();
+    });
+
+    it("storageLogTimer calls console.log on interval", async () => {
+      const logStore = new ReplayStore({ batchIntervalMs: 9999, storageLogIntervalMs: 1000 });
+      const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+      await logStore.open();
+
+      await vi.advanceTimersByTimeAsync(1000);
+
+      expect(logSpy).toHaveBeenCalledWith(expect.stringContaining("[ReplayStore"));
+      logStore.dispose();
+      logSpy.mockRestore();
+    });
+
+    it("storageLogTimer is not started when storageLogIntervalMs is 0", async () => {
+      const logStore = new ReplayStore({ batchIntervalMs: 9999, storageLogIntervalMs: 0 });
+      const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+      await logStore.open();
+
+      await vi.advanceTimersByTimeAsync(10_000);
+
+      expect(logSpy).not.toHaveBeenCalled();
+      logStore.dispose();
+      logSpy.mockRestore();
+    });
+
+    it("clearAll iterates OPFS root entries and removes them (lines 291-293)", async () => {
+      const removedNames: string[] = [];
+      const fakeRoot = {
+        // Async generator that yields one entry
+        entries: async function* () {
+          yield ["chunk1.webm", {} as FileSystemHandle] as [string, FileSystemHandle];
+        },
+        removeEntry: vi.fn(async (name: string) => {
+          removedNames.push(name);
+        }),
+      };
+      // biome-ignore lint/suspicious/noExplicitAny: injecting fake OPFS root
+      (store as any)._opfsRoot = fakeRoot;
+      await store.clearAll();
+      expect(removedNames).toContain("chunk1.webm");
+    });
   });
 });
