@@ -63,13 +63,13 @@ describe("DVR metric buffer flush (onDvrReady pattern)", () => {
     const buf = { current: [{ channelId: "cpu", tAbsMs: 100, value: 10 }] };
     const handleDvrReady = makeDvrReady(buf);
 
-    const first: typeof buf["current"] = [];
+    const first: Array<{ channelId: string; t: number; y: number }> = [];
     simulateHostReady(handleDvrReady, first);
     expect(first).toHaveLength(1);
     expect(buf.current).toHaveLength(0);
 
     // A second flush (e.g. component re-render) must push nothing
-    const second: typeof buf["current"] = [];
+    const second: Array<{ channelId: string; t: number; y: number }> = [];
     simulateHostReady(handleDvrReady, second);
     expect(second).toHaveLength(0);
   });
