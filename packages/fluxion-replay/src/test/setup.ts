@@ -563,3 +563,15 @@ Object.defineProperty(globalThis, "IS_REACT_ACT_ENVIRONMENT", {
   writable: true,
   configurable: true,
 });
+
+// Suppress React's act() warnings on console.error. These fire during
+// environment teardown and cause EnvironmentTeardownError in vitest 4.x
+// because the pending onUserConsoleLog RPC races with worker shutdown.
+// React's printWarning captures `console.error` at module load time, so
+// patching here (in setup.ts, before any test imports React) intercepts it.
+const _originalConsoleError = console.error.bind(console);
+console.error = (...args: unknown[]) => {
+  const msg = typeof args[0] === "string" ? args[0] : "";
+  if (msg.includes("not wrapped in act") || msg.includes("Warning:")) return;
+  _originalConsoleError(...args);
+};

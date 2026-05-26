@@ -13,6 +13,7 @@ export default defineConfig({
   test: {
     environment: "happy-dom",
     globals: false,
+    teardownTimeout: 10000,
     include: ["src/**/*.test.{ts,tsx}"],
     // Bench files are picked up by `vitest bench` only. Exclude here so a
     // plain `vitest run` doesn't try to execute them as regular tests.

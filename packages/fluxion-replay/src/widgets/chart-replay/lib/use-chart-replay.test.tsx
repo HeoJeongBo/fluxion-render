@@ -1,5 +1,5 @@
 import { act, render, renderHook } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   buildRecording,
   ChartReplayProbe,
@@ -11,6 +11,14 @@ import {
 } from "./chart-replay-fixtures";
 import { MetricChannel } from "../../../entities/metric-channel/metric-channel";
 import { useChartReplay } from "./use-chart-replay";
+
+// Suppress console.error and console.warn at the file level so pending
+// onUserConsoleLog RPCs don't race with environment teardown in vitest 4.x.
+beforeAll(() => {
+  vi.spyOn(console, "error").mockImplementation(() => {});
+  vi.spyOn(console, "warn").mockImplementation(() => {});
+});
+afterAll(() => vi.restoreAllMocks());
 
 // ── Tests ───────────────────────────────────────────────────────────────────
 
@@ -875,15 +883,6 @@ describe("useChartReplay", () => {
   // A missing / NaN / non-positive value silently produced empty backfill —
   // chart looked broken with no error. Throw at mount so the typo is caught.
   describe("Phase 20: windowMs validation", () => {
-    // React logs every render-time throw to console.error; silence it so
-    // the test output stays clean. We restore in afterEach.
-    let consoleErrorSpy: ReturnType<typeof vi.spyOn>;
-    beforeEach(() => {
-      consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
-    });
-    afterEach(() => {
-      consoleErrorSpy.mockRestore();
-    });
 
     // Render the hook directly so the throw happens during the render
     // (not inside a useEffect, where React would swallow it). Using
