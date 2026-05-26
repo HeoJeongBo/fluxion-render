@@ -1,5 +1,18 @@
 # Changelog
 
+# [0.7.0](https://github-personal/HeoJeongBo/fluxion-render/compare/fluxion-replay-v0.5.0...fluxion-replay-v0.7.0) (2026-05-26)
+
+
+### Bug Fixes
+
+* **replay:** correct test array type annotation in dvr-metric-buffer.test.ts ([586d5ac](https://github-personal/HeoJeongBo/fluxion-render/commit/586d5ac121b1565f8a9808c12bb597a8189e854d))
+* **replay:** suppress React act() teardown race and upgrade vitest to 4.1.7 ([322baab](https://github-personal/HeoJeongBo/fluxion-render/commit/322baab0102ad308caeb296ef54f0e9101dd6c07))
+
+
+### Features
+
+* **replay,examples:** add auto-eviction, storage logging, and user scenario tests ([1a9e862](https://github-personal/HeoJeongBo/fluxion-render/commit/1a9e8620b5f479e7dcbb2d74be16e5983cb53f4e))
+
 * chore: release @heojeongbo/fluxion-render v0.10.0 (48cbe4e)
 * feat(render,replay,examples): DX overhaul + bridge hook + testing utils (48e5185)
 
