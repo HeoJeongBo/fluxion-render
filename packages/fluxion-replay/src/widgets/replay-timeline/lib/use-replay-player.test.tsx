@@ -416,4 +416,9 @@ describe("useReplayPlayer", () => {
       player.dispose();
     });
   });
+
+  it("seek() is a no-op when player is null", () => {
+    const { result } = renderHook(() => useReplayPlayer(null));
+    expect(() => act(() => { result.current.seek(5_000); })).not.toThrow();
+  });
 });

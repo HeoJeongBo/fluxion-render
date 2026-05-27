@@ -97,6 +97,11 @@ describe("useStorageInfo", () => {
     logSpy.mockRestore();
   });
 
+  it("cleanup does not throw when timerRef is null (session=null, no interval set)", () => {
+    const { unmount } = renderHook(() => useStorageInfo(null));
+    expect(() => unmount()).not.toThrow();
+  });
+
   it("does not log to console when logToConsole is false (default)", async () => {
     const session = new ReplaySession({ channels: [] });
     await session.open();

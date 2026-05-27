@@ -1,7 +1,7 @@
 import { renderHook, act } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ReplayPlayer } from "../../../features/player/model/replay-player";
-import { ReplayStore } from "../../../features/store/model/replay-store";
+import { ReplayStore, type RecordingSegment } from "../../../features/store/model/replay-store";
 import { useReplayTimeline } from "./use-replay-timeline";
 
 function makePlayer(earliest = 0, latest = 10_000) {
@@ -196,4 +196,120 @@ describe("useReplayTimeline", () => {
   // identity-stability reasons that bit chart-replay (Phase 10). The seek-by-
   // value contract (seekTo(0.5) always seeks to the midpoint) is what matters
   // and is covered by the tests above.
+
+  describe("segments + isInGap", () => {
+    it("isInGap is false when no segments", () => {
+      const player = makePlayer(0, 10_000);
+      const { result } = renderHook(() =>
+        useReplayTimeline(player, { earliest: 0, latest: 10_000 })
+      );
+      expect(result.current.isInGap).toBe(false);
+      player.dispose();
+    });
+
+    it("isInGap is false when currentT is inside a segment", () => {
+      const player = makePlayer(0, 10_000);
+      const segments = [
+        { start: 0, end: 4_000 },
+        { start: 6_000, end: 10_000 },
+      ];
+      const { result } = renderHook(() =>
+        useReplayTimeline(player, { earliest: 0, latest: 10_000 }, segments)
+      );
+      // currentT starts at 0, inside first segment
+      expect(result.current.isInGap).toBe(false);
+      player.dispose();
+    });
+
+    it("isInGap is true when currentT is inside a gap", () => {
+      const store = new ReplayStore({ batchIntervalMs: 9999 });
+      const p = new ReplayPlayer({
+        store,
+        channels: new Map(),
+        timeRange: { earliest: 0, latest: 10_000 },
+      });
+      p.seek(5_000);
+
+      const segments: RecordingSegment[] = [
+        { start: 0, end: 4_000 },
+        { start: 6_000, end: 10_000 },
+      ];
+      const { result } = renderHook(() =>
+        useReplayTimeline(p, { earliest: 0, latest: 10_000 }, segments)
+      );
+      // currentT=5000, gap=[4000..6000)
+      expect(result.current.isInGap).toBe(true);
+      p.dispose();
+    });
+
+    it("seekTo with segments snaps gap to next segment start", () => {
+      const player = makePlayer(0, 10_000);
+      const seekSpy = vi.spyOn(player, "seek");
+      const segments = [
+        { start: 0, end: 4_000 },
+        { start: 6_000, end: 10_000 },
+      ];
+      const { result } = renderHook(() =>
+        useReplayTimeline(player, { earliest: 0, latest: 10_000 }, segments)
+      );
+      // seekTo(0.5) = 5000ms, which is in the gap → snapped to 6000
+      act(() => { result.current.seekTo(0.5); });
+      expect(seekSpy).toHaveBeenCalledWith(6_000);
+      player.dispose();
+    });
+
+    it("seekToMs with segments applies snapTimeToSegment", () => {
+      const player = makePlayer(0, 10_000);
+      const seekSpy = vi.spyOn(player, "seek");
+      const segments = [
+        { start: 0, end: 4_000 },
+        { start: 6_000, end: 10_000 },
+      ];
+      const { result } = renderHook(() =>
+        useReplayTimeline(player, { earliest: 0, latest: 10_000 }, segments)
+      );
+      // t=5000 is in gap → snapped to 6000
+      act(() => { result.current.seekToMs(5_000); });
+      expect(seekSpy).toHaveBeenCalledWith(6_000);
+      player.dispose();
+    });
+
+    it("seekForward with segments snaps to next segment", () => {
+      const player = makePlayer(0, 10_000);
+      const seekSpy = vi.spyOn(player, "seek");
+      const segments = [
+        { start: 0, end: 4_000 },
+        { start: 6_000, end: 10_000 },
+      ];
+      const { result } = renderHook(() =>
+        useReplayTimeline(player, { earliest: 0, latest: 10_000 }, segments)
+      );
+      // currentT=0, seekForward(4500) → raw=4500 (in gap) → snapped to 6000
+      act(() => { result.current.seekForward(4_500); });
+      expect(seekSpy).toHaveBeenCalledWith(6_000);
+      player.dispose();
+    });
+
+    it("seekToMs without segments passes value unchanged", () => {
+      const player = makePlayer(0, 10_000);
+      const seekSpy = vi.spyOn(player, "seek");
+      const { result } = renderHook(() =>
+        useReplayTimeline(player, { earliest: 0, latest: 10_000 })
+      );
+      act(() => { result.current.seekToMs(3_500); });
+      expect(seekSpy).toHaveBeenCalledWith(3_500);
+      player.dispose();
+    });
+
+    it("seekForward without segments passes raw value", () => {
+      const player = makePlayer(0, 10_000);
+      const seekSpy = vi.spyOn(player, "seek");
+      const { result } = renderHook(() =>
+        useReplayTimeline(player, { earliest: 0, latest: 10_000 })
+      );
+      act(() => { result.current.seekForward(3_000); });
+      expect(seekSpy).toHaveBeenCalledWith(3_000);
+      player.dispose();
+    });
+  });
 });

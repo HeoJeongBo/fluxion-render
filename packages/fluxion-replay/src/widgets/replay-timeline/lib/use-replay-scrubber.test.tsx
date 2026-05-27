@@ -318,4 +318,19 @@ describe("useReplayScrubber", () => {
       expect(result.current.max).toBe(recStart + 60_000);
     });
   });
+
+  it("value falls back to rawMax when liveTimeRange is null, scrubT is null, isDvr is false", () => {
+    const now = 1_700_000_000_000;
+    const { result } = setup({
+      effectiveTimeRange: { earliest: now, latest: now + 90_000 },
+      liveTimeRange: null,
+      isDvr: false,
+      replayPlayerT: 0,
+      scrubT: null,
+    });
+    // resolved = scrubT ?? (isDvr? replayPlayerT : liveTimeRange?.latest ?? rawMax)
+    // = null ?? (false ? 0 : null ?? rawMax)
+    // = rawMax = now + 90_000
+    expect(result.current.value).toBe(now + 90_000);
+  });
 });

@@ -121,6 +121,9 @@ describe("useChartReplay", () => {
         data: ch.decode(ch.encode({ name: "signal", value: 0.7 })),
         t: 5050,
       });
+      // Fix 3: frames are buffered in liveBuffer until the next onTick drains
+      // them via pushBatch. Emit a tick to flush the buffer.
+      player.emitTick(5050);
     });
 
     expect(pushes).toHaveLength(1);
@@ -187,6 +190,7 @@ describe("useChartReplay", () => {
     });
     expect(player.frameListenerCount()).toBe(1);
     expect(player.seekListenerCount()).toBe(1);
+    expect(player.tickListenerCount()).toBe(1);
     const baseResets = resets.length;
     const basePushes = pushes.length;
     const baseBatches = batches.length;
@@ -194,6 +198,7 @@ describe("useChartReplay", () => {
     await act(async () => { unmount(); });
     expect(player.frameListenerCount()).toBe(0);
     expect(player.seekListenerCount()).toBe(0);
+    expect(player.tickListenerCount()).toBe(0);
 
     // Post-unmount emissions are ignored.
     await act(async () => {
@@ -288,6 +293,7 @@ describe("useChartReplay", () => {
           data: ch.decode(ch.encode({ name: "signal", value: 0.7 })),
           t: ORIGIN + 5050,
         });
+        player.emitTick(ORIGIN + 5050);
       });
 
       expect(pushes).toHaveLength(1);
@@ -506,6 +512,7 @@ describe("useChartReplay", () => {
           data: ch.decode(ch.encode({ name: "signal", value: 0.123 })),
           t: ORIGIN + 30_050,
         });
+        player.emitTick(ORIGIN + 30_050);
       });
 
       expect(pushes).toHaveLength(1);

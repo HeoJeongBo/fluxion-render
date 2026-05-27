@@ -126,6 +126,23 @@ describe("ReplaySession", () => {
     session.dispose();
   });
 
+  it("getSegments() returns empty array before recording starts", async () => {
+    const session = new ReplaySession({ channels: [] });
+    await session.open();
+    expect(session.getSegments()).toEqual([]);
+    session.dispose();
+  });
+
+  it("getSegments() reflects started segment during recording", async () => {
+    const session = new ReplaySession({ channels: [] });
+    await session.open();
+    await session.startRecording();
+    const segs = session.getSegments();
+    expect(segs.length).toBeGreaterThanOrEqual(1);
+    expect(segs[0]).toHaveProperty("start");
+    session.dispose();
+  });
+
   // Phase 13: enterReplay must flush the recorder's pending batch before
   // computing the player's timeRange — otherwise the last ~500ms of just-
   // recorded frames are invisible to the player and the chart shows a tail

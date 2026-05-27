@@ -24,6 +24,15 @@ const DEFAULT_BITRATE = 1_000_000;
 const DEFAULT_FRAMERATE = 30;
 
 export class VideoRecorder {
+  /**
+   * `true` when the current browser supports both `VideoEncoder` and
+   * `MediaStreamTrackProcessor` (required for screen/camera recording).
+   * Check this before rendering a record button — Safari returns `false`.
+   */
+  static readonly isSupported: boolean =
+    typeof VideoEncoder !== "undefined" &&
+    typeof MediaStreamTrackProcessor !== "undefined";
+
   private readonly _channelId: string;
   private readonly _store: ReplayStore;
   private readonly _recorder: ReplayRecorder;

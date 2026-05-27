@@ -18,8 +18,9 @@ export type {
 
 export { useReplayTimeline } from "./widgets/replay-timeline/lib/use-replay-timeline";
 export type {
-  UseReplayTimelineResult,
   BufferedRange,
+  GapInfo,
+  UseReplayTimelineResult,
 } from "./widgets/replay-timeline/lib/use-replay-timeline";
 
 export { ReplayTimeline } from "./widgets/replay-timeline/ui/replay-timeline";

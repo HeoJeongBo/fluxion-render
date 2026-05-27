@@ -89,10 +89,11 @@ Below the table, list the commit subjects per package so the user can sanity-che
 Unless the user said `--apply`, run the `:dry` variants in dependency order and stop:
 
 ```bash
-# Dependency order (worker → render → replay; only run for packages that need a bump)
-pnpm release:worker:dry      # if worker has commits
-pnpm release:dry             # render (the default :dry alias)
-pnpm release:replay:dry      # if replay has commits
+# Load .env so GITHUB_TOKEN is available, then dry-run
+set -a && source .env && set +a
+CI=true pnpm release:worker:dry      # if worker has commits
+CI=true pnpm release:dry             # render (the default :dry alias)
+CI=true pnpm release:replay:dry      # if replay has commits
 ```
 
 Show the output to the user. Ask if they want to proceed with the real release.
@@ -102,9 +103,10 @@ Show the output to the user. Ask if they want to proceed with the real release.
 Run in dependency order. If any step fails, **stop** — do not run subsequent packages. release-it leaves the working tree dirty on failure; let the user inspect.
 
 ```bash
-pnpm release:worker:<level>   # if needed, FIRST (other packages depend on it)
-pnpm release:<level>          # render, depends on worker
-pnpm release:replay:<level>   # depends on render
+set -a && source .env && set +a
+CI=true pnpm release:worker:<level>   # if needed, FIRST (other packages depend on it)
+CI=true pnpm release:<level>          # render, depends on worker
+CI=true pnpm release:replay:<level>   # depends on render
 ```
 
 After each successful run, `git log --oneline -2` and `git tag --list 'fluxion-<pkg>-v*' --sort=-v:refname | head -1` to confirm.

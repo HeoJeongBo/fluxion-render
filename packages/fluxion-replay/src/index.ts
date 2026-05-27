@@ -53,7 +53,9 @@ export type {
 // Session (main orchestrator)
 export { ReplaySession } from "./features/session/model/replay-session";
 export { createReplaySession } from "./features/session/lib/create-replay-session";
+export { detectGaps } from "./features/session/lib/detect-gaps";
 export { snapTimeToSegment } from "./features/session/lib/snap-time-to-segment";
+export type { GapInfo } from "./features/session/lib/detect-gaps";
 export type { ReplaySessionOptions, ReplaySessionMode } from "./features/session/model/replay-session";
 
 // Video subsystem

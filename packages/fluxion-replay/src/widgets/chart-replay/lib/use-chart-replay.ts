@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { FluxionHost, LineLayerHandle, LineSample } from "@heojeongbo/fluxion-render";
 import type { ReplayPlayer, ReplayPlayerFrame } from "../../../features/player/model/replay-player";
-import type { ReplayStore } from "../../../features/store/model/replay-store";
+import type { DecodedFrame, ReplayStore } from "../../../features/store/model/replay-store";
 import type { BaseChannel } from "../../../shared/model/base-channel";
 
 export interface UseChartReplayOptions<T> {
@@ -81,6 +81,18 @@ export function useChartReplay<T>(
   const pickRef = useRef(pickValue);
   pickRef.current = pickValue;
 
+  // Fix 1: cache the last hydrate result so seeks within the same window
+  // skip the IDB round-trip entirely.
+  const cacheRef = useRef<{
+    from: number;
+    to: number;
+    frames: DecodedFrame<T>[];
+  } | null>(null);
+
+  // Fix 3: accumulate onFrame events per tick instead of calling handle.push()
+  // once per frame — drained as a single pushBatch() in onTick.
+  const liveBufferRef = useRef<LineSample[]>([]);
+
   const handle = useMemo<LineLayerHandle | null>(
     () => (host ? host.line(layerId) : null),
     [host, layerId],
@@ -117,6 +129,9 @@ export function useChartReplay<T>(
     // get wiped by the reset, leaving the chart with a stutter.
     let hydratingT: number | null = null;
     const pending: ReplayPlayerFrame<T>[] = [];
+    // Reset per-effect live buffer so stale samples from a prior player
+    // don't bleed into the new subscription.
+    liveBufferRef.current = [];
 
     const flushPending = (cutoff: number) => {
       if (pending.length === 0) return;
@@ -136,10 +151,22 @@ export function useChartReplay<T>(
           pending.length = 0;
           setIsHydrating(true);
 
-          // Store keeps absolute t; query in that space. Pass the channel
-          // (not the channelId) so the store decodes payloads up-front and
-          // we don't need to `as T` the result. Phase 20-B-3.
-          const frames = await store.getFramesByChannel(channel, t - windowMs, t);
+          // Fix 1: if the entire [t-windowMs, t] window sits within the
+          // last cached query range, skip the IDB round-trip and slice
+          // locally. This makes rapid scrubs within the same windowMs
+          // nearly free (no IDB, no decode).
+          const from = t - windowMs;
+          const cache = cacheRef.current;
+          let frames: DecodedFrame<T>[];
+          if (cache && cache.from <= from && cache.to >= t) {
+            frames = cache.frames.filter((f) => f.t >= from && f.t <= t);
+          } else {
+            // Store keeps absolute t; query in that space. Pass the channel
+            // (not the channelId) so the store decodes payloads up-front and
+            // we don't need to `as T` the result. Phase 20-B-3.
+            frames = await store.getFramesByChannel(channel, from, t);
+            cacheRef.current = { from, to: t, frames };
+          }
           // Yield once so a React cleanup that sets `cancelled = true` has a
           // chance to run before we touch the chart. Without this yield, a
           // fast-resolving IDB query (cache hit / fake-IDB microtask) lets a
@@ -205,15 +232,31 @@ export function useChartReplay<T>(
         pending.push(frame);
         return;
       }
-      handle.push({ t: frame.t - timeOrigin, y: pickRef.current(frame.data) });
+      // Fix 3: accumulate into buffer; onTick flushes as a single pushBatch.
+      liveBufferRef.current.push({ t: frame.t - timeOrigin, y: pickRef.current(frame.data) });
+    });
+
+    // Fix 3: drain the live buffer once per tick with a single pushBatch call
+    // instead of one handle.push() per frame, reducing GPU command overhead.
+    const offTick = player.onTick(() => {
+      const buf = liveBufferRef.current;
+      if (buf.length === 0) return;
+      if (buf.length === 1) {
+        handle.push(buf[0]!);
+      } else {
+        handle.pushBatch(buf.slice());
+      }
+      buf.length = 0;
     });
 
     return () => {
       cancelled = true;
       pending.length = 0;
       queuedT = null;
+      liveBufferRef.current = [];
       offSeek();
       offFrame();
+      offTick();
     };
   }, [handle, player, store, channel, windowMs, timeOrigin]);
 

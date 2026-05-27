@@ -167,4 +167,87 @@ describe("useRecordingSession", () => {
     expect(stub.clearRecording).toHaveBeenCalledTimes(1);
     expect(stub.startRecording).toHaveBeenCalledTimes(1);
   });
+
+  it("unmount before clearRecording completes sets cancelled=true, skips startRecording", async () => {
+    const stub = makeSessionStub();
+    let resolveClear!: () => void;
+    stub.clearRecording.mockImplementation(
+      () => new Promise<void>((res) => { resolveClear = res; }),
+    );
+
+    const { unmount } = renderHook(() =>
+      useRecordingSession({ session: stubAsSession(stub), enabled: true }),
+    );
+
+    // clearRecording is hanging — unmount immediately
+    unmount();
+    resolveClear();
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    // cancelled=true after unmount, so startRecording should NOT be called
+    expect(stub.startRecording).not.toHaveBeenCalled();
+  });
+
+  it("unmount before startRecording completes sets cancelled=true, skips setIsRecording", async () => {
+    const stub = makeSessionStub();
+    let resolveStart!: () => void;
+    stub.startRecording.mockImplementation(
+      () => new Promise<void>((res) => { resolveStart = res; }),
+    );
+
+    const { result, unmount } = renderHook(() =>
+      useRecordingSession({ session: stubAsSession(stub), enabled: true }),
+    );
+    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+
+    // clearRecording done, startRecording is hanging — unmount
+    unmount();
+    resolveStart();
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    // cancelled=true, so setIsRecording(true) should NOT have been called
+    expect(result.current.isRecording).toBe(false);
+  });
+
+  it("surfaces a non-Error thrown value wrapped in Error", async () => {
+    const stub = makeSessionStub();
+    stub.startRecording.mockRejectedValueOnce("string error");
+    const { result } = renderHook(() =>
+      useRecordingSession({ session: stubAsSession(stub), enabled: true }),
+    );
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(result.current.error).toBeInstanceOf(Error);
+    expect(result.current.error?.message).toBe("string error");
+  });
+
+  it("error after cancel is silently swallowed (cancelled=true guard)", async () => {
+    const stub = makeSessionStub();
+    let rejectStart!: (e: Error) => void;
+    stub.startRecording.mockImplementation(
+      () => new Promise<void>((_res, rej) => { rejectStart = rej; }),
+    );
+
+    const { result, unmount } = renderHook(() =>
+      useRecordingSession({ session: stubAsSession(stub), enabled: true }),
+    );
+    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+
+    unmount(); // sets cancelled=true
+    rejectStart(new Error("post-cancel error"));
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    // Error should NOT surface because cancelled=true
+    expect(result.current.error).toBeNull();
+  });
 });

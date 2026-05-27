@@ -569,4 +569,24 @@ describe("useReplayDvr", () => {
     unmount();
     expect(ses.player.endListenerCount()).toBe(0);
   });
+
+  it("enter() is a no-op when enterReplay returns null", async () => {
+    const ses = makeFakeSession();
+    // Override enterReplay to return null (simulates session not ready)
+    const enterReplayNull = vi.fn(async () => null as unknown as ReturnType<typeof ses.enterReplay> extends Promise<infer T> ? T : never);
+    const { result } = setup({
+      session: ses.session,
+      enterReplay: enterReplayNull as typeof ses.enterReplay,
+      exitReplay: ses.exitReplay,
+      liveTimeRange: LIVE,
+    });
+
+    await act(async () => {
+      await result.current.enter(1_030_000);
+    });
+
+    // isDvr stays false because enterReplay returned null
+    expect(result.current.isDvr).toBe(false);
+    expect(result.current.player).toBeNull();
+  });
 });

@@ -1,6 +1,11 @@
-import { useCallback } from "react";
+import { useCallback, useMemo } from "react";
 import type { ReplayPlayer } from "../../../features/player/model/replay-player";
+import { detectGaps, type GapInfo } from "../../../features/session/lib/detect-gaps";
+import { snapTimeToSegment } from "../../../features/session/lib/snap-time-to-segment";
+import type { RecordingSegment } from "../../../features/store/model/replay-store";
 import { useReplayPlayer } from "./use-replay-player";
+
+export type { GapInfo };
 
 export interface BufferedRange {
   readonly start: number;
@@ -21,6 +26,12 @@ export interface UseReplayTimelineResult {
   latest: number;
   bufferedRanges: BufferedRange[];
   fraction: number;
+  /** Recording segments (A→B, C→D …). Empty array when no segments are known. */
+  segments: readonly RecordingSegment[];
+  /** Gaps between segments (B→C …). Derived from `segments`. */
+  gaps: readonly GapInfo[];
+  /** True when `currentT` falls inside a gap (no recorded data at this time). */
+  isInGap: boolean;
   seekTo: (fraction: number) => void;
   seekToMs: (t: number) => void;
   seekForward: (ms: number) => void;
@@ -34,6 +45,7 @@ export interface UseReplayTimelineResult {
 export function useReplayTimeline(
   player: ReplayPlayer | null,
   timeRange: { earliest: number; latest: number } | null,
+  segments: readonly RecordingSegment[] = [],
 ): UseReplayTimelineResult {
   const { currentT, seek } = useReplayPlayer(player);
 
@@ -47,27 +59,45 @@ export function useReplayTimeline(
   const remainingMs = Math.max(0, latest - currentT);
   const percent = durationMs > 0 ? (currentMs / durationMs) * 100 : 0;
 
+  const gaps = useMemo(() => detectGaps(segments, latest), [segments, latest]);
+
+  const isInGap = useMemo(
+    () => gaps.some((g) => currentT >= g.start && currentT < g.end),
+    [gaps, currentT],
+  );
+
   const seekTo = useCallback(
     (f: number) => {
       if (!timeRange) return;
       const clamped = Math.min(1, Math.max(0, f));
-      seek(timeRange.earliest + clamped * durationMs);
+      const raw = timeRange.earliest + clamped * durationMs;
+      const snapped = segments.length > 0
+        ? snapTimeToSegment(raw, segments, timeRange.latest)
+        : raw;
+      seek(snapped);
     },
-    [seek, timeRange, durationMs],
+    [seek, timeRange, durationMs, segments],
   );
 
   const seekToMs = useCallback(
     (t: number) => {
-      seek(t);
+      const snapped = segments.length > 0
+        ? snapTimeToSegment(t, segments, latest)
+        : t;
+      seek(snapped);
     },
-    [seek],
+    [seek, segments, latest],
   );
 
   const seekForward = useCallback(
     (ms: number) => {
-      seek(currentT + ms);
+      const raw = currentT + ms;
+      const snapped = segments.length > 0
+        ? snapTimeToSegment(raw, segments, latest)
+        : raw;
+      seek(snapped);
     },
-    [seek, currentT],
+    [seek, currentT, segments, latest],
   );
 
   const seekBackward = useCallback(
@@ -91,6 +121,9 @@ export function useReplayTimeline(
     latest,
     bufferedRanges: [],
     fraction,
+    segments,
+    gaps,
+    isInGap,
     seekTo,
     seekToMs,
     seekForward,

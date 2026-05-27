@@ -195,6 +195,52 @@ describe("useChartLiveBackfill", () => {
     vi.restoreAllMocks();
   });
 
+  it("layerId defaults to channel.channelId when not provided (branch line 65)", async () => {
+    const fixedNow = 1_700_000_000_000;
+    vi.spyOn(Date, "now").mockReturnValue(fixedNow);
+    const host = makeFakeHost();
+    const frames = [metricFrame("signal", fixedNow - 1_000, 3)];
+    const store = makeFakeStore({ signal: frames });
+
+    renderHook(() =>
+      useChartLiveBackfill<MetricSample>({
+        host: host.host as never,
+        store: store as never,
+        channel: SIGNAL_CHANNEL,
+        // layerId intentionally omitted → falls back to channel.channelId ("signal")
+        windowMs: 5_000,
+        timeOrigin: 0,
+        pickValue: (d) => d.value,
+        active: true,
+      }),
+    );
+    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+    // host.line should have been called with "signal" (channel.channelId)
+    expect(host.host.line).toHaveBeenCalledWith("signal");
+    vi.restoreAllMocks();
+  });
+
+  it("host=null: handle is null, effect returns early (branch line 74)", async () => {
+    const store = makeFakeStore({ signal: [] });
+    // No throws and no interactions with store — effect exits early
+    expect(() =>
+      renderHook(() =>
+        useChartLiveBackfill<MetricSample>({
+          host: null,
+          store: store as never,
+          channel: SIGNAL_CHANNEL,
+          layerId: "signal",
+          windowMs: 5_000,
+          timeOrigin: 0,
+          pickValue: (d) => d.value,
+          active: true,
+        }),
+      )
+    ).not.toThrow();
+    await act(async () => { await Promise.resolve(); });
+    expect(store.flush).not.toHaveBeenCalled();
+  });
+
   // Phase 16: the sync immediate reset is the smoking-gun for the
   // DVR→Live exit-race. It must fire SYNCHRONOUSLY when active flips true,
   // BEFORE the async query result is processed.

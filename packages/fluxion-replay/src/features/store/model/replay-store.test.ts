@@ -355,5 +355,73 @@ describe("ReplayStore", () => {
       await store.clearAll();
       expect(removedNames).toContain("chunk1.webm");
     });
+
+    it("writeVideoChunk writes data through OPFS mock (lines 276-278)", async () => {
+      const writtenData: Uint8Array[] = [];
+      const fakeFile = {
+        createWritable: async () => ({
+          write: vi.fn(async (d: Uint8Array) => writtenData.push(d)),
+          close: vi.fn(async () => {}),
+        }),
+      };
+      const fakeDir = {
+        getFileHandle: vi.fn(async () => fakeFile),
+      };
+      const fakeRoot = {
+        getDirectoryHandle: vi.fn(async () => fakeDir),
+      };
+      // biome-ignore lint/suspicious/noExplicitAny: injecting fake OPFS root
+      (store as any)._opfsRoot = fakeRoot;
+
+      const data = new Uint8Array([1, 2, 3, 4]);
+      await store.writeVideoChunk("cam", "test.chunk", data);
+      expect(writtenData).toHaveLength(1);
+    });
+
+    it("readVideoChunk returns data from OPFS mock (lines 280-292)", async () => {
+      const payload = new Uint8Array([5, 6, 7, 8]);
+      const fakeFile = { arrayBuffer: async () => payload.buffer as ArrayBuffer };
+      const fakeFileHandle = { getFile: async () => fakeFile };
+      const fakeDir = { getFileHandle: vi.fn(async () => fakeFileHandle) };
+      const fakeRoot = { getDirectoryHandle: vi.fn(async () => fakeDir) };
+      // biome-ignore lint/suspicious/noExplicitAny: injecting fake OPFS root
+      (store as any)._opfsRoot = fakeRoot;
+
+      const result = await store.readVideoChunk("cam", "test.chunk");
+      expect(result).toEqual(payload);
+    });
+
+    it("readVideoChunk returns null when opfsRoot is null (line 282)", async () => {
+      // biome-ignore lint/suspicious/noExplicitAny: injecting null OPFS root
+      (store as any)._opfsRoot = null;
+      const result = await store.readVideoChunk("cam", "missing.chunk");
+      expect(result).toBeNull();
+    });
+
+    it("readVideoChunk returns null when file does not exist (catch path)", async () => {
+      const fakeRoot = {
+        getDirectoryHandle: vi.fn(async () => { throw new Error("not found"); }),
+      };
+      // biome-ignore lint/suspicious/noExplicitAny: injecting fake OPFS root
+      (store as any)._opfsRoot = fakeRoot;
+      const result = await store.readVideoChunk("cam", "ghost.chunk");
+      expect(result).toBeNull();
+    });
+
+    it("writeVideoChunk throws when opfsRoot is null (_assertOpfs)", async () => {
+      // biome-ignore lint/suspicious/noExplicitAny: injecting null OPFS root
+      (store as any)._opfsRoot = null;
+      await expect(store.writeVideoChunk("cam", "x.chunk", new Uint8Array([1]))).rejects.toThrow("OPFS");
+    });
+
+    it("_writeBatch is called during flush (statements coverage lines 411-423)", async () => {
+      // _writeBatch is a private method called from flush(). This exercises the
+      // IDB transaction path: store.add per record + oncomplete resolution.
+      store.appendFrame({ t: 9000, channelId: "batch-ch", payload: new ArrayBuffer(4) });
+      store.appendFrame({ t: 9100, channelId: "batch-ch", payload: new ArrayBuffer(4) });
+      await expect(store.flush()).resolves.toBeUndefined();
+      const frames = await store.getFrames(8900, 9200);
+      expect(frames).toHaveLength(2);
+    });
   });
 });

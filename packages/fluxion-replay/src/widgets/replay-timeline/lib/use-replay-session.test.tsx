@@ -202,5 +202,25 @@ describe("useReplaySession", () => {
 
       globalThis.indexedDB.open = orig;
     });
+
+    it("wraps a non-Error thrown value in Error", async () => {
+      const orig = globalThis.indexedDB.open;
+      globalThis.indexedDB.open = (() => {
+        const req: { onerror?: (e: unknown) => void; onsuccess?: unknown; error: unknown } = {
+          error: "string failure",
+        };
+        Promise.resolve().then(() => req.onerror?.({ target: req }));
+        return req as unknown as IDBOpenDBRequest;
+      }) as unknown as typeof globalThis.indexedDB.open;
+
+      const { result } = renderHook(() => useReplaySession({ channels: [] }));
+      await act(async () => {
+        await Promise.resolve();
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+      expect(result.current.error).toBeInstanceOf(Error);
+      globalThis.indexedDB.open = orig;
+    });
   });
 });

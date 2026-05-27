@@ -77,6 +77,13 @@ describe("useLiveTimeRange", () => {
     setIntervalSpy.mockRestore();
   });
 
+  it("cleanup does not throw when timerRef is null (session=null, no interval set)", () => {
+    // When session=null, the effect returns early without setting a timer.
+    // Unmount should not throw even though timerRef.current is still null.
+    const { unmount } = renderHook(() => useLiveTimeRange(null));
+    expect(() => unmount()).not.toThrow();
+  });
+
   // ── Callback identity (regression for chart-replay's "B~B / scrubMin===scrubMax" bug)
   // If `seed` (or any returned callback) is a new reference each render,
   // consumers that put it in useEffect deps will re-fire forever — in

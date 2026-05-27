@@ -44,11 +44,13 @@ export function makeFakeHost() {
 
 export type FrameListener = (frame: ReplayPlayerFrame) => void;
 export type SeekListener = (t: number) => void;
+export type TickListener = (t: number) => void;
 export type EndListener = () => void;
 
 export function makeFakePlayer(initialT = 1000) {
   const frameListeners = new Set<FrameListener>();
   const seekListeners = new Set<SeekListener>();
+  const tickListeners = new Set<TickListener>();
   const endListeners = new Set<EndListener>();
   let currentT = initialT;
 
@@ -82,6 +84,10 @@ export function makeFakePlayer(initialT = 1000) {
       seekListeners.add(l);
       return () => seekListeners.delete(l);
     }),
+    onTick: vi.fn((l: TickListener) => {
+      tickListeners.add(l);
+      return () => tickListeners.delete(l);
+    }),
     onEnd: vi.fn((l: EndListener) => {
       endListeners.add(l);
       return () => endListeners.delete(l);
@@ -92,6 +98,7 @@ export function makeFakePlayer(initialT = 1000) {
     dispose: vi.fn(() => {
       frameListeners.clear();
       seekListeners.clear();
+      tickListeners.clear();
       endListeners.clear();
     }),
     emitFrame(frame: ReplayPlayerFrame) {
@@ -100,11 +107,15 @@ export function makeFakePlayer(initialT = 1000) {
     emitSeek(t: number) {
       for (const l of seekListeners) l(t);
     },
+    emitTick(t: number) {
+      for (const l of tickListeners) l(t);
+    },
     emitEnd() {
       for (const l of endListeners) l();
     },
     frameListenerCount() { return frameListeners.size; },
     seekListenerCount() { return seekListeners.size; },
+    tickListenerCount() { return tickListeners.size; },
     endListenerCount() { return endListeners.size; },
   };
 }
