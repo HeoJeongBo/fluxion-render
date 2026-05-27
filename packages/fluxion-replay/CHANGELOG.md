@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.7.1](https://github-personal/HeoJeongBo/fluxion-render/compare/fluxion-replay-v0.7.0...fluxion-replay-v0.7.1) (2026-05-27)
+
+
+### Features
+
+* **replay:** maximize test coverage and add chart replay perf optimizations ([cadb2eb](https://github-personal/HeoJeongBo/fluxion-render/commit/cadb2eb0506b4e4910d673859c620dbdbdde9f29))
+
 # [0.7.0](https://github-personal/HeoJeongBo/fluxion-render/compare/fluxion-replay-v0.5.0...fluxion-replay-v0.7.0) (2026-05-26)
 
 
