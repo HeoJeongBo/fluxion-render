@@ -133,6 +133,33 @@ describe("useChartReplay", () => {
     expect(batches.length).toBe(baseBatches);
   });
 
+  it("flushes 2+ buffered live frames as pushBatch on tick (buf.length > 1 branch)", async () => {
+    const { host, batches } = makeFakeHost();
+    const player = makeFakePlayer(5000);
+    const store = makeFakeStore({ signal: [] });
+    const ch = new MetricChannel("signal");
+
+    await act(async () => {
+      render(<ChartReplayProbe host={host} player={player} store={store} windowMs={2000} />);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    const baseBatches = batches.length;
+
+    await act(async () => {
+      // Emit two frames before the tick — both should land as a single pushBatch
+      player.emitFrame({ channelId: "signal", data: ch.decode(ch.encode({ name: "signal", value: 0.3 })), t: 5010 });
+      player.emitFrame({ channelId: "signal", data: ch.decode(ch.encode({ name: "signal", value: 0.6 })), t: 5020 });
+      player.emitTick(5020);
+    });
+
+    expect(batches.length).toBe(baseBatches + 1);
+    expect(batches[baseBatches].samples).toEqual([
+      { t: 5010, y: 0.3 },
+      { t: 5020, y: 0.6 },
+    ]);
+  });
+
   it("ignores frames for other channels", async () => {
     const { host, pushes } = makeFakeHost();
     const player = makeFakePlayer(5000);

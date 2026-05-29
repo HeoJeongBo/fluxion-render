@@ -158,6 +158,26 @@ describe("useFluxionStream", () => {
     host.dispose();
   });
 
+  it("logs a console.warn when host stays null beyond 2s", () => {
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval", "setTimeout", "clearTimeout", "Date"] });
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    render(<Probe host={null} intervalMs={10} setup={() => null} tick={() => 0} />);
+    vi.advanceTimersByTime(2001);
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining("host is still null"));
+    warnSpy.mockRestore();
+  });
+
+  it("cancels the null-host warning when host becomes ready before 2s", () => {
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval", "setTimeout", "clearTimeout", "Date"] });
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const host = makeHost();
+    render(<Probe host={host} intervalMs={10} setup={() => null} tick={() => 0} />);
+    vi.advanceTimersByTime(3000);
+    expect(warnSpy).not.toHaveBeenCalled();
+    warnSpy.mockRestore();
+    host.dispose();
+  });
+
   it("stale setup/tick closures are replaced without tearing down the interval", () => {
     const host = makeHost();
     let latestDivisor = 1;

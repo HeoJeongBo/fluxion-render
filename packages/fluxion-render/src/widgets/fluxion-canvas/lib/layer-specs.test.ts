@@ -1,0 +1,224 @@
+import { describe, expect, it } from "vitest";
+import {
+  areaLayer,
+  axisGridLayer,
+  barLayer,
+  candlestickLayer,
+  eventMarkerLayer,
+  heatmapLayer,
+  heatmapStreamLayer,
+  lidarLayer,
+  lineLayer,
+  lineStaticLayer,
+  poseArrowLayer,
+  referenceLineLayer,
+  scatterColoredLayer,
+  scatterLayer,
+  stepLayer,
+} from "./layer-specs";
+
+describe("lineLayer", () => {
+  it("returns kind=line with given id", () => {
+    const spec = lineLayer("myLine");
+    expect(spec.kind).toBe("line");
+    expect(spec.id).toBe("myLine");
+  });
+
+  it("passes config through", () => {
+    const config = { color: "#ff0000" };
+    const spec = lineLayer("l", config);
+    expect(spec.config).toBe(config);
+  });
+
+  it("config is undefined when not provided", () => {
+    const spec = lineLayer("l");
+    expect(spec.config).toBeUndefined();
+  });
+});
+
+describe("lineStaticLayer", () => {
+  it("returns kind=line-static with given id", () => {
+    const spec = lineStaticLayer("ls");
+    expect(spec.kind).toBe("line-static");
+    expect(spec.id).toBe("ls");
+  });
+
+  it("passes config through", () => {
+    const config = { color: "#00ff00" };
+    const spec = lineStaticLayer("ls", config);
+    expect(spec.config).toBe(config);
+  });
+});
+
+describe("lidarLayer", () => {
+  it("returns kind=lidar with given id", () => {
+    const spec = lidarLayer("lid");
+    expect(spec.kind).toBe("lidar");
+    expect(spec.id).toBe("lid");
+  });
+
+  it("passes config through", () => {
+    const config = { stride: 4 as const };
+    const spec = lidarLayer("lid", config);
+    expect(spec.config).toBe(config);
+  });
+});
+
+describe("axisGridLayer", () => {
+  it("returns kind=axis-grid with given id", () => {
+    const spec = axisGridLayer("axis");
+    expect(spec.kind).toBe("axis-grid");
+    expect(spec.id).toBe("axis");
+  });
+
+  it("passes config through", () => {
+    const config = { xMode: "time" as const, timeWindowMs: 5000 };
+    const spec = axisGridLayer("axis", config);
+    expect(spec.config).toBe(config);
+  });
+});
+
+describe("scatterLayer", () => {
+  it("returns kind=scatter with given id", () => {
+    const spec = scatterLayer("sc");
+    expect(spec.kind).toBe("scatter");
+    expect(spec.id).toBe("sc");
+  });
+
+  it("config is undefined when not provided", () => {
+    expect(scatterLayer("sc").config).toBeUndefined();
+  });
+});
+
+describe("areaLayer", () => {
+  it("returns kind=area with given id", () => {
+    const spec = areaLayer("ar");
+    expect(spec.kind).toBe("area");
+    expect(spec.id).toBe("ar");
+  });
+});
+
+describe("stepLayer", () => {
+  it("returns kind=step with given id", () => {
+    const spec = stepLayer("st");
+    expect(spec.kind).toBe("step");
+    expect(spec.id).toBe("st");
+  });
+});
+
+describe("barLayer", () => {
+  it("returns kind=bar with given id", () => {
+    const spec = barLayer("br");
+    expect(spec.kind).toBe("bar");
+    expect(spec.id).toBe("br");
+  });
+});
+
+describe("candlestickLayer", () => {
+  it("returns kind=candlestick with given id", () => {
+    const spec = candlestickLayer("cs");
+    expect(spec.kind).toBe("candlestick");
+    expect(spec.id).toBe("cs");
+  });
+});
+
+describe("heatmapLayer", () => {
+  it("returns kind=heatmap with given id", () => {
+    const spec = heatmapLayer("hm");
+    expect(spec.kind).toBe("heatmap");
+    expect(spec.id).toBe("hm");
+  });
+});
+
+describe("eventMarkerLayer", () => {
+  it("returns kind=event-marker with given id", () => {
+    const spec = eventMarkerLayer("em");
+    expect(spec.kind).toBe("event-marker");
+    expect(spec.id).toBe("em");
+  });
+});
+
+describe("scatterColoredLayer", () => {
+  it("returns kind=scatter-colored with given id", () => {
+    const spec = scatterColoredLayer("scc");
+    expect(spec.kind).toBe("scatter-colored");
+    expect(spec.id).toBe("scc");
+  });
+});
+
+describe("heatmapStreamLayer", () => {
+  it("returns kind=heatmap-stream with given id", () => {
+    const spec = heatmapStreamLayer("hs");
+    expect(spec.kind).toBe("heatmap-stream");
+    expect(spec.id).toBe("hs");
+  });
+});
+
+describe("referenceLineLayer", () => {
+  it("returns kind=reference-line with given id", () => {
+    const spec = referenceLineLayer("rl");
+    expect(spec.kind).toBe("reference-line");
+    expect(spec.id).toBe("rl");
+  });
+});
+
+describe("poseArrowLayer", () => {
+  it("returns kind=pose-arrow with given id", () => {
+    const spec = poseArrowLayer("pa");
+    expect(spec.kind).toBe("pose-arrow");
+    expect(spec.id).toBe("pa");
+  });
+});
+
+describe("all layer factories", () => {
+  it("each factory returns an object with id, kind, and config properties", () => {
+    const factories = [
+      lineLayer("a"),
+      lineStaticLayer("b"),
+      lidarLayer("c"),
+      axisGridLayer("d"),
+      scatterLayer("e"),
+      areaLayer("f"),
+      stepLayer("g"),
+      barLayer("h"),
+      candlestickLayer("i"),
+      heatmapLayer("j"),
+      eventMarkerLayer("k"),
+      scatterColoredLayer("l"),
+      heatmapStreamLayer("m"),
+      referenceLineLayer("n"),
+      poseArrowLayer("o"),
+    ];
+
+    for (const spec of factories) {
+      expect(spec).toHaveProperty("id");
+      expect(spec).toHaveProperty("kind");
+      expect("config" in spec).toBe(true);
+    }
+  });
+
+  it("each factory preserves the provided id", () => {
+    const id = "unique-test-id";
+    const specs = [
+      lineLayer(id),
+      lineStaticLayer(id),
+      lidarLayer(id),
+      axisGridLayer(id),
+      scatterLayer(id),
+      areaLayer(id),
+      stepLayer(id),
+      barLayer(id),
+      candlestickLayer(id),
+      heatmapLayer(id),
+      eventMarkerLayer(id),
+      scatterColoredLayer(id),
+      heatmapStreamLayer(id),
+      referenceLineLayer(id),
+      poseArrowLayer(id),
+    ];
+
+    for (const spec of specs) {
+      expect(spec.id).toBe(id);
+    }
+  });
+});

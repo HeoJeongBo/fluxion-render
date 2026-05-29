@@ -21,6 +21,8 @@ export interface FakeCtx {
   globalAlpha: number;
   setTransform(...args: unknown[]): void;
   fillRect(...args: unknown[]): void;
+  clearRect(...args: unknown[]): void;
+  strokeRect(...args: unknown[]): void;
   rect(...args: unknown[]): void;
   beginPath(): void;
   closePath(): void;
@@ -29,10 +31,15 @@ export interface FakeCtx {
   stroke(): void;
   fill(): void;
   fillText(...args: unknown[]): void;
+  measureText(text: string): { width: number };
   setLineDash(segments: number[]): void;
   save(): void;
   restore(): void;
   arc(...args: unknown[]): void;
+  scale(...args: unknown[]): void;
+  translate(...args: unknown[]): void;
+  drawImage(...args: unknown[]): void;
+  createLinearGradient(...args: unknown[]): { addColorStop(...a: unknown[]): void };
 }
 
 export function createFakeCtx(): FakeCtx {
@@ -53,6 +60,8 @@ export function createFakeCtx(): FakeCtx {
     globalAlpha: 1,
     setTransform: rec("setTransform"),
     fillRect: rec("fillRect"),
+    clearRect: rec("clearRect"),
+    strokeRect: rec("strokeRect"),
     rect: rec("rect"),
     beginPath: rec("beginPath") as () => void,
     closePath: rec("closePath") as () => void,
@@ -61,10 +70,15 @@ export function createFakeCtx(): FakeCtx {
     stroke: rec("stroke") as () => void,
     fill: rec("fill") as () => void,
     fillText: rec("fillText"),
+    measureText: (_text: string) => ({ width: 50 }),
     setLineDash: rec("setLineDash") as (segments: number[]) => void,
     save: rec("save") as () => void,
     restore: rec("restore") as () => void,
     arc: rec("arc"),
+    scale: rec("scale"),
+    translate: rec("translate"),
+    drawImage: rec("drawImage"),
+    createLinearGradient: (..._args: unknown[]) => ({ addColorStop: rec("addColorStop") }),
   };
 }
 

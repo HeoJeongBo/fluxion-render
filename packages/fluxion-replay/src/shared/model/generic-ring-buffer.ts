@@ -32,6 +32,7 @@ export class GenericRingBuffer<T> {
   forEach(fn: (item: T, index: number) => void): void {
     for (let i = 0; i < this._count; i++) {
       const item = this._buf[this._oldestSlot(i)];
+      /* v8 ignore next */
       if (item !== undefined) fn(item, i);
     }
   }

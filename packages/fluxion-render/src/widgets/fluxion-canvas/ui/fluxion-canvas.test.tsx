@@ -88,4 +88,16 @@ describe("FluxionCanvas", () => {
     );
     expect(onReady).toHaveBeenCalledTimes(1);
   });
+
+  it("renders a single div container when externalAxes is false", () => {
+    const { factory } = makeFakeWorkerFactory();
+    const { container } = render(
+      <FluxionCanvas
+        hostOptions={{ workerFactory: factory }}
+        layers={[]}
+        externalAxes={false}
+      />,
+    );
+    expect(container.querySelectorAll("div")).toHaveLength(1);
+  });
 });

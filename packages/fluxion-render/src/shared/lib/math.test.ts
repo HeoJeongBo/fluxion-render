@@ -1,5 +1,26 @@
 import { describe, expect, it } from "vitest";
-import { niceStep, niceTicks } from "./math";
+import { intervalTicks, niceStep, niceTicks } from "./math";
+
+describe("intervalTicks", () => {
+  it("returns ticks at fixed interval boundaries", () => {
+    expect(intervalTicks(0, 10, 2)).toEqual([0, 2, 4, 6, 8, 10]);
+  });
+
+  it("returns empty for invalid inputs", () => {
+    expect(intervalTicks(5, 5, 1)).toEqual([]);
+    expect(intervalTicks(10, 0, 1)).toEqual([]);
+    expect(intervalTicks(Number.NaN, 10, 1)).toEqual([]);
+    expect(intervalTicks(0, Number.POSITIVE_INFINITY, 1)).toEqual([]);
+    expect(intervalTicks(0, 10, 0)).toEqual([]);
+    expect(intervalTicks(0, 10, -1)).toEqual([]);
+  });
+
+  it("handles non-zero min", () => {
+    const ticks = intervalTicks(1, 5, 1);
+    expect(ticks[0]).toBe(1);
+    expect(ticks[ticks.length - 1]).toBeLessThanOrEqual(5);
+  });
+});
 
 describe("niceStep", () => {
   it("returns round step for order-of-magnitude ranges", () => {

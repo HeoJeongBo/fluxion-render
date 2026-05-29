@@ -450,4 +450,156 @@ describe("Engine", () => {
       engine.dispatch({ op: Op.DISPOSE });
     });
   });
+
+  describe("SET_AXIS_CANVAS", () => {
+    it("renders onto xAxisCanvas and yAxisCanvas after set", () => {
+      const engine = new Engine();
+      const canvas = newCanvas(100, 100);
+      engine.dispatch({ op: Op.INIT, canvas, width: 100, height: 100, dpr: 1 });
+      engine.dispatch({
+        op: Op.ADD_LAYER,
+        id: "axis",
+        kind: "axis-grid",
+        config: { xRange: [0, 10], yRange: [0, 10] },
+      });
+      const xAxisCanvas = newCanvas(100, 30);
+      const yAxisCanvas = newCanvas(60, 100);
+      engine.dispatch({
+        op: Op.SET_AXIS_CANVAS,
+        xAxisCanvas: xAxisCanvas as unknown as OffscreenCanvas,
+        yAxisCanvas: yAxisCanvas as unknown as OffscreenCanvas,
+        xAxisHeight: 30,
+        yAxisWidth: 60,
+      });
+      flushFrame();
+      const xCtx = (xAxisCanvas as unknown as { getContext: () => FakeCtx }).getContext();
+      const yCtx = (yAxisCanvas as unknown as { getContext: () => FakeCtx }).getContext();
+      expect(xCtx.calls.some((c) => c.name === "setTransform")).toBe(true);
+      expect(yCtx.calls.some((c) => c.name === "setTransform")).toBe(true);
+      engine.dispatch({ op: Op.DISPOSE });
+    });
+
+    it("resizes axis canvases when main canvas is resized", () => {
+      const engine = new Engine();
+      const canvas = newCanvas(100, 100);
+      engine.dispatch({ op: Op.INIT, canvas, width: 100, height: 100, dpr: 1 });
+      const xAxisCanvas = newCanvas(100, 30);
+      const yAxisCanvas = newCanvas(60, 100);
+      engine.dispatch({
+        op: Op.SET_AXIS_CANVAS,
+        xAxisCanvas: xAxisCanvas as unknown as OffscreenCanvas,
+        yAxisCanvas: yAxisCanvas as unknown as OffscreenCanvas,
+        xAxisHeight: 30,
+        yAxisWidth: 60,
+      });
+      engine.dispatch({ op: Op.RESIZE, width: 200, height: 150, dpr: 2 });
+      expect(xAxisCanvas.width).toBe(400);
+      expect(yAxisCanvas.height).toBe(300);
+      engine.dispatch({ op: Op.DISPOSE });
+    });
+
+    it("only xAxisCanvas provided — yAxis stays null", () => {
+      const engine = new Engine();
+      const canvas = newCanvas(100, 100);
+      engine.dispatch({ op: Op.INIT, canvas, width: 100, height: 100, dpr: 1 });
+      engine.dispatch({
+        op: Op.ADD_LAYER,
+        id: "axis",
+        kind: "axis-grid",
+        config: { xRange: [0, 10], yRange: [0, 10] },
+      });
+      const xAxisCanvas = newCanvas(100, 30);
+      engine.dispatch({
+        op: Op.SET_AXIS_CANVAS,
+        xAxisCanvas: xAxisCanvas as unknown as OffscreenCanvas,
+        xAxisHeight: 30,
+        yAxisWidth: 60,
+      });
+      flushFrame();
+      const xCtx = (xAxisCanvas as unknown as { getContext: () => FakeCtx }).getContext();
+      expect(xCtx.calls.some((c) => c.name === "setTransform")).toBe(true);
+      engine.dispatch({ op: Op.DISPOSE });
+    });
+  });
+
+  describe("SET_AXIS_STYLE", () => {
+    it("posts axis style fields to the engine and triggers a frame", () => {
+      const engine = new Engine();
+      const canvas = newCanvas(100, 100);
+      engine.dispatch({ op: Op.INIT, canvas, width: 100, height: 100, dpr: 1 });
+      expect(() =>
+        engine.dispatch({
+          op: Op.SET_AXIS_STYLE,
+          color: "#aaa",
+          font: "12px monospace",
+          tickSize: 8,
+          tickMargin: 3,
+          bgColor: "#000",
+        }),
+      ).not.toThrow();
+      flushFrame();
+      engine.dispatch({ op: Op.DISPOSE });
+    });
+  });
+
+  describe("maybeSendTickUpdate (no axis canvases)", () => {
+    it("sends TICK_UPDATE when axis layer is present and no axis canvases", () => {
+      const engine = new Engine();
+      const canvas = newCanvas(100, 100);
+      engine.dispatch({ op: Op.INIT, canvas, width: 100, height: 100, dpr: 1 });
+      engine.dispatch({
+        op: Op.ADD_LAYER,
+        id: "axis",
+        kind: "axis-grid",
+        config: { xRange: [0, 10], yRange: [0, 10] },
+      });
+      expect(() => flushFrame()).not.toThrow();
+      engine.dispatch({ op: Op.DISPOSE });
+    });
+
+    it("does not send TICK_UPDATE when axis canvases are present", () => {
+      const engine = new Engine();
+      const canvas = newCanvas(100, 100);
+      engine.dispatch({ op: Op.INIT, canvas, width: 100, height: 100, dpr: 1 });
+      engine.dispatch({
+        op: Op.ADD_LAYER,
+        id: "axis",
+        kind: "axis-grid",
+        config: { xRange: [0, 10], yRange: [0, 10] },
+      });
+      const xAxisCanvas = newCanvas(100, 30);
+      engine.dispatch({
+        op: Op.SET_AXIS_CANVAS,
+        xAxisCanvas: xAxisCanvas as unknown as OffscreenCanvas,
+        xAxisHeight: 30,
+        yAxisWidth: 60,
+      });
+      expect(() => flushFrame()).not.toThrow();
+      engine.dispatch({ op: Op.DISPOSE });
+    });
+  });
+
+  it("ADD_LAYER with all layer kinds does not throw", () => {
+    const engine = new Engine();
+    const canvas = newCanvas(100, 100);
+    engine.dispatch({ op: Op.INIT, canvas, width: 100, height: 100, dpr: 1 });
+    engine.dispatch({
+      op: Op.ADD_LAYER,
+      id: "axis",
+      kind: "axis-grid",
+      config: { xRange: [0, 10], yRange: [0, 10] },
+    });
+    const kinds = [
+      "lidar", "scatter", "area", "step", "bar", "candlestick",
+      "heatmap", "event-marker", "scatter-colored", "heatmap-stream",
+      "reference-line", "pose-arrow",
+    ] as const;
+    for (const kind of kinds) {
+      expect(() =>
+        engine.dispatch({ op: Op.ADD_LAYER, id: kind, kind }),
+      ).not.toThrow();
+    }
+    flushFrame();
+    engine.dispatch({ op: Op.DISPOSE });
+  });
 });

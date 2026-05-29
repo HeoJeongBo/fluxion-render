@@ -397,6 +397,47 @@ describe("VideoReplayer", () => {
     });
   });
 
+  it("_renderFrame is a no-op when getContext returns null (ctx=null branch)", async () => {
+    await store.writeVideoChunk("cam", "0.chunk", new Uint8Array([1, 2, 3]));
+
+    const origVideoDecoder = globalThis.VideoDecoder;
+    let capturedOutput: ((frame: VideoFrame) => void) | null = null;
+    class CapturingDecoder {
+      state = "unconfigured";
+      constructor(init: { output: (frame: VideoFrame) => void; error: unknown }) {
+        capturedOutput = init.output;
+      }
+      configure(_config: unknown) { this.state = "configured"; }
+      decode(_chunk: unknown) {}
+      async flush() {}
+      close() { this.state = "closed"; }
+    }
+    Object.defineProperty(globalThis, "VideoDecoder", {
+      value: CapturingDecoder, writable: true, configurable: true,
+    });
+
+    // Canvas whose getContext returns null — covers the `if (!ctx) return;` branch
+    const canvas = { getContext: () => null, width: 640, height: 480 } as unknown as HTMLCanvasElement;
+    const replayer = new VideoReplayer({ store, channelId: "cam", outputCanvas: canvas });
+    replayer.feedFrame({
+      channelId: "cam",
+      data: { opfsPath: "video/cam/0.chunk", isKeyframe: true, durationUs: 33333, byteLength: 3, codedWidth: 640, codedHeight: 480 },
+      t: 0,
+    });
+    for (let i = 0; i < 10; i++) await Promise.resolve();
+
+    const frame = { timestamp: 0, duration: null, displayWidth: 640, displayHeight: 480, close: vi.fn() } as unknown as VideoFrame;
+    // Must not throw even though ctx is null
+    expect(() => capturedOutput!(frame)).not.toThrow();
+    // close() should NOT have been called because we returned early
+    expect((frame as unknown as { close: ReturnType<typeof vi.fn> }).close).not.toHaveBeenCalled();
+
+    replayer.dispose();
+    Object.defineProperty(globalThis, "VideoDecoder", {
+      value: origVideoDecoder, writable: true, configurable: true,
+    });
+  });
+
   it("_renderFrame draws into canvas at canvas dimensions without resizing", async () => {
     await store.writeVideoChunk("cam", "0.chunk", new Uint8Array([1, 2, 3]));
 

@@ -72,4 +72,16 @@ describe("useLayerConfig", () => {
     expect(spy).not.toHaveBeenCalled();
     host.dispose();
   });
+
+  it("re-sends after host null reset then reconnects with same config", () => {
+    const { host } = makeHost();
+    const spy = vi.spyOn(host, "configLayer");
+    const { rerender } = render(
+      <Probe host={host} spec={axisGridLayer("axis", { timeWindowMs: 5000 })} />,
+    );
+    rerender(<Probe host={null} spec={axisGridLayer("axis", { timeWindowMs: 5000 })} />);
+    rerender(<Probe host={host} spec={axisGridLayer("axis", { timeWindowMs: 5000 })} />);
+    expect(spy).toHaveBeenCalledTimes(2);
+    host.dispose();
+  });
 });

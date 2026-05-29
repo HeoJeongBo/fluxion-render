@@ -324,4 +324,14 @@ describe("defineWorkerWithState", () => {
     const [call] = selfMock.postMessage.mock.calls;
     expect(call![1]).toEqual([buf]);
   });
+
+  it("posts reply without transfer when none provided (covers else branch)", () => {
+    defineWorkerWithState((_msg, reply) => {
+      reply({ result: 42 });
+    });
+    selfMock.emit({ hostId: "host-1" });
+    const [call] = selfMock.postMessage.mock.calls;
+    expect((call![0] as Record<string, unknown>).result).toBe(42);
+    expect(call![1]).toBeUndefined();
+  });
 });

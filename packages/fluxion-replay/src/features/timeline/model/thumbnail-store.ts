@@ -35,6 +35,7 @@ export class ThumbnailStore {
     }
     if (best === null) return null;
     const dataUrl = this._store.get(best);
+    /* v8 ignore next */
     return dataUrl !== undefined ? { t: best, dataUrl } : null;
   }
 

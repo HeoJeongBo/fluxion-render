@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { Op } from "../../../shared/protocol";
+import { Op, WorkerOp } from "../../../shared/protocol";
 import { FluxionHost } from "./fluxion-host";
 
 interface RecordedPost {
@@ -303,6 +303,170 @@ describe("FluxionHost", () => {
     const second = posts[1].msg as { id: string; latestT?: number };
     expect(second.id).toBe("chart");
     expect(second.latestT).toBe(5000);
+    host.dispose();
+  });
+
+  it("addAxisLayer posts ADD_LAYER with kind axis-grid", () => {
+    const { worker, posts } = makeFakeWorker();
+    const host = new FluxionHost(makeCanvas(), { workerFactory: () => worker });
+    posts.length = 0;
+    host.addAxisLayer("grid", { xRange: [0, 10], yRange: [0, 10] });
+    expect(posts).toHaveLength(1);
+    const msg = posts[0].msg as { op: number; kind: string };
+    expect(msg.op).toBe(Op.ADD_LAYER);
+    expect(msg.kind).toBe("axis-grid");
+    host.dispose();
+  });
+
+  it("typed handle accessors return correct handle types with right ids", () => {
+    const { worker } = makeFakeWorker();
+    const host = new FluxionHost(makeCanvas(), { workerFactory: () => worker });
+    expect(host.line("a").id).toBe("a");
+    expect(host.lineStatic("b").id).toBe("b");
+    expect(host.lidar("c").id).toBe("c");
+    expect(host.scatter("d").id).toBe("d");
+    expect(host.area("e").id).toBe("e");
+    expect(host.step("f").id).toBe("f");
+    expect(host.bar("g").id).toBe("g");
+    expect(host.candlestick("h").id).toBe("h");
+    expect(host.heatmap("i").id).toBe("i");
+    expect(host.eventMarker("j").id).toBe("j");
+    expect(host.scatterColored("k").id).toBe("k");
+    expect(host.heatmapStream("l").id).toBe("l");
+    expect(host.referenceLine("m").id).toBe("m");
+    expect(host.poseArrow("n").id).toBe("n");
+    host.dispose();
+  });
+
+  it("lidar() accessor respects explicit stride", () => {
+    const { worker } = makeFakeWorker();
+    const host = new FluxionHost(makeCanvas(), { workerFactory: () => worker });
+    expect(host.lidar("pts", 2).stride).toBe(2);
+    expect(host.lidar("pts", 3).stride).toBe(3);
+    host.dispose();
+  });
+
+  it("dispose removes the worker message listener", () => {
+    const listeners: { type: string; fn: EventListener }[] = [];
+    const { worker, posts } = makeFakeWorker();
+    const workerWithEvents = {
+      ...worker,
+      addEventListener: (type: string, fn: EventListener) => {
+        listeners.push({ type, fn });
+      },
+      removeEventListener: (type: string, fn: EventListener) => {
+        const idx = listeners.findIndex((l) => l.type === type && l.fn === fn);
+        if (idx >= 0) listeners.splice(idx, 1);
+      },
+    };
+    const host = new FluxionHost(makeCanvas(), { workerFactory: () => workerWithEvents as unknown as Worker });
+    expect(listeners).toHaveLength(1);
+    host.dispose();
+    expect(listeners).toHaveLength(0);
+    posts.length = 0;
+    host.dispose();
+    expect(posts).toHaveLength(0);
+  });
+
+  it("onBoundsChange fires when worker sends BOUNDS_UPDATE", () => {
+    const { worker } = makeFakeWorker();
+    let messageHandler: ((evt: Event) => void) | null = null;
+    const workerWithEvents = {
+      ...worker,
+      addEventListener: (_type: string, fn: EventListener) => {
+        messageHandler = fn as (evt: Event) => void;
+      },
+      removeEventListener: () => {},
+    };
+    const host = new FluxionHost(makeCanvas(), { workerFactory: () => workerWithEvents as unknown as Worker });
+    const received: { yMin: number; yMax: number; latestT: number }[] = [];
+    host.onBoundsChange((yMin, yMax, latestT) => received.push({ yMin, yMax, latestT }));
+    messageHandler!({ data: { op: WorkerOp.BOUNDS_UPDATE, hostId: "x", yMin: -1, yMax: 1, latestT: 500 } } as unknown as Event);
+    expect(received).toHaveLength(1);
+    expect(received[0]).toEqual({ yMin: -1, yMax: 1, latestT: 500 });
+    host.dispose();
+  });
+
+  it("onTickUpdate fires when worker sends TICK_UPDATE", () => {
+    const { worker } = makeFakeWorker();
+    let messageHandler: ((evt: Event) => void) | null = null;
+    const workerWithEvents = {
+      ...worker,
+      addEventListener: (_type: string, fn: EventListener) => {
+        messageHandler = fn as (evt: Event) => void;
+      },
+      removeEventListener: () => {},
+    };
+    const host = new FluxionHost(makeCanvas(), { workerFactory: () => workerWithEvents as unknown as Worker });
+    const received: { xTicks: unknown; yTicks: unknown }[] = [];
+    host.onTickUpdate((xTicks, yTicks) => received.push({ xTicks, yTicks }));
+    const xTicks = [{ value: 0, label: "0", fraction: 0 }];
+    const yTicks = [{ value: 1, label: "1", fraction: 0.5 }];
+    messageHandler!({ data: { op: WorkerOp.TICK_UPDATE, hostId: "x", xTicks, yTicks, xRawValues: [] } } as unknown as Event);
+    expect(received).toHaveLength(1);
+    expect(received[0].xTicks).toBe(xTicks);
+    expect(received[0].yTicks).toBe(yTicks);
+    host.dispose();
+  });
+
+  it("onBoundsChange unsubscribe removes listener", () => {
+    const { worker } = makeFakeWorker();
+    let messageHandler: ((evt: Event) => void) | null = null;
+    const workerWithEvents = {
+      ...worker,
+      addEventListener: (_type: string, fn: EventListener) => {
+        messageHandler = fn as (evt: Event) => void;
+      },
+      removeEventListener: () => {},
+    };
+    const host = new FluxionHost(makeCanvas(), { workerFactory: () => workerWithEvents as unknown as Worker });
+    let count = 0;
+    const unsub = host.onBoundsChange(() => { count++; });
+    messageHandler!({ data: { op: WorkerOp.BOUNDS_UPDATE, hostId: "x", yMin: 0, yMax: 1, latestT: 0 } } as unknown as Event);
+    expect(count).toBe(1);
+    unsub();
+    messageHandler!({ data: { op: WorkerOp.BOUNDS_UPDATE, hostId: "x", yMin: 0, yMax: 1, latestT: 0 } } as unknown as Event);
+    expect(count).toBe(1);
+    host.dispose();
+  });
+
+  it("onTickUpdate unsubscribe removes listener", () => {
+    const { worker } = makeFakeWorker();
+    let messageHandler: ((evt: Event) => void) | null = null;
+    const workerWithEvents = {
+      ...worker,
+      addEventListener: (_type: string, fn: EventListener) => {
+        messageHandler = fn as (evt: Event) => void;
+      },
+      removeEventListener: () => {},
+    };
+    const host = new FluxionHost(makeCanvas(), { workerFactory: () => workerWithEvents as unknown as Worker });
+    let count = 0;
+    const unsub = host.onTickUpdate(() => { count++; });
+    messageHandler!({ data: { op: WorkerOp.TICK_UPDATE, hostId: "x", xTicks: [], yTicks: [], xRawValues: [] } } as unknown as Event);
+    expect(count).toBe(1);
+    unsub();
+    messageHandler!({ data: { op: WorkerOp.TICK_UPDATE, hostId: "x", xTicks: [], yTicks: [], xRawValues: [] } } as unknown as Event);
+    expect(count).toBe(1);
+    host.dispose();
+  });
+
+  it("ignores unknown worker message op codes", () => {
+    const { worker } = makeFakeWorker();
+    let messageHandler: ((evt: Event) => void) | null = null;
+    const workerWithEvents = {
+      ...worker,
+      addEventListener: (_type: string, fn: EventListener) => {
+        messageHandler = fn as (evt: Event) => void;
+      },
+      removeEventListener: () => {},
+    };
+    const host = new FluxionHost(makeCanvas(), { workerFactory: () => workerWithEvents as unknown as Worker });
+    expect(() => {
+      messageHandler!({ data: { op: 999 } } as unknown as Event);
+      messageHandler!({ data: null } as unknown as Event);
+      messageHandler!({ data: "string" } as unknown as Event);
+    }).not.toThrow();
     host.dispose();
   });
 });

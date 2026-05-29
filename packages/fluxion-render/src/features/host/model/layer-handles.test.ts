@@ -1,8 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   AreaLayerHandle,
+  BarLayerHandle,
   CandlestickLayerHandle,
+  EventMarkerHandle,
   type FluxionDataSink,
+  HeatmapLayerHandle,
+  HeatmapStreamHandle,
   LidarLayerHandle,
   LineLayerHandle,
   LineStaticLayerHandle,
@@ -208,6 +212,298 @@ describe("PoseArrowHandle", () => {
   it("pushRaw forwards the buffer unchanged", () => {
     const { sink, pushes } = makeFakeSink();
     const h = new PoseArrowHandle(sink, "pose");
+    const raw = new Float32Array([1, 2, 3]);
+    h.pushRaw(raw);
+    expect(pushes[0].data).toBe(raw);
+  });
+});
+
+describe("LineStaticLayerHandle", () => {
+  it("pushRaw forwards the buffer unchanged", () => {
+    const { sink, pushes } = makeFakeSink();
+    const h = new LineStaticLayerHandle(sink, "plot");
+    const raw = new Float32Array([1, 2, 3]);
+    h.pushRaw(raw);
+    expect(pushes[0].data).toBe(raw);
+  });
+});
+
+describe("ScatterLayerHandle", () => {
+  it("push encodes a single [t,y] sample", () => {
+    const { sink, pushes } = makeFakeSink();
+    const h = new ScatterLayerHandle(sink, "sc");
+    h.push({ t: 10, y: 0.3 });
+    expect(pushes).toHaveLength(1);
+    expectF32Close(pushes[0].data, [10, 0.3]);
+  });
+
+  it("pushBatch encodes multiple samples", () => {
+    const { sink, pushes } = makeFakeSink();
+    const h = new ScatterLayerHandle(sink, "sc");
+    h.pushBatch([{ t: 1, y: 0.1 }, { t: 2, y: 0.2 }]);
+    expect(pushes).toHaveLength(1);
+    expectF32Close(pushes[0].data, [1, 0.1, 2, 0.2]);
+  });
+
+  it("pushBatch is a no-op for empty arrays", () => {
+    const { sink, pushes } = makeFakeSink();
+    const h = new ScatterLayerHandle(sink, "sc");
+    h.pushBatch([]);
+    expect(pushes).toHaveLength(0);
+  });
+
+  it("pushRaw forwards the buffer unchanged", () => {
+    const { sink, pushes } = makeFakeSink();
+    const h = new ScatterLayerHandle(sink, "sc");
+    const raw = new Float32Array([1, 2]);
+    h.pushRaw(raw);
+    expect(pushes[0].data).toBe(raw);
+  });
+});
+
+describe("AreaLayerHandle", () => {
+  it("push encodes a single [t,y] sample", () => {
+    const { sink, pushes } = makeFakeSink();
+    const h = new AreaLayerHandle(sink, "area");
+    h.push({ t: 5, y: 0.7 });
+    expectF32Close(pushes[0].data, [5, 0.7]);
+  });
+
+  it("pushBatch encodes multiple samples", () => {
+    const { sink, pushes } = makeFakeSink();
+    const h = new AreaLayerHandle(sink, "area");
+    h.pushBatch([{ t: 1, y: 0.1 }, { t: 2, y: 0.2 }]);
+    expectF32Close(pushes[0].data, [1, 0.1, 2, 0.2]);
+  });
+
+  it("pushBatch is a no-op for empty arrays", () => {
+    const { sink, pushes } = makeFakeSink();
+    const h = new AreaLayerHandle(sink, "area");
+    h.pushBatch([]);
+    expect(pushes).toHaveLength(0);
+  });
+
+  it("pushRaw forwards the buffer unchanged", () => {
+    const { sink, pushes } = makeFakeSink();
+    const h = new AreaLayerHandle(sink, "area");
+    const raw = new Float32Array([1, 2]);
+    h.pushRaw(raw);
+    expect(pushes[0].data).toBe(raw);
+  });
+});
+
+describe("StepLayerHandle", () => {
+  it("push encodes a single [t,y] sample", () => {
+    const { sink, pushes } = makeFakeSink();
+    const h = new StepLayerHandle(sink, "step");
+    h.push({ t: 3, y: 0.9 });
+    expectF32Close(pushes[0].data, [3, 0.9]);
+  });
+
+  it("pushBatch encodes multiple samples", () => {
+    const { sink, pushes } = makeFakeSink();
+    const h = new StepLayerHandle(sink, "step");
+    h.pushBatch([{ t: 10, y: 1 }, { t: 20, y: 2 }]);
+    expect(Array.from(pushes[0].data)).toEqual([10, 1, 20, 2]);
+  });
+
+  it("pushBatch is a no-op for empty arrays", () => {
+    const { sink, pushes } = makeFakeSink();
+    const h = new StepLayerHandle(sink, "step");
+    h.pushBatch([]);
+    expect(pushes).toHaveLength(0);
+  });
+
+  it("pushRaw forwards the buffer unchanged", () => {
+    const { sink, pushes } = makeFakeSink();
+    const h = new StepLayerHandle(sink, "step");
+    const raw = new Float32Array([5, 6]);
+    h.pushRaw(raw);
+    expect(pushes[0].data).toBe(raw);
+  });
+});
+
+describe("BarLayerHandle", () => {
+  it("setXY interleaves xy points", () => {
+    const { sink, pushes } = makeFakeSink();
+    const h = new BarLayerHandle(sink, "bar");
+    h.setXY([{ x: 1, y: 2 }, { x: 3, y: 4 }]);
+    expect(Array.from(pushes[0].data)).toEqual([1, 2, 3, 4]);
+  });
+
+  it("setY writes a flat y array", () => {
+    const { sink, pushes } = makeFakeSink();
+    const h = new BarLayerHandle(sink, "bar");
+    h.setY([10, 20, 30]);
+    expect(Array.from(pushes[0].data)).toEqual([10, 20, 30]);
+  });
+
+  it("pushRaw forwards the buffer unchanged", () => {
+    const { sink, pushes } = makeFakeSink();
+    const h = new BarLayerHandle(sink, "bar");
+    const raw = new Float32Array([7, 8]);
+    h.pushRaw(raw);
+    expect(pushes[0].data).toBe(raw);
+  });
+});
+
+describe("CandlestickLayerHandle", () => {
+  it("push encodes a single [t,open,high,low,close] sample", () => {
+    const { sink, pushes } = makeFakeSink();
+    const h = new CandlestickLayerHandle(sink, "cs");
+    h.push({ t: 100, open: 1, high: 3, low: 0.5, close: 2 });
+    expect(Array.from(pushes[0].data)).toEqual([100, 1, 3, 0.5, 2]);
+  });
+
+  it("pushBatch encodes multiple samples", () => {
+    const { sink, pushes } = makeFakeSink();
+    const h = new CandlestickLayerHandle(sink, "cs");
+    h.pushBatch([
+      { t: 1, open: 1, high: 2, low: 0, close: 1.5 },
+      { t: 2, open: 2, high: 3, low: 1, close: 2.5 },
+    ]);
+    expect(pushes[0].data.length).toBe(10);
+    expect(pushes[0].data[0]).toBe(1);
+    expect(pushes[0].data[5]).toBe(2);
+  });
+
+  it("pushBatch is a no-op for empty arrays", () => {
+    const { sink, pushes } = makeFakeSink();
+    const h = new CandlestickLayerHandle(sink, "cs");
+    h.pushBatch([]);
+    expect(pushes).toHaveLength(0);
+  });
+
+  it("pushRaw forwards the buffer unchanged", () => {
+    const { sink, pushes } = makeFakeSink();
+    const h = new CandlestickLayerHandle(sink, "cs");
+    const raw = new Float32Array(5);
+    h.pushRaw(raw);
+    expect(pushes[0].data).toBe(raw);
+  });
+});
+
+describe("HeatmapLayerHandle", () => {
+  it("setGrid encodes [x,y,value] triples", () => {
+    const { sink, pushes } = makeFakeSink();
+    const h = new HeatmapLayerHandle(sink, "hm");
+    h.setGrid([
+      { x: 0, y: 0, value: 0.1 },
+      { x: 1, y: 1, value: 0.9 },
+    ]);
+    expect(pushes[0].data.length).toBe(6);
+    expect(pushes[0].data[0]).toBeCloseTo(0);
+    expect(pushes[0].data[2]).toBeCloseTo(0.1);
+    expect(pushes[0].data[5]).toBeCloseTo(0.9);
+  });
+
+  it("pushRaw forwards the buffer unchanged", () => {
+    const { sink, pushes } = makeFakeSink();
+    const h = new HeatmapLayerHandle(sink, "hm");
+    const raw = new Float32Array(6);
+    h.pushRaw(raw);
+    expect(pushes[0].data).toBe(raw);
+  });
+});
+
+describe("EventMarkerHandle", () => {
+  it("setEvents encodes [t,severity] pairs", () => {
+    const { sink, pushes } = makeFakeSink();
+    const h = new EventMarkerHandle(sink, "ev");
+    h.setEvents([{ t: 100 }, { t: 200, severity: 2 }]);
+    expect(Array.from(pushes[0].data)).toEqual([100, 0, 200, 2]);
+  });
+
+  it("clearEvents pushes an empty Float32Array", () => {
+    const { sink, pushes } = makeFakeSink();
+    const h = new EventMarkerHandle(sink, "ev");
+    h.clearEvents();
+    expect(pushes).toHaveLength(1);
+    expect(pushes[0].data.length).toBe(0);
+  });
+
+  it("pushRaw forwards the buffer unchanged", () => {
+    const { sink, pushes } = makeFakeSink();
+    const h = new EventMarkerHandle(sink, "ev");
+    const raw = new Float32Array([1, 0]);
+    h.pushRaw(raw);
+    expect(pushes[0].data).toBe(raw);
+  });
+});
+
+describe("ScatterColoredHandle", () => {
+  it("push encodes [t,y,colorValue,size] with defaults", () => {
+    const { sink, pushes } = makeFakeSink();
+    const h = new ScatterColoredHandle(sink, "sc");
+    h.push({ t: 10, y: 0.5 });
+    expect(pushes[0].data.length).toBe(4);
+    expect(pushes[0].data[0]).toBeCloseTo(10);
+    expect(pushes[0].data[1]).toBeCloseTo(0.5);
+    expect(pushes[0].data[2]).toBeCloseTo(0.5);
+    expect(pushes[0].data[3]).toBeCloseTo(0.5);
+  });
+
+  it("push uses provided colorValue and size", () => {
+    const { sink, pushes } = makeFakeSink();
+    const h = new ScatterColoredHandle(sink, "sc");
+    h.push({ t: 5, y: 1, colorValue: 0.2, size: 0.8 });
+    expect(pushes[0].data[2]).toBeCloseTo(0.2);
+    expect(pushes[0].data[3]).toBeCloseTo(0.8);
+  });
+
+  it("pushBatch encodes multiple samples", () => {
+    const { sink, pushes } = makeFakeSink();
+    const h = new ScatterColoredHandle(sink, "sc");
+    h.pushBatch([
+      { t: 1, y: 0.1, colorValue: 0.1, size: 0.1 },
+      { t: 2, y: 0.2, colorValue: 0.2, size: 0.2 },
+    ]);
+    expect(pushes[0].data.length).toBe(8);
+    expect(pushes[0].data[0]).toBeCloseTo(1);
+    expect(pushes[0].data[4]).toBeCloseTo(2);
+  });
+
+  it("pushBatch is a no-op for empty arrays", () => {
+    const { sink, pushes } = makeFakeSink();
+    const h = new ScatterColoredHandle(sink, "sc");
+    h.pushBatch([]);
+    expect(pushes).toHaveLength(0);
+  });
+
+  it("pushRaw forwards the buffer unchanged", () => {
+    const { sink, pushes } = makeFakeSink();
+    const h = new ScatterColoredHandle(sink, "sc");
+    const raw = new Float32Array(4);
+    h.pushRaw(raw);
+    expect(pushes[0].data).toBe(raw);
+  });
+});
+
+describe("HeatmapStreamHandle", () => {
+  it("pushColumn encodes [t, ...values] from number array", () => {
+    const { sink, pushes } = makeFakeSink();
+    const h = new HeatmapStreamHandle(sink, "hs");
+    h.pushColumn(1000, [0.1, 0.5, 0.9]);
+    expect(pushes[0].data.length).toBe(4);
+    expect(pushes[0].data[0]).toBeCloseTo(1000);
+    expect(pushes[0].data[1]).toBeCloseTo(0.1);
+    expect(pushes[0].data[3]).toBeCloseTo(0.9);
+  });
+
+  it("pushColumn encodes [t, ...values] from Float32Array", () => {
+    const { sink, pushes } = makeFakeSink();
+    const h = new HeatmapStreamHandle(sink, "hs");
+    const vals = new Float32Array([0.2, 0.4, 0.6]);
+    h.pushColumn(500, vals);
+    expect(pushes[0].data.length).toBe(4);
+    expect(pushes[0].data[0]).toBeCloseTo(500);
+    expect(pushes[0].data[1]).toBeCloseTo(0.2);
+    expect(pushes[0].data[3]).toBeCloseTo(0.6);
+  });
+
+  it("pushRaw forwards the buffer unchanged", () => {
+    const { sink, pushes } = makeFakeSink();
+    const h = new HeatmapStreamHandle(sink, "hs");
     const raw = new Float32Array([1, 2, 3]);
     h.pushRaw(raw);
     expect(pushes[0].data).toBe(raw);

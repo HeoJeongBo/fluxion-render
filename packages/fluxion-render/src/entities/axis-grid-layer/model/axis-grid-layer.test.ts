@@ -305,4 +305,155 @@ describe("AxisGridLayer", () => {
       expect(ctx.calls.filter((c) => c.name === "fillText").length).toBeGreaterThan(0);
     });
   });
+
+  describe("yMode=auto degenerate yRange fallback", () => {
+    it("falls back to [-1,1] when yRange is degenerate (min==max) and no observations", () => {
+      const layer = new AxisGridLayer("axis");
+      layer.setConfig({ xRange: [0, 10], yMode: "auto", yRange: [5, 5] });
+      const v = makeViewport();
+      frame(layer, v);
+      expect(v.bounds.yMin).toBe(-1);
+      expect(v.bounds.yMax).toBe(1);
+    });
+  });
+
+  describe("drawXAxis", () => {
+    it("draws tick marks and labels onto an axis canvas", () => {
+      const layer = new AxisGridLayer("axis");
+      layer.setConfig({ xRange: [0, 10], yRange: [0, 10] });
+      const v = makeViewport();
+      frame(layer, v);
+      const ctx = createFakeCtx();
+      layer.drawXAxis(ctx as unknown as OffscreenCanvasRenderingContext2D, 200, 30, {});
+      expect(ctx.calls.some((c) => c.name === "clearRect")).toBe(true);
+      expect(ctx.calls.some((c) => c.name === "stroke")).toBe(true);
+      expect(ctx.calls.some((c) => c.name === "fillText")).toBe(true);
+    });
+
+    it("skips tick strokes when tickSize=0", () => {
+      const layer = new AxisGridLayer("axis");
+      layer.setConfig({ xRange: [0, 10], yRange: [0, 10] });
+      const v = makeViewport();
+      frame(layer, v);
+      const ctx = createFakeCtx();
+      layer.drawXAxis(ctx as unknown as OffscreenCanvasRenderingContext2D, 200, 30, { tickSize: 0 });
+      expect(ctx.calls.some((c) => c.name === "stroke")).toBe(false);
+      expect(ctx.calls.some((c) => c.name === "fillText")).toBe(true);
+    });
+
+    it("uses xTickIntervalMs for tick positions", () => {
+      const layer = new AxisGridLayer("axis");
+      layer.setConfig({ xRange: [0, 5000], yRange: [0, 1], xTickIntervalMs: 1000 });
+      const v = makeViewport();
+      frame(layer, v);
+      const ctx = createFakeCtx();
+      layer.drawXAxis(ctx as unknown as OffscreenCanvasRenderingContext2D, 200, 30, {});
+      expect(ctx.calls.some((c) => c.name === "fillText")).toBe(true);
+    });
+
+    it("applies bgColor style override when provided", () => {
+      const layer = new AxisGridLayer("axis");
+      layer.setConfig({ xRange: [0, 10], yRange: [0, 10] });
+      const v = makeViewport();
+      frame(layer, v);
+      const ctx = createFakeCtx();
+      layer.drawXAxis(ctx as unknown as OffscreenCanvasRenderingContext2D, 200, 30, {
+        color: "#aaa",
+        font: "12px mono",
+        tickSize: 4,
+        tickMargin: 2,
+      });
+      expect(ctx.calls.some((c) => c.name === "fillText")).toBe(true);
+    });
+  });
+
+  describe("drawYAxis", () => {
+    it("draws tick marks and labels onto a y-axis canvas", () => {
+      const layer = new AxisGridLayer("axis");
+      layer.setConfig({ xRange: [0, 10], yRange: [0, 10] });
+      const v = makeViewport();
+      frame(layer, v);
+      const ctx = createFakeCtx();
+      layer.drawYAxis(ctx as unknown as OffscreenCanvasRenderingContext2D, 60, 200, {});
+      expect(ctx.calls.some((c) => c.name === "clearRect")).toBe(true);
+      expect(ctx.calls.some((c) => c.name === "stroke")).toBe(true);
+      expect(ctx.calls.some((c) => c.name === "fillText")).toBe(true);
+    });
+
+    it("skips tick strokes when tickSize=0", () => {
+      const layer = new AxisGridLayer("axis");
+      layer.setConfig({ xRange: [0, 10], yRange: [0, 10] });
+      const v = makeViewport();
+      frame(layer, v);
+      const ctx = createFakeCtx();
+      layer.drawYAxis(ctx as unknown as OffscreenCanvasRenderingContext2D, 60, 200, { tickSize: 0 });
+      expect(ctx.calls.some((c) => c.name === "stroke")).toBe(false);
+      expect(ctx.calls.some((c) => c.name === "fillText")).toBe(true);
+    });
+
+    it("applies yPadPx to offset the usable area", () => {
+      const layer = new AxisGridLayer("axis");
+      layer.setConfig({ xRange: [0, 10], yRange: [0, 10] });
+      const v = makeViewport();
+      frame(layer, v);
+      const ctxNoPad = createFakeCtx();
+      const ctxPad = createFakeCtx();
+      layer.drawYAxis(ctxNoPad as unknown as OffscreenCanvasRenderingContext2D, 60, 200, {}, 0);
+      layer.drawYAxis(ctxPad as unknown as OffscreenCanvasRenderingContext2D, 60, 200, {}, 20);
+      const yNoPad = ctxNoPad.calls.filter((c) => c.name === "fillText").map((c) => c.args[2] as number);
+      const yPad = ctxPad.calls.filter((c) => c.name === "fillText").map((c) => c.args[2] as number);
+      expect(yNoPad.length).toBe(yPad.length);
+      expect(yNoPad[0]).not.toBe(yPad[0]);
+    });
+
+    it("handles degenerate ySpan=0 without dividing by zero", () => {
+      const layer = new AxisGridLayer("axis");
+      layer.setConfig({ xRange: [0, 1], yRange: [5, 5] });
+      const v = makeViewport();
+      frame(layer, v);
+      const ctx = createFakeCtx();
+      expect(() =>
+        layer.drawYAxis(ctx as unknown as OffscreenCanvasRenderingContext2D, 60, 200, {}),
+      ).not.toThrow();
+    });
+  });
+
+  describe("computeTicksForExport", () => {
+    it("returns xTicks, yTicks with value/label/fraction", () => {
+      const layer = new AxisGridLayer("axis");
+      layer.setConfig({ xRange: [0, 10], yRange: [0, 10] });
+      const v = makeViewport();
+      frame(layer, v);
+      const { xTicks, yTicks, xRawValues } = layer.computeTicksForExport();
+      expect(xTicks.length).toBeGreaterThan(0);
+      expect(yTicks.length).toBeGreaterThan(0);
+      expect(xTicks[0]).toHaveProperty("value");
+      expect(xTicks[0]).toHaveProperty("label");
+      expect(xTicks[0]).toHaveProperty("fraction");
+      expect(xRawValues).toEqual([]);
+    });
+
+    it("populates xRawValues and clears labels when xTickFormat is a function", () => {
+      const layer = new AxisGridLayer("axis");
+      layer.setConfig({
+        xRange: [0, 10],
+        yRange: [0, 10],
+        xTickFormat: (v) => `${v}!`,
+      });
+      const v = makeViewport();
+      frame(layer, v);
+      const { xTicks, xRawValues } = layer.computeTicksForExport();
+      expect(xRawValues.length).toBeGreaterThan(0);
+      expect(xTicks.every((t) => t.label === "")).toBe(true);
+    });
+
+    it("uses xTickIntervalMs ticks for export", () => {
+      const layer = new AxisGridLayer("axis");
+      layer.setConfig({ xRange: [0, 3000], yRange: [0, 1], xTickIntervalMs: 1000 });
+      const v = makeViewport();
+      frame(layer, v);
+      const { xTicks } = layer.computeTicksForExport();
+      expect(xTicks.some((t) => t.value === 1000 || t.value === 2000)).toBe(true);
+    });
+  });
 });
