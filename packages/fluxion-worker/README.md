@@ -313,12 +313,13 @@ const pool = new WorkerPool<TMsg>({
 });
 ```
 
-| Method | Description |
-|--------|-------------|
+| Method / Property | Description |
+|-------------------|-------------|
 | `pool.acquire()` | Returns a `WorkerHandle` bound to the least-busy worker |
 | `pool.dispatch(msg, opts?, transfer?)` | One-liner: acquire → request → release |
 | `pool.onError(callback)` | Global error handler for fire-and-forget errors. Returns an `off` fn |
 | `pool.stats()` | `{ size, hostCounts, leastBusyIndex, totalActive }` |
+| `pool.isDisposed` | `true` if `dispose()` has been called on this pool |
 | `pool.dispose()` | Terminates all workers and cleans up listeners |
 
 **Global error handler** — catches errors from fire-and-forget `postMessage` calls that would otherwise be silently dropped:

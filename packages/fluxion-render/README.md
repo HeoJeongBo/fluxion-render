@@ -578,7 +578,7 @@ For high-frequency raw sensor data (200Hz+), you can bypass the default `HostMsg
 
 ### `"@heojeongbo/fluxion-render/worker"` sub-entry
 
-Exports `Engine`, `Op`, `defineWorker`, `defineWorkerWithState`, and all associated types:
+Exports `Engine`, `Op`, `defineWorker`, `defineWorkerWithState`, and all associated types. Also exports pool-aware message types for custom pool workers:
 
 ```ts
 import {
@@ -587,6 +587,13 @@ import {
   defineWorkerWithState,
   type HostMsg,
   type StreamDataMsg,
+} from "@heojeongbo/fluxion-render/worker";
+
+// Pool-aware types — used in custom pool worker scripts
+import type {
+  FluxionPoolStreamMsg,
+  PoolInitMsg,
+  PoolDisposeMsg,
 } from "@heojeongbo/fluxion-render/worker";
 ```
 
@@ -648,7 +655,101 @@ setInterval(() => {
 }, dtMs);
 ```
 
-**`host.emitStream(id, buffer, length)`** — transfers `buffer` to the worker's `streamHandler`. After the call, `buffer` is detached and must not be read. Only meaningful when `workerFactory` is set (solo mode). For pool mode, use `FluxionWorkerHandle.emitStream()`.
+**`host.emitStream(id, buffer, length)`** — transfers `buffer` to the worker's `streamHandler`. After the call, `buffer` is detached and must not be read. Only meaningful when `workerFactory` is set (solo mode). For pool mode, use `pool.broadcastStream()` described below.
+
+---
+
+### Pool fan-out stream (1 worker, N canvases, 1 decode)
+
+When one pool worker serves many canvases, send a single encoded packet and decode it **once** in the worker — not once per canvas. This is the most efficient pattern for high-frequency multi-channel sensor data.
+
+**How it works:**
+1. Create a `size: 1` pool with a pool-aware custom worker
+2. Pass the pool to every `<FluxionCanvas>` via `hostOptions={{ pool }}`
+3. In `onReady`, capture each `host.hostId` (unique Engine ID in the worker)
+4. Call `pool.broadcastStream(targets, buffer, length)` — groups targets by worker, one transfer per worker
+
+**Pool-aware worker script:**
+
+```ts
+import { Engine, Op } from "@heojeongbo/fluxion-render/worker";
+import type {
+  FluxionPoolStreamMsg, HostMsg, PoolInitMsg, PoolDisposeMsg,
+} from "@heojeongbo/fluxion-render/worker";
+
+const engines = new Map<string, Engine>();
+
+self.onmessage = (e: MessageEvent) => {
+  const msg = e.data as HostMsg | FluxionPoolStreamMsg | { mode?: string };
+
+  if ("op" in msg && msg.op === Op.POOL_INIT) {
+    const m = msg as PoolInitMsg;
+    const engine = new Engine();
+    engines.set(m.hostId, engine);
+    engine.dispatch({ op: Op.INIT, canvas: m.canvas, width: m.width,
+                      height: m.height, dpr: m.dpr, bgColor: m.bgColor, hostId: m.hostId });
+    return;
+  }
+
+  if ("op" in msg && msg.op === Op.POOL_DISPOSE) {
+    const m = msg as PoolDisposeMsg;
+    engines.get(m.hostId)?.dispatch({ op: Op.DISPOSE });
+    engines.delete(m.hostId);
+    return;
+  }
+
+  if ((msg as { mode?: string }).mode === "pool-stream") {
+    const s = msg as FluxionPoolStreamMsg;
+    const raw = new Float32Array(s.buffer, 0, s.length);
+    // Decode once — wire format: [timestamp_us: f32, raw_i16: f32] per sample
+    const sampleCount = s.length >> 1;
+    const decoded = new Float32Array(sampleCount * 2);
+    for (let i = 0; i < sampleCount; i++) {
+      decoded[i * 2]     = raw[i * 2]! / 1000;      // µs → ms
+      decoded[i * 2 + 1] = raw[i * 2 + 1]! / 32767; // raw → [-1, 1]
+    }
+    // Fan-out to N engines
+    for (const { hostId, layerId } of s.targets) {
+      engines.get(hostId)?.pushRaw(layerId, decoded);
+    }
+    return;
+  }
+
+  // Standard HostMsg — route by hostId
+  const hostMsg = msg as HostMsg & { hostId?: string };
+  engines.get(hostMsg.hostId ?? "__solo__")?.dispatch(hostMsg);
+};
+```
+
+**Main thread (React):**
+
+```tsx
+const pool = useFluxionWorkerPool({
+  size: 1,
+  workerFactory: () =>
+    new Worker(new URL("./my-pool-worker.ts", import.meta.url), { type: "module" }),
+});
+
+const hostsRef = useRef<(FluxionHost | null)[]>(Array.from({ length: N }, () => null));
+
+// In each chart's onReady:
+<FluxionCanvas
+  hostOptions={{ pool }}
+  onReady={(host) => { hostsRef.current[i] = host; }}
+  ...
+/>
+
+// Send loop — one call per channel, decode happens once in the worker
+pool.broadcastStream(
+  [{ hostId: hostsRef.current[i]!.hostId, layerId: "sensor" }],
+  buf.buffer,
+  buf.length,
+);
+```
+
+**`pool.broadcastStream(targets, buffer, length)`** — groups `targets` by worker and sends one `pool-stream` message per worker. With `size: 1`, the original `buffer` is transferred (zero-copy, no copies). With `size > 1`, all but the last worker receive a `buffer.slice(0)` copy.
+
+**`host.hostId`** — the unique ID that identifies this host's Engine inside the worker. Use it to build the `targets` array for `broadcastStream`.
 
 ---
 
@@ -663,6 +764,7 @@ FluxionHost                          FluxionWorkerPool
   │──ADD_LAYER ──────────────────────►│    LayerStack
   │──DATA (Float32Array transfer) ───►│      LineChartLayer
   │──emitStream (ArrayBuffer) ────────►│      streamHandler → pushRaw()
+  │──broadcastStream (pool-stream) ───►│  Engine × N  (decode once, fan-out)
   │──RESIZE ──────────────────────────►│      LidarScatterLayer
   │──DISPOSE ─────────────────────────►│      AxisGridLayer
                                        │
@@ -675,6 +777,7 @@ FluxionHost                          FluxionWorkerPool
 - `ArrayBuffer` is transferred (not copied) on every `pushData` call
 - The Scheduler only renders when data changes (`markDirty()`)
 - Multiple engines share one worker via `hostId` routing
+- `pool.broadcastStream()` with `size: 1` decodes once and fans out to N engines — ideal for multi-channel sensor dashboards
 
 ---
 
