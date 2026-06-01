@@ -1,5 +1,12 @@
 # Changelog
 
+# [0.4.0](https://github-personal/HeoJeongBo/fluxion-render/compare/fluxion-worker-v0.3.1...fluxion-worker-v0.4.0) (2026-06-01)
+
+
+### Features
+
+* **render,worker,examples:** add custom worker stream pattern and stream mode ([952aba3](https://github-personal/HeoJeongBo/fluxion-render/commit/952aba389ced294b4ff488dfcef02c73e7589b07))
+
 ## [0.3.1](https://github-personal/HeoJeongBo/fluxion-render/compare/fluxion-worker-v0.3.0...fluxion-worker-v0.3.1) (2026-06-01)
 
 
