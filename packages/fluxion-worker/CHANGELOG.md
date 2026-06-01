@@ -1,5 +1,9 @@
 # Changelog
 
+* fix(render,worker): fix "WorkerPool has been disposed" in React StrictMode (75bd076)
+* feat(render,worker,examples): add pool-level fan-out stream API (6342d1b)
+* chore: release @heojeongbo/fluxion-render v0.11.0 (a05f392)
+
 # [0.4.0](https://github-personal/HeoJeongBo/fluxion-render/compare/fluxion-worker-v0.3.1...fluxion-worker-v0.4.0) (2026-06-01)
 
 
