@@ -1,5 +1,7 @@
 # Changelog
 
+## [0.7.2](https://github-personal/HeoJeongBo/fluxion-render/compare/fluxion-replay-v0.7.1...fluxion-replay-v0.7.2) (2026-06-01)
+
 ## [0.7.1](https://github-personal/HeoJeongBo/fluxion-render/compare/fluxion-replay-v0.7.0...fluxion-replay-v0.7.1) (2026-05-27)
 
 
