@@ -5,6 +5,7 @@ import {
   FluxionTable,
   lineLayer,
   useFluxionStream,
+  useTimeOrigin,
 } from "@heojeongbo/fluxion-render/react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -47,7 +48,7 @@ const COLUMNS: import("@heojeongbo/fluxion-render/react").FluxionTableColumn<Sen
 ];
 
 export function TableDemoPage() {
-  const timeOrigin = useMemo(() => Date.now(), []);
+  const timeOrigin = useTimeOrigin();
   const [host, setHost] = useState<FluxionHost | null>(null);
 
   const layers = useMemo(

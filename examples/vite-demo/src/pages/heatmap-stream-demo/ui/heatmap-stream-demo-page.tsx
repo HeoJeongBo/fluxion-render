@@ -5,6 +5,7 @@ import {
   heatmapStreamLayer,
   useFluxionStream,
   useLayerConfig,
+  useTimeOrigin,
 } from "@heojeongbo/fluxion-render/react";
 import { useMemo, useState } from "react";
 import { THEME } from "../../../shared/ui/theme";
@@ -31,7 +32,7 @@ function generateColumn(tMs: number): Float32Array {
 }
 
 export function HeatmapStreamDemoPage() {
-  const timeOrigin = useMemo(() => Date.now(), []);
+  const timeOrigin = useTimeOrigin();
   const [host, setHost] = useState<FluxionHost | null>(null);
   const [colormap, setColormap] = useState<ColormapOption>("viridis");
 

@@ -4,6 +4,7 @@ import {
   FluxionCanvas,
   lineLayer,
   useFluxionStream,
+  useTimeOrigin,
 } from "@heojeongbo/fluxion-render/react";
 import { useMemo, useState } from "react";
 import { generateFloat32StampedBatch, stampToMs } from "../../../shared/lib/test-data";
@@ -27,7 +28,7 @@ const COLORS = [
 function MiniChart({ index }: { index: number }) {
   const color = COLORS[index % COLORS.length]!;
   const freqHz = 0.5 + (index % 7) * 0.3;
-  const timeOrigin = useMemo(() => Date.now(), []);
+  const timeOrigin = useTimeOrigin();
   const [host, setHost] = useState<FluxionHost | null>(null);
 
   const layers = useMemo(

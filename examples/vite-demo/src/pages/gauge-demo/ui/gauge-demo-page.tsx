@@ -6,6 +6,7 @@ import {
   lineLayer,
   useFluxionStream,
   useLayerConfig,
+  useTimeOrigin,
 } from "@heojeongbo/fluxion-render/react";
 import { useMemo, useState } from "react";
 import { generateFloat32StampedMessage, stampToMs } from "../../../shared/lib/test-data";
@@ -40,7 +41,7 @@ function ThresholdLegend() {
 }
 
 export function GaugeDemoPage() {
-  const timeOrigin = useMemo(() => Date.now(), []);
+  const timeOrigin = useTimeOrigin();
   const [host, setHost] = useState<FluxionHost | null>(null);
   const [currentValue, setCurrentValue] = useState(0);
 

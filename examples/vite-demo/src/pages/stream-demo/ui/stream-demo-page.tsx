@@ -10,6 +10,7 @@ import {
   useFluxionStream,
   useFluxionTable,
   useLayerConfig,
+  useTimeOrigin,
 } from "@heojeongbo/fluxion-render/react";
 import { useMemo, useState } from "react";
 import {
@@ -76,7 +77,7 @@ export function StreamDemoPage({
 }: StreamDemoPageProps = {}) {
   const [localWindowMs, setLocalWindowMs] = useState(DEFAULT_WINDOW_MS);
   const windowMs = windowProp ?? localWindowMs;
-  const timeOrigin = useMemo(() => Date.now(), []);
+  const timeOrigin = useTimeOrigin();
   const [host, setHost] = useState<FluxionHost | null>(null);
   const [enabled, setEnabled] = useState<Record<string, boolean>>(
     () => Object.fromEntries(SERIES.map((s) => [s.id, true])),

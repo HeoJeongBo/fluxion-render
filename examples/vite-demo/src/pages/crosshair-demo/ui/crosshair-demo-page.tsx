@@ -8,6 +8,7 @@ import {
   useFluxionCrosshair,
   useFluxionStream,
   useLayerConfig,
+  useTimeOrigin,
 } from "@heojeongbo/fluxion-render/react";
 import { useMemo, useState } from "react";
 import {
@@ -37,7 +38,7 @@ const SERIES = [
 
 export function CrosshairDemoPage() {
   const [windowMs, setWindowMs] = useState(DEFAULT_WINDOW_MS);
-  const timeOrigin = useMemo(() => Date.now(), []);
+  const timeOrigin = useTimeOrigin();
   const [host, setHost] = useState<FluxionHost | null>(null);
 
   // Data cache — mirrors what we push to the Worker

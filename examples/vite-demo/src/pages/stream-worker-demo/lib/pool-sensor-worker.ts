@@ -1,18 +1,19 @@
 /**
- * Pool-aware sensor worker — decodes raw sensor payloads inside the worker.
+ * Pool-aware sensor worker — receives ONE LSD-style packet per tick,
+ * decodes each channel, and pushes 1 sample to the matching engine.
  *
- * Manages multiple Engine instances (one per hostId) to support the pool
- * pattern where a single worker handles many canvases. Receives:
- *   - Standard HostMsg (POOL_INIT, RESIZE, ADD_LAYER, ...) — op-based routing
- *   - FluxionPoolStreamMsg (mode: "pool-stream") — decode once, fan-out to N engines
+ * Main thread sends broadcastStream() ONCE with the packet:
+ *   buffer = Float32Array[ 1 + activeCount ]
+ *     [0]       timestamp_us  — microsecond timestamp (f32)
+ *     [1..N]    ch0_raw .. chN_raw  — ADC values in [-32767, 32767] (f32)
  *
- * Wire format per sample (2× f32):
- *   [0] timestamp_us  — microsecond timestamp
- *   [1] raw_value     — sensor ADC value in [-32767, 32767]
+ * targets[ci] always corresponds to buf[1+ci] (guaranteed by main thread).
  *
- * Decode (worker-side):
+ * Worker decodes each channel and pushes to the matching Engine:
  *   timestamp_ms = timestamp_us / 1000
- *   normalized   = raw_value / 32767  → [-1.0, 1.0]
+ *   normalized   = raw_i16 / 32767  → [-1.0, 1.0]
+ *
+ * Result: 1 postMessage → worker parses → each engine gets 1 sample.
  */
 import { Engine, Op } from "@heojeongbo/fluxion-render/worker";
 import type {
@@ -21,6 +22,7 @@ import type {
   PoolDisposeMsg,
   PoolInitMsg,
 } from "@heojeongbo/fluxion-render/worker";
+
 
 const RAW_MAX = 32767;
 const SOLO_HOST_ID = "__solo__";
@@ -56,13 +58,13 @@ self.onmessage = (e: MessageEvent) => {
     if ((msg as { mode?: string }).mode === "pool-stream") {
       const s = msg as FluxionPoolStreamMsg;
       const raw = new Float32Array(s.buffer, 0, s.length);
-      const sampleCount = s.length >> 1;
-      const decoded = new Float32Array(sampleCount * 2);
-      for (let i = 0; i < sampleCount; i++) {
-        decoded[i * 2]     = raw[i * 2]! / 1000;       // µs → ms
-        decoded[i * 2 + 1] = raw[i * 2 + 1]! / RAW_MAX; // raw → [-1, 1]
-      }
-      for (const { hostId, layerId } of s.targets) {
+      // LSD packet: raw[0] = timestamp_us, raw[1+ci] = ch_ci raw_i16
+      const t_ms = raw[0]! / 1000; // µs → ms
+      for (let ci = 0; ci < s.targets.length; ci++) {
+        const { hostId, layerId } = s.targets[ci]!;
+        const decoded = new Float32Array(2);
+        decoded[0] = t_ms;
+        decoded[1] = raw[1 + ci]! / RAW_MAX; // raw → [-1, 1]
         engines.get(hostId)?.pushRaw(layerId, decoded);
       }
       return;

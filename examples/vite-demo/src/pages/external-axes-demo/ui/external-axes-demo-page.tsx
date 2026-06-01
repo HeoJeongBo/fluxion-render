@@ -5,6 +5,7 @@ import {
   lineLayer,
   useFluxionStream,
   useLayerConfig,
+  useTimeOrigin,
 } from "@heojeongbo/fluxion-render/react";
 import { useMemo, useState } from "react";
 
@@ -36,7 +37,7 @@ const transformBatch = (msgs: Float32StampedMessage[]): LineSample[] =>
 export function ExternalAxesDemoPage() {
   const [windowMs, setWindowMs] = useState(DEFAULT_WINDOW_MS);
   const [host, setHost] = useState<FluxionHost | null>(null);
-  const timeOrigin = useMemo(() => Date.now(), []);
+  const timeOrigin = useTimeOrigin();
 
   const layers = useMemo(
     () => [

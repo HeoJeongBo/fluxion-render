@@ -8,6 +8,7 @@ import {
   useFluxionCrosshair,
   useFluxionStream,
   useLayerConfig,
+  useTimeOrigin,
 } from "@heojeongbo/fluxion-render/react";
 import { useMemo, useState } from "react";
 import { THEME } from "../../../shared/ui/theme";
@@ -30,7 +31,7 @@ cache.registerLayer("area", { capacity: 4096, label: "signal", color: "#4fc3f7" 
 
 export function AreaDemoPage() {
   const [localWindowMs, setLocalWindowMs] = useState(DEFAULT_WINDOW_MS);
-  const timeOrigin = useMemo(() => Date.now(), []);
+  const timeOrigin = useTimeOrigin();
   const [host, setHost] = useState<FluxionHost | null>(null);
 
   const layers = useMemo(

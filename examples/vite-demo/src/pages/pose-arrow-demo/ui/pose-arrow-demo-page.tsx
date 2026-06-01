@@ -5,6 +5,7 @@ import {
   lineLayer,
   poseArrowLayer,
   useFluxionStream,
+  useTimeOrigin,
 } from "@heojeongbo/fluxion-render/react";
 import { useMemo, useRef, useState } from "react";
 import { THEME } from "../../../shared/ui/theme";
@@ -13,7 +14,7 @@ const TARGET_HZ = 20;
 const DEFAULT_WINDOW_MS = 10_000;
 
 export function PoseArrowDemoPage() {
-  const timeOrigin = useMemo(() => Date.now(), []);
+  const timeOrigin = useTimeOrigin();
   const [host, setHost] = useState<FluxionHost | null>(null);
   const phaseRef = useRef(0);
 

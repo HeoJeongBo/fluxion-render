@@ -5,6 +5,7 @@ import {
   FluxionCanvas,
   useFluxionStream,
   useLayerConfig,
+  useTimeOrigin,
 } from "@heojeongbo/fluxion-render/react";
 import { useMemo, useState } from "react";
 import { THEME } from "../../../shared/ui/theme";
@@ -33,7 +34,7 @@ function nextCandle(t: number) {
 
 export function CandlestickDemoPage() {
   const [localWindowMs, setLocalWindowMs] = useState(DEFAULT_WINDOW_MS);
-  const timeOrigin = useMemo(() => Date.now(), []);
+  const timeOrigin = useTimeOrigin();
   const [host, setHost] = useState<FluxionHost | null>(null);
 
   const layers = useMemo(

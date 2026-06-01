@@ -6,6 +6,7 @@ import {
   lineLayer,
   useFluxionStream,
   useLayerConfig,
+  useTimeOrigin,
 } from "@heojeongbo/fluxion-render/react";
 import { useMemo, useRef, useState } from "react";
 import { generateFloat32StampedMessage, stampToMs } from "../../../shared/lib/test-data";
@@ -17,7 +18,7 @@ const Y_AXIS_WIDTH = 60;
 const X_AXIS_HEIGHT = 30;
 
 export function EventMarkerDemoPage() {
-  const timeOrigin = useMemo(() => Date.now(), []);
+  const timeOrigin = useTimeOrigin();
   const [host, setHost] = useState<FluxionHost | null>(null);
   const [events, setEvents] = useState<MarkerEvent[]>([]);
   const eventsRef = useRef<MarkerEvent[]>([]);

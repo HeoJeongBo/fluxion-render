@@ -6,6 +6,7 @@ import {
   referenceLineLayer,
   useFluxionStream,
   useLayerConfig,
+  useTimeOrigin,
 } from "@heojeongbo/fluxion-render/react";
 import { useMemo, useState } from "react";
 import { THEME } from "../../../shared/ui/theme";
@@ -14,7 +15,7 @@ const TARGET_HZ = 60;
 const DEFAULT_WINDOW_MS = 8000;
 
 export function ReferenceLineDemoPage() {
-  const timeOrigin = useMemo(() => Date.now(), []);
+  const timeOrigin = useTimeOrigin();
   const [host, setHost] = useState<FluxionHost | null>(null);
 
   // Setpoint slider state

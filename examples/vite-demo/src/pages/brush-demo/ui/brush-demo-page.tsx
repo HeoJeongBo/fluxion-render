@@ -11,6 +11,7 @@ import {
   useFluxionStream,
   useLayerConfig,
   useResizeObserver,
+  useTimeOrigin,
 } from "@heojeongbo/fluxion-render/react";
 import { useMemo, useRef, useState } from "react";
 import { generateFloat32StampedMessage, stampToMs } from "../../../shared/lib/test-data";
@@ -26,7 +27,7 @@ const cache = new HoverDataCache();
 cache.registerLayer("line", { capacity: 4096, label: "signal", color: "#4fc3f7" });
 
 export function BrushDemoPage() {
-  const timeOrigin = useMemo(() => Date.now(), []);
+  const timeOrigin = useTimeOrigin();
   const [host, setHost] = useState<FluxionHost | null>(null);
   const [selection, setSelection] = useState<{ tStart: number; tEnd: number } | null>(null);
   const overlayRef = useRef<HTMLDivElement>(null!);

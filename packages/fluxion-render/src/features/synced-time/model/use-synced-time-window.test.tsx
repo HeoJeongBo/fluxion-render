@@ -75,7 +75,7 @@ describe("useSyncedTimeWindow — setWindowMs", () => {
 });
 
 describe("useSyncedTimeWindow — syncConfig", () => {
-  it("syncConfig returns object with timeWindowMs matching current windowMs", () => {
+  it("syncConfig returns object with timeWindowMs and timeOrigin", () => {
     let captured: ResultCapture | undefined;
     render(
       <Harness
@@ -85,10 +85,13 @@ describe("useSyncedTimeWindow — syncConfig", () => {
         }}
       />,
     );
-    expect(captured!.syncConfig()).toEqual({ timeWindowMs: 7000 });
+    const cfg = captured!.syncConfig();
+    expect(cfg.timeWindowMs).toBe(7000);
+    expect(typeof cfg.timeOrigin).toBe("number");
+    expect(cfg.timeOrigin).toBeGreaterThan(0);
   });
 
-  it("syncConfig reflects updated windowMs after setWindowMs", () => {
+  it("syncConfig reflects updated windowMs after setWindowMs but keeps same timeOrigin", () => {
     let captured: ResultCapture | undefined;
     render(
       <Harness
@@ -97,10 +100,13 @@ describe("useSyncedTimeWindow — syncConfig", () => {
         }}
       />,
     );
+    const originBefore = captured!.syncConfig().timeOrigin;
     act(() => {
       captured!.setWindowMs(1500);
     });
-    expect(captured!.syncConfig()).toEqual({ timeWindowMs: 1500 });
+    const cfg = captured!.syncConfig();
+    expect(cfg.timeWindowMs).toBe(1500);
+    expect(cfg.timeOrigin).toBe(originBefore);
   });
 
   it("syncConfig returns a new object reference on each call", () => {
@@ -191,16 +197,37 @@ describe("useSyncedTimeWindow — bind", () => {
   });
 });
 
+describe("useSyncedTimeWindow — timeOrigin", () => {
+  it("timeOrigin is a positive number (Date.now snapshot)", () => {
+    let captured: ResultCapture | undefined;
+    render(<Harness onResult={(r) => { captured = r; }} />);
+    expect(typeof captured!.timeOrigin).toBe("number");
+    expect(captured!.timeOrigin).toBeGreaterThan(0);
+  });
+
+  it("timeOrigin is stable across re-renders caused by setWindowMs", () => {
+    let captured: ResultCapture | undefined;
+    render(<Harness onResult={(r) => { captured = r; }} />);
+    const origin = captured!.timeOrigin;
+    act(() => { captured!.setWindowMs(9000); });
+    expect(captured!.timeOrigin).toBe(origin);
+  });
+
+  it("timeOrigin matches the value returned by syncConfig", () => {
+    let captured: ResultCapture | undefined;
+    render(<Harness onResult={(r) => { captured = r; }} />);
+    expect(captured!.syncConfig().timeOrigin).toBe(captured!.timeOrigin);
+  });
+});
+
 describe("useSyncedTimeWindow — multiple instances", () => {
   it("two independent instances maintain independent state", () => {
     let r1Captured: ResultCapture | undefined;
-    let r2Captured: ResultCapture | undefined;
 
     function MultiHarness() {
       const r1 = useSyncedTimeWindow(1000);
       const r2 = useSyncedTimeWindow(2000);
       r1Captured = r1;
-      r2Captured = r2;
       return (
         <>
           <span data-testid="w1">{r1.windowMs}</span>

@@ -8,6 +8,8 @@ export type FluxionWorkerPoolOptions = WorkerPoolOptions;
 
 export class FluxionWorkerPool extends WorkerPool<HostMsg> {
   private readonly _registry = new Map<string, FluxionWorkerHandle>();
+  // Maps hostId → worker index so broadcastStream can group by worker, not by handle instance.
+  private readonly _hostIndex = new Map<string, number>();
 
   protected override _createHandle(
     worker: Worker,
@@ -16,14 +18,21 @@ export class FluxionWorkerPool extends WorkerPool<HostMsg> {
   ): FluxionWorkerHandle {
     const handle = new FluxionWorkerHandle(worker, hostId, () => {
       this._registry.delete(hostId);
+      this._hostIndex.delete(hostId);
       this._release(index);
     });
     this._registry.set(hostId, handle);
+    this._hostIndex.set(hostId, index);
     return handle;
   }
 
   override acquire(): FluxionWorkerHandle {
     return super.acquire() as FluxionWorkerHandle;
+  }
+
+  /** Returns true if the given hostId is currently registered in this pool. */
+  hasHost(hostId: string): boolean {
+    return this._registry.has(hostId);
   }
 
   /**
@@ -40,22 +49,25 @@ export class FluxionWorkerPool extends WorkerPool<HostMsg> {
     buffer: ArrayBuffer,
     length: number,
   ): void {
-    // Group targets by the handle they're bound to (= by worker)
-    const byHandle = new Map<FluxionWorkerHandle, FluxionPoolStreamMsg["targets"]>();
+    // Group targets by worker index (not by handle instance — each acquire() returns
+    // a new handle object even when backed by the same worker, so using the handle as
+    // a Map key would create one group per host instead of one group per worker).
+    const byWorkerIndex = new Map<number, { handle: FluxionWorkerHandle; targets: FluxionPoolStreamMsg["targets"] }>();
     for (const t of targets) {
       const h = this._registry.get(t.hostId);
-      if (!h) continue;
-      let group = byHandle.get(h);
-      if (!group) { group = []; byHandle.set(h, group); }
-      group.push(t);
+      const idx = this._hostIndex.get(t.hostId);
+      if (!h || idx === undefined) continue;
+      let group = byWorkerIndex.get(idx);
+      if (!group) { group = { handle: h, targets: [] }; byWorkerIndex.set(idx, group); }
+      group.targets.push(t);
     }
 
     // Send one pool-stream message per worker.
     // Last worker gets the original buffer (transfer); earlier ones get copies.
-    const entries = [...byHandle.entries()];
-    entries.forEach(([h, ts], i) => {
+    const entries = [...byWorkerIndex.values()];
+    entries.forEach(({ handle, targets: ts }, i) => {
       const buf = i < entries.length - 1 ? buffer.slice(0) : buffer;
-      h.emitPoolStream(ts, buf, length);
+      handle.emitPoolStream(ts, buf, length);
     });
   }
 }

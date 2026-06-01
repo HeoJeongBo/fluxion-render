@@ -81,6 +81,7 @@ export {
 } from "./features/pie";
 export {
   useSyncedTimeWindow,
+  useTimeOrigin,
   type UseSyncedTimeWindowResult,
 } from "./features/synced-time";
 export {

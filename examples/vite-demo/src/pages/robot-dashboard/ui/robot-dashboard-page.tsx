@@ -378,8 +378,7 @@ const WINDOW_OPTIONS = [
 ] as const;
 
 export function RobotDashboardPage() {
-  const timeOrigin = useMemo(() => Date.now(), []);
-  const { windowMs, setWindowMs, syncConfig } = useSyncedTimeWindow(DEFAULT_WINDOW_MS);
+  const { windowMs, setWindowMs, timeOrigin, syncConfig } = useSyncedTimeWindow(DEFAULT_WINDOW_MS);
 
   return (
     <div style={{ display: "flex", flexDirection: "column", width: "100%", height: "100%", background: THEME.page.background }}>

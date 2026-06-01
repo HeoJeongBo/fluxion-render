@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { Op } from "../../../shared/protocol";
 import type { HostMsg } from "../../../shared/protocol";
+import { Op } from "../../../shared/protocol";
 import { FluxionWorkerPool } from "./fluxion-worker-pool";
 
 // ─── Fake Worker ─────────────────────────────────────────────────────────────
@@ -141,6 +141,118 @@ describe("FluxionWorkerPool", () => {
     handle.postMessage(makeInitMsg(), []);
     const msg = fakeWorkers[0]!.postMessage.mock.calls[0]![0] as { op: number };
     expect(msg.op).toBe(Op.POOL_INIT);
+    pool.dispose();
+  });
+});
+
+// ─── FluxionWorkerPool.hasHost ───────────────────────────────────────────────
+
+describe("FluxionWorkerPool.hasHost", () => {
+  it("returns true for an acquired host", () => {
+    const { pool } = makePool();
+    const handle = pool.acquire();
+    expect(pool.hasHost(handle.hostId)).toBe(true);
+    pool.dispose();
+  });
+
+  it("returns false for an unknown hostId", () => {
+    const { pool } = makePool();
+    expect(pool.hasHost("nonexistent")).toBe(false);
+    pool.dispose();
+  });
+
+  it("returns false after the handle is released via DISPOSE", () => {
+    const { pool } = makePool();
+    const handle = pool.acquire();
+    handle.postMessage({ op: Op.DISPOSE });
+    expect(pool.hasHost(handle.hostId)).toBe(false);
+    pool.dispose();
+  });
+});
+
+// ─── FluxionWorkerPool.broadcastStream ───────────────────────────────────────
+
+describe("FluxionWorkerPool.broadcastStream", () => {
+  it("size=1 pool: sends exactly 1 postMessage for N hosts on the same worker", () => {
+    const { pool, fakeWorkers } = makePool(1);
+    const handles = Array.from({ length: 5 }, () => pool.acquire());
+    const targets = handles.map((h) => ({ hostId: h.hostId, layerId: "line" }));
+    const buf = new Float32Array([0, 1, 2, 3, 4, 5]).buffer;
+
+    pool.broadcastStream(targets, buf, 6);
+
+    // All 5 hosts share worker[0] → exactly 1 postMessage
+    expect(fakeWorkers[0]!.postMessage).toHaveBeenCalledTimes(1);
+    const [call] = fakeWorkers[0]!.postMessage.mock.calls;
+    const msg = call![0] as { mode: string; targets: typeof targets; length: number };
+    expect(msg.mode).toBe("pool-stream");
+    expect(msg.targets).toHaveLength(5);
+    expect(msg.length).toBe(6);
+    pool.dispose();
+  });
+
+  it("size=1 pool: targets array in the message preserves input order", () => {
+    const { pool, fakeWorkers } = makePool(1);
+    const h0 = pool.acquire();
+    const h1 = pool.acquire();
+    const h2 = pool.acquire();
+    const targets = [
+      { hostId: h0.hostId, layerId: "a" },
+      { hostId: h1.hostId, layerId: "b" },
+      { hostId: h2.hostId, layerId: "c" },
+    ];
+    const buf = new Float32Array(4).buffer;
+    pool.broadcastStream(targets, buf, 4);
+
+    const msg = fakeWorkers[0]!.postMessage.mock.calls[0]![0] as { targets: typeof targets };
+    expect(msg.targets.map((t) => t.hostId)).toEqual([h0.hostId, h1.hostId, h2.hostId]);
+    pool.dispose();
+  });
+
+  it("size=2 pool: sends one message per worker, buffer copied to all but last", () => {
+    const { pool, fakeWorkers } = makePool(2);
+    // Acquire 2 handles — one per worker (least-busy routing)
+    const h0 = pool.acquire(); // → worker 0
+    const h1 = pool.acquire(); // → worker 1
+    const targets = [
+      { hostId: h0.hostId, layerId: "x" },
+      { hostId: h1.hostId, layerId: "y" },
+    ];
+    const buf = new Float32Array([10, 20]).buffer;
+    pool.broadcastStream(targets, buf, 2);
+
+    expect(fakeWorkers[0]!.postMessage).toHaveBeenCalledTimes(1);
+    expect(fakeWorkers[1]!.postMessage).toHaveBeenCalledTimes(1);
+
+    const buf0 = (fakeWorkers[0]!.postMessage.mock.calls[0]![0] as { buffer: ArrayBuffer }).buffer;
+    const buf1 = (fakeWorkers[1]!.postMessage.mock.calls[0]![0] as { buffer: ArrayBuffer }).buffer;
+    // The two workers must NOT share the same ArrayBuffer reference
+    expect(buf0).not.toBe(buf1);
+    pool.dispose();
+  });
+
+  it("skips targets whose hostId is not in the registry", () => {
+    const { pool, fakeWorkers } = makePool(1);
+    const handle = pool.acquire();
+    const targets = [
+      { hostId: handle.hostId, layerId: "line" },
+      { hostId: "ghost-host", layerId: "line" }, // not in registry
+    ];
+    const buf = new Float32Array(4).buffer;
+    pool.broadcastStream(targets, buf, 4);
+
+    const msg = fakeWorkers[0]!.postMessage.mock.calls[0]![0] as { targets: typeof targets };
+    expect(msg.targets).toHaveLength(1);
+    expect(msg.targets[0]!.hostId).toBe(handle.hostId);
+    pool.dispose();
+  });
+
+  it("sends nothing when all targets are unregistered", () => {
+    const { pool, fakeWorkers } = makePool(1);
+    pool.acquire(); // pool has 1 known host but we won't include it
+    const buf = new Float32Array(2).buffer;
+    pool.broadcastStream([{ hostId: "unknown", layerId: "x" }], buf, 2);
+    expect(fakeWorkers[0]!.postMessage).not.toHaveBeenCalled();
     pool.dispose();
   });
 });

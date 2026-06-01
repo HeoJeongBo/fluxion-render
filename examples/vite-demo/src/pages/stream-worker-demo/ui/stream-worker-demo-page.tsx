@@ -1,17 +1,16 @@
 /**
- * Pool Fan-Out Stream Demo
+ * Pool Fan-Out Stream Demo — 1 raw packet → worker parse → 40 charts
  *
- * One pool (size=1, 1 worker) serves 40 canvases. Each tick, one packet per
- * channel is assembled on the main thread as raw Float32 wire format and sent
- * via pool.broadcastStream() — the worker decodes and pushes to each engine.
+ * One pool (size=1, 1 worker) serves 40 canvases. Each tick, one LSD-style
+ * packet is built and sent via ONE pool.broadcastStream() call.
+ * The worker decodes each channel and pushes 1 sample to its matching engine.
  *
- * Compared to the previous solo-worker pattern (40 workers):
- *   - Workers:   40  → 1
- *   - Decode:    40× → 40× (per tick, but all in one thread — no scheduling overhead)
- *   - postMessage paths: 40 workers → 1 worker
+ * Wire format: Float32[ 1 + activeCount ]
+ *   [0]       timestamp_us  (f32, microseconds)
+ *   [1..N]    ch0_raw .. chN_raw  (f32, raw_i16 range [-32767, 32767])
  *
- * Wire format per sample: Float32[2] = [ timestamp_us, raw_i16 ]
- * Decoded in pool-sensor-worker: us/1000 → ms, raw/32767 → [-1, 1]
+ * targets[ci] always matches buf[1+ci] — ordering is guaranteed because
+ * both are built from the same activeTargets array in the same loop.
  */
 import type { FluxionHost } from "@heojeongbo/fluxion-render";
 import { createSineSynth, mulberry32 } from "@heojeongbo/fluxion-render/testing";
@@ -20,6 +19,7 @@ import {
   FluxionCanvas,
   scatterLayer,
   useFluxionWorkerPool,
+  useTimeOrigin,
 } from "@heojeongbo/fluxion-render/react";
 import { useEffect, useMemo, useRef } from "react";
 import { THEME } from "../../../shared/ui/theme";
@@ -27,10 +27,10 @@ import { THEME } from "../../../shared/ui/theme";
 const CHART_COUNT = 40;
 const COLS = 8;
 const ROWS = Math.ceil(CHART_COUNT / COLS);
-const BATCH_SIZE = 2;
-const INTERVAL_MS = BATCH_SIZE * (1000 / 120); // ~16.7ms
+const SAMPLE_HZ = 120; // samples per channel per second (1 tick = 1 sample)
+const INTERVAL_MS = 1000 / SAMPLE_HZ; // ~8.33ms — exactly 120Hz
 const TIME_WINDOW_MS = 5000;
-const CAPACITY = 2048;
+const MAX_HZ = SAMPLE_HZ; // 120 samples/channel/sec → capacity = ceil(5*120*1.1) = 660
 
 const COLORS = [
   "#4fc3f7",
@@ -47,14 +47,14 @@ const noise = mulberry32(0xdeadbeef);
 
 interface SensorChartProps {
   index: number;
+  timeOrigin: number;
   pool: ReturnType<typeof useFluxionWorkerPool>;
   onReady: (host: FluxionHost) => void;
 }
 
-function SensorChart({ index, pool, onReady }: SensorChartProps) {
+function SensorChart({ index, timeOrigin, pool, onReady }: SensorChartProps) {
   const color = COLORS[index % COLORS.length]!;
   const freqHz = 0.4 + index * 0.15;
-  const timeOrigin = useMemo(() => Date.now(), []);
 
   const layers = useMemo(
     () => [
@@ -69,9 +69,9 @@ function SensorChart({ index, pool, onReady }: SensorChartProps) {
         showYLabels: false,
         gridColor: THEME.chart.gridColor,
         axisColor: THEME.chart.axisColor,
-        yPadPx: 8,
+        yPadPx: 4,
       }),
-      scatterLayer("line", { color, pointSize: 3, capacity: CAPACITY }),
+      scatterLayer("line", { color, pointSize: 3, retentionMs: TIME_WINDOW_MS, maxHz: MAX_HZ }),
     ],
     [timeOrigin, color],
   );
@@ -131,18 +131,18 @@ export function StreamWorkerDemoPage() {
       ),
   });
 
+  const timeOrigin = useTimeOrigin();
+
   const hostsRef = useRef<(FluxionHost | null)[]>(
     Array.from({ length: CHART_COUNT }, () => null),
   );
 
-  const readyCountRef = useRef(0);
-
   useEffect(() => {
+    // Each channel: unique frequency + phase → distinct waveform per chart.
     const synths = Array.from({ length: CHART_COUNT }, (_, i) =>
       createSineSynth({ freqHz: 0.4 + i * 0.15, amplitude: 0.8, seriesOffset: i * 0.5 }),
     );
-    const dtMs = 1000 / 120;
-    const t0 = Date.now();
+    const t0 = timeOrigin;
     let lastT = 0;
 
     const id = setInterval(() => {
@@ -150,28 +150,39 @@ export function StreamWorkerDemoPage() {
       const tStart = lastT;
       lastT = tEnd;
 
+      // Collect only hosts that belong to the current pool — stale hosts from a
+      // previous pool instance (e.g. React StrictMode double-invoke) would cause
+      // registry misses in broadcastStream, shifting the ci↔buf index mapping.
+      const activeTargets: { hostId: string; layerId: string; idx: number }[] = [];
       for (let i = 0; i < CHART_COUNT; i++) {
         const host = hostsRef.current[i];
-        if (!host) continue;
-
-        const buf = new Float32Array(BATCH_SIZE * 2);
-        for (let s = 0; s < BATCH_SIZE; s++) {
-          const t = tStart + s * dtMs;
-          const raw = (synths[i]!(t) + (noise() - 0.5) * 0.1) * 32767;
-          buf[s * 2]     = t * 1000; // ms → µs (decoded back in worker)
-          buf[s * 2 + 1] = raw;       // normalized → raw i16 range
+        if (host && pool.hasHost(host.hostId)) {
+          activeTargets.push({ hostId: host.hostId, layerId: "line", idx: i });
         }
-
-        pool.broadcastStream(
-          [{ hostId: host.hostId, layerId: "line" }],
-          buf.buffer,
-          buf.length,
-        );
       }
+      if (activeTargets.length === 0) return;
+
+      // LSD packet: Float32[1 + activeCount]
+      //   [0]     timestamp_us
+      //   [1..N]  ch0_raw .. chN_raw  (raw_i16 as f32, range [-32767, 32767])
+      // targets[ci] ↔ buf[1+ci] — same loop, same order.
+      const t = tStart;
+      const buf = new Float32Array(1 + activeTargets.length);
+      buf[0] = t * 1000; // ms → µs
+      for (let ci = 0; ci < activeTargets.length; ci++) {
+        const { idx } = activeTargets[ci]!;
+        buf[1 + ci] = (synths[idx]!(t) + idx * 0.2 + (noise() - 0.5) * 0.1) * 32767;
+      }
+
+      pool.broadcastStream(
+        activeTargets.map(({ hostId, layerId }) => ({ hostId, layerId })),
+        buf.buffer,
+        buf.length,
+      );
     }, INTERVAL_MS);
 
     return () => clearInterval(id);
-  }, [pool]);
+  }, [pool, timeOrigin]);
 
   return (
     <div style={{ display: "flex", flexDirection: "column", width: "100%", height: "100%" }}>
@@ -190,8 +201,8 @@ export function StreamWorkerDemoPage() {
       >
         <strong style={{ color: THEME.page.textPrimary }}>Pool Fan-Out Stream</strong>
         <span>
-          size-1 pool · {CHART_COUNT} canvases · 1 worker · decode in worker ·
-          {" "}raw wire format (µs + i16) transferred per channel
+          size-1 pool · {CHART_COUNT} canvases · 1 worker · 1 postMessage/tick ·
+          {" "}worker parses all channels · each chart gets different values
         </span>
       </div>
       <div
@@ -210,10 +221,10 @@ export function StreamWorkerDemoPage() {
           <SensorChart
             key={i}
             index={i}
+            timeOrigin={timeOrigin}
             pool={pool}
             onReady={(host) => {
               hostsRef.current[i] = host;
-              readyCountRef.current++;
             }}
           />
         ))}
