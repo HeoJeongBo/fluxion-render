@@ -103,6 +103,9 @@ export function useFluxionCanvas(
   const containerRef = useRef<HTMLDivElement>(null);
   const hostRef = useRef<FluxionHost | null>(null);
   const [host, setHost] = useState<FluxionHost | null>(null);
+  // Incremented when a disposed-pool early-return fires, so the effect re-runs
+  // once the parent re-renders with a fresh pool.
+  const [mountKey, setMountKey] = useState(0);
 
   // Stash the latest options in a ref so the mount effect can stay with
   // an empty dep array without going stale between StrictMode invocations.
@@ -112,6 +115,15 @@ export function useFluxionCanvas(
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
+
+    // StrictMode: parent cleanup disposes the pool and schedules a new one via setPool,
+    // but children effects re-run synchronously before that re-render propagates the new
+    // pool. Bump mountKey so this effect re-runs after the parent re-renders with pool B.
+    const current = optionsRef.current;
+    if (current.hostOptions?.pool?.isDisposed) {
+      setMountKey((k) => k + 1);
+      return;
+    }
 
     // Main chart canvas — created fresh each mount.
     const canvas = document.createElement("canvas");
@@ -124,7 +136,6 @@ export function useFluxionCanvas(
 
     // Axis canvases — also created fresh each mount so transferControlToOffscreen
     // is always called on a brand-new element (StrictMode double-invoke safe).
-    const current = optionsRef.current;
     const xAxisContainer = current.xAxisContainerRef?.current ?? null;
     const yAxisContainer = current.yAxisContainerRef?.current ?? null;
     const xAxisCanvas = xAxisContainer ? makeAxisCanvas(xAxisContainer) : undefined;
@@ -152,7 +163,7 @@ export function useFluxionCanvas(
         yAxisContainer!.removeChild(yAxisCanvas);
       }
     };
-  }, []);
+  }, [mountKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleResize = useCallback((info: ResizeInfo) => {
     const instance = hostRef.current;

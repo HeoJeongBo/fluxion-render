@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import type { FluxionWorkerPoolOptions } from "../../../features/worker-pool";
 import { FluxionWorkerPool } from "../../../features/worker-pool";
@@ -7,8 +7,9 @@ import { FluxionWorkerPool } from "../../../features/worker-pool";
  * Creates a `FluxionWorkerPool` that lives for the lifetime of the component.
  * The pool is disposed automatically on unmount.
  *
- * Use this when you want a scoped pool (e.g. a specific page owns N workers)
- * instead of the module-level default pool.
+ * Uses `useState` so that when the pool is recycled (e.g. React StrictMode
+ * double-invoke), the parent re-renders and children receive the fresh pool
+ * before attempting to acquire from it.
  *
  * @example
  * const pool = useFluxionWorkerPool({ size: 4, workerFactory: () => new Worker(...) });
@@ -19,18 +20,17 @@ export function useFluxionWorkerPool(
   opts: FluxionWorkerPoolOptions,
 ): FluxionWorkerPool {
   const optsRef = useRef(opts);
-  const poolRef = useRef<FluxionWorkerPool | null>(null);
-
-  if (!poolRef.current) {
-    poolRef.current = new FluxionWorkerPool(optsRef.current);
-  }
+  const [pool, setPool] = useState(() => new FluxionWorkerPool(optsRef.current));
 
   useEffect(() => {
+    const current = pool;
     return () => {
-      poolRef.current?.dispose();
-      poolRef.current = null;
+      current.dispose();
+      // Recreate immediately so the next render (triggered by setPool) delivers
+      // a live pool to children before they attempt acquire().
+      setPool(new FluxionWorkerPool(optsRef.current));
     };
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  return poolRef.current;
+  return pool;
 }

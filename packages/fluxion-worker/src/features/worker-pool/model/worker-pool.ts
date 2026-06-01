@@ -494,6 +494,11 @@ export class WorkerPool<TMsg extends object> {
   private _seq = 0;
   private _disposed = false;
 
+  /** Returns true if `dispose()` has been called on this pool. */
+  get isDisposed(): boolean {
+    return this._disposed;
+  }
+
   constructor(opts: WorkerPoolOptions) {
     const size = Math.max(1, Math.min(opts.size ?? 4, 16));
     this.workers = Array.from({ length: size }, () => opts.workerFactory());
