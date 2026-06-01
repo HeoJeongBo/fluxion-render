@@ -1,5 +1,17 @@
 # Changelog
 
+# [0.12.0](https://github-personal/HeoJeongBo/fluxion-render/compare/fluxion-render-v0.11.0...fluxion-render-v0.12.0) (2026-06-01)
+
+
+### Bug Fixes
+
+* **render,worker:** fix "WorkerPool has been disposed" in React StrictMode ([75bd076](https://github-personal/HeoJeongBo/fluxion-render/commit/75bd0762f3d66a52dc1150108a63420c1e78a1da))
+
+
+### Features
+
+* **render,worker,examples:** add pool-level fan-out stream API ([6342d1b](https://github-personal/HeoJeongBo/fluxion-render/commit/6342d1b564533e7334626884fcbbe8b04936269e))
+
 # [0.11.0](https://github-personal/HeoJeongBo/fluxion-render/compare/fluxion-render-v0.10.1...fluxion-render-v0.11.0) (2026-06-01)
 
 
