@@ -34,10 +34,11 @@ import {
   lineLayer,
   useFluxionCanvas,
   useFluxionStream,
+  useTimeOrigin,
 } from '@heojeongbo/fluxion-render/react';
 
 function Chart() {
-  const timeOrigin = useMemo(() => Date.now(), []);
+  const timeOrigin = useTimeOrigin(); // stable Date.now() snapshot from first render
 
   const { containerRef, host } = useFluxionCanvas({
     layers: [
@@ -294,6 +295,37 @@ const { rate } = useFluxionStream({
 
 `tMs` is milliseconds since the first tick (not `Date.now()`). Use it as the `t` value for line samples.
 
+### `useTimeOrigin()`
+
+Returns a stable `Date.now()` snapshot captured on the first render of the component. Use it as `timeOrigin` for `axisGridLayer` so timestamps on all charts are relative to the same epoch.
+
+```ts
+const timeOrigin = useTimeOrigin();
+// timeOrigin is fixed for the lifetime of the component — never changes on re-render
+```
+
+### `useSyncedTimeWindow(initialMs?)`
+
+Manages a shared `timeWindowMs` across a set of charts. Returns a state value plus utilities for syncing it to multiple hosts.
+
+```ts
+const {
+  windowMs,          // current time window in ms (default 5000)
+  setWindowMs,       // update the window and re-render
+  timeOrigin,        // stable Date.now() snapshot (same as useTimeOrigin)
+  syncConfig,        // () => { timeWindowMs, timeOrigin } — pass to axisGridLayer
+  bind,              // (host, axisId?) => void — apply config to a live host
+} = useSyncedTimeWindow(initialMs?);
+```
+
+```tsx
+const tw = useSyncedTimeWindow(5000);
+// ...
+axisGridLayer('axis', { xMode: 'time', ...tw.syncConfig() })
+// later, to change window for all bound hosts:
+tw.setWindowMs(10000);
+```
+
 ### `useFluxionWorkerPool(options)`
 
 Creates a scoped `FluxionWorkerPool` that is disposed when the component unmounts.
@@ -546,6 +578,9 @@ const pool = new FluxionWorkerPool({
 // Pass to FluxionHost — called automatically, you rarely need this directly
 pool.acquire() // → FluxionWorkerHandle
 
+pool.hasHost(hostId: string) // → boolean — true if the hostId is registered in this pool
+pool.broadcastStream(targets, buffer, length) // send one raw packet to multiple engines
+
 pool.dispose() // terminate all workers
 ```
 
@@ -701,15 +736,16 @@ self.onmessage = (e: MessageEvent) => {
   if ((msg as { mode?: string }).mode === "pool-stream") {
     const s = msg as FluxionPoolStreamMsg;
     const raw = new Float32Array(s.buffer, 0, s.length);
-    // Decode once — wire format: [timestamp_us: f32, raw_i16: f32] per sample
-    const sampleCount = s.length >> 1;
-    const decoded = new Float32Array(sampleCount * 2);
-    for (let i = 0; i < sampleCount; i++) {
-      decoded[i * 2]     = raw[i * 2]! / 1000;      // µs → ms
-      decoded[i * 2 + 1] = raw[i * 2 + 1]! / 32767; // raw → [-1, 1]
-    }
-    // Fan-out to N engines
-    for (const { hostId, layerId } of s.targets) {
+    // Wire format: Float32[1 + N]
+    //   raw[0]       = timestamp_us
+    //   raw[1 + ci]  = ch_ci raw_i16 (ADC value in [-32767, 32767])
+    // targets[ci] corresponds to raw[1 + ci] — same ordering guaranteed by main thread
+    const t_ms = raw[0]! / 1000; // µs → ms
+    for (let ci = 0; ci < s.targets.length; ci++) {
+      const { hostId, layerId } = s.targets[ci]!;
+      const decoded = new Float32Array(2);
+      decoded[0] = t_ms;
+      decoded[1] = raw[1 + ci]! / 32767; // raw → [-1, 1]
       engines.get(hostId)?.pushRaw(layerId, decoded);
     }
     return;
@@ -724,27 +760,52 @@ self.onmessage = (e: MessageEvent) => {
 **Main thread (React):**
 
 ```tsx
+import { useTimeOrigin, useFluxionWorkerPool, FluxionCanvas } from '@heojeongbo/fluxion-render/react';
+
 const pool = useFluxionWorkerPool({
   size: 1,
   workerFactory: () =>
     new Worker(new URL("./my-pool-worker.ts", import.meta.url), { type: "module" }),
 });
 
+const timeOrigin = useTimeOrigin();
 const hostsRef = useRef<(FluxionHost | null)[]>(Array.from({ length: N }, () => null));
 
-// In each chart's onReady:
+// In each chart's onReady — filter stale hosts from prev pool (React StrictMode safe):
 <FluxionCanvas
   hostOptions={{ pool }}
   onReady={(host) => { hostsRef.current[i] = host; }}
   ...
 />
 
-// Send loop — one call per channel, decode happens once in the worker
-pool.broadcastStream(
-  [{ hostId: hostsRef.current[i]!.hostId, layerId: "sensor" }],
-  buf.buffer,
-  buf.length,
-);
+// Send loop — build one raw packet, one broadcastStream call, worker decodes all channels
+useEffect(() => {
+  const id = setInterval(() => {
+    // Only include hosts registered in the current pool
+    const targets = hostsRef.current
+      .map((host, i) => host && pool.hasHost(host.hostId)
+        ? { hostId: host.hostId, layerId: "sensor", idx: i }
+        : null)
+      .filter(Boolean) as { hostId: string; layerId: string; idx: number }[];
+
+    if (targets.length === 0) return;
+
+    const tMs = Date.now() - timeOrigin;
+    const buf = new Float32Array(1 + targets.length);
+    buf[0] = tMs * 1000; // ms → µs
+    for (let ci = 0; ci < targets.length; ci++) {
+      buf[1 + ci] = readChannel(targets[ci]!.idx) * 32767; // raw i16 range
+    }
+
+    // targets[ci] ↔ buf[1+ci] — same loop, same order
+    pool.broadcastStream(
+      targets.map(({ hostId, layerId }) => ({ hostId, layerId })),
+      buf.buffer,
+      buf.length,
+    );
+  }, 1000 / 120);
+  return () => clearInterval(id);
+}, [pool, timeOrigin]);
 ```
 
 **`pool.broadcastStream(targets, buffer, length)`** — groups `targets` by worker and sends one `pool-stream` message per worker. With `size: 1`, the original `buffer` is transferred (zero-copy, no copies). With `size > 1`, all but the last worker receive a `buffer.slice(0)` copy.

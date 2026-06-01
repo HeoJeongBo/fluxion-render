@@ -1,5 +1,5 @@
 /**
- * Pool-aware sensor worker — receives ONE LSD-style packet per tick,
+ * Pool-aware sensor worker — receives ONE RAW-style packet per tick,
  * decodes each channel, and pushes 1 sample to the matching engine.
  *
  * Main thread sends broadcastStream() ONCE with the packet:
@@ -58,7 +58,7 @@ self.onmessage = (e: MessageEvent) => {
     if ((msg as { mode?: string }).mode === "pool-stream") {
       const s = msg as FluxionPoolStreamMsg;
       const raw = new Float32Array(s.buffer, 0, s.length);
-      // LSD packet: raw[0] = timestamp_us, raw[1+ci] = ch_ci raw_i16
+      // RAW packet: raw[0] = timestamp_us, raw[1+ci] = ch_ci raw_i16
       const t_ms = raw[0]! / 1000; // µs → ms
       for (let ci = 0; ci < s.targets.length; ci++) {
         const { hostId, layerId } = s.targets[ci]!;

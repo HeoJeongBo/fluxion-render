@@ -1,8 +1,8 @@
 /**
  * Pool Fan-Out Stream Demo — 1 raw packet → worker parse → 40 charts
  *
- * One pool (size=1, 1 worker) serves 40 canvases. Each tick, one LSD-style
- * packet is built and sent via ONE pool.broadcastStream() call.
+ * One pool (size=1, 1 worker) serves 40 canvases. Each tick, one raw packet
+ * is built and sent via ONE pool.broadcastStream() call.
  * The worker decodes each channel and pushes 1 sample to its matching engine.
  *
  * Wire format: Float32[ 1 + activeCount ]
@@ -162,7 +162,7 @@ export function StreamWorkerDemoPage() {
       }
       if (activeTargets.length === 0) return;
 
-      // LSD packet: Float32[1 + activeCount]
+      // Raw packet: Float32[1 + activeCount]
       //   [0]     timestamp_us
       //   [1..N]  ch0_raw .. chN_raw  (raw_i16 as f32, range [-32767, 32767])
       // targets[ci] ↔ buf[1+ci] — same loop, same order.
