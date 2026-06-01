@@ -10,7 +10,8 @@
   "github": {
     "release": true,
     "releaseName": "fluxion-render v${version}",
-    "releaseNotes": null
+    "releaseNotes": null,
+    "host": "github.com"
   },
   "npm": {
     "publish": false
