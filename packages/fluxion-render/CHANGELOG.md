@@ -1,5 +1,7 @@
 # Changelog
 
+## [0.12.1](https://github-personal/HeoJeongBo/fluxion-render/compare/fluxion-render-v0.12.0...fluxion-render-v0.12.1) (2026-06-01)
+
 # [0.12.0](https://github-personal/HeoJeongBo/fluxion-render/compare/fluxion-render-v0.11.0...fluxion-render-v0.12.0) (2026-06-01)
 
 
