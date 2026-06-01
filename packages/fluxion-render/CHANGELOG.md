@@ -1,5 +1,12 @@
 # Changelog
 
+# [0.13.0](https://github-personal/HeoJeongBo/fluxion-render/compare/fluxion-render-v0.12.1...fluxion-render-v0.13.0) (2026-06-01)
+
+
+### Features
+
+* **render:** add useTimeOrigin, extend useSyncedTimeWindow with timeOrigin, fix broadcastStream grouping ([75f163f](https://github-personal/HeoJeongBo/fluxion-render/commit/75f163fb52aa41709717e7820535e61065751496))
+
 ## [0.12.1](https://github-personal/HeoJeongBo/fluxion-render/compare/fluxion-render-v0.12.0...fluxion-render-v0.12.1) (2026-06-01)
 
 # [0.12.0](https://github-personal/HeoJeongBo/fluxion-render/compare/fluxion-render-v0.11.0...fluxion-render-v0.12.0) (2026-06-01)
