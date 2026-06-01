@@ -10,6 +10,7 @@ import {
   type AxisStyle,
   type BoundsUpdateMsg,
   type DType,
+  type FluxionPoolStreamMsg,
   type HostMsg,
   type LayerKind,
   type SerializedTick,
@@ -115,6 +116,7 @@ export class FluxionHost {
     terminate(): void;
     addEventListener?(type: string, listener: EventListener): void;
     removeEventListener?(type: string, listener: EventListener): void;
+    readonly hostId?: string;
   };
   private disposed = false;
   private boundsListeners: BoundsChangeListener[] = [];
@@ -405,6 +407,33 @@ export class FluxionHost {
   emitStream(id: string, buffer: ArrayBuffer, length: number): void {
     if (this.disposed) return;
     const msg = { id, buffer, length, mode: "stream" as const };
+    this.worker.postMessage(msg, [buffer]);
+  }
+
+  /**
+   * The unique identifier for this host's Engine instance in the worker.
+   * In pool mode this is the `hostId` assigned by the pool; in solo mode it is `"__solo__"`.
+   * Use this to build the `targets` array for `emitPoolStream`.
+   */
+  get hostId(): string {
+    return this.worker.hostId ?? "__solo__";
+  }
+
+  /**
+   * Fan-out a single buffer to multiple Engine instances on the same worker (zero-copy).
+   * The buffer is decoded once on the worker, then `pushRaw` is called for each target.
+   *
+   * All target `hostId`s must reside on the same worker as this host.
+   * Use a size-1 pool (`useFluxionWorkerPool({ size: 1 })`) to guarantee co-location.
+   * After this call, `buffer` is detached — do not read it again.
+   */
+  emitPoolStream(
+    targets: FluxionPoolStreamMsg["targets"],
+    buffer: ArrayBuffer,
+    length: number,
+  ): void {
+    if (this.disposed) return;
+    const msg: FluxionPoolStreamMsg = { mode: "pool-stream", targets, buffer, length };
     this.worker.postMessage(msg, [buffer]);
   }
 

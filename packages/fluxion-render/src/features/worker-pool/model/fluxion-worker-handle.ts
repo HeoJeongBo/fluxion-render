@@ -1,6 +1,12 @@
 import { WorkerHandle } from "@heojeongbo/fluxion-worker";
 
-import type { HostMsg, InitMsg, PoolDisposeMsg, PoolInitMsg } from "../../../shared/protocol";
+import type {
+  FluxionPoolStreamMsg,
+  HostMsg,
+  InitMsg,
+  PoolDisposeMsg,
+  PoolInitMsg,
+} from "../../../shared/protocol";
 import { Op } from "../../../shared/protocol";
 
 export class FluxionWorkerHandle extends WorkerHandle<HostMsg> {
@@ -45,6 +51,19 @@ export class FluxionWorkerHandle extends WorkerHandle<HostMsg> {
    */
   emitStream(id: string, buffer: ArrayBuffer, length: number): void {
     const msg = { id, buffer, length, hostId: this.hostId, mode: "stream" as const };
+    this._worker.postMessage(msg, [buffer]);
+  }
+
+  /**
+   * Fan-out one buffer to multiple Engine instances on this worker (zero-copy).
+   * All targets must reside on this worker. After this call, `buffer` is detached.
+   */
+  emitPoolStream(
+    targets: FluxionPoolStreamMsg["targets"],
+    buffer: ArrayBuffer,
+    length: number,
+  ): void {
+    const msg: FluxionPoolStreamMsg = { mode: "pool-stream", targets, buffer, length };
     this._worker.postMessage(msg, [buffer]);
   }
 }

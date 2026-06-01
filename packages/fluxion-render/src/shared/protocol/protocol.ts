@@ -208,6 +208,25 @@ export interface StreamDataMsg {
   stride?: number;
 }
 
+/**
+ * Pool-level fan-out stream message.
+ * Sent via `FluxionHost.emitPoolStream()` to deliver one decoded buffer to
+ * multiple Engine instances on the same worker in a single transfer.
+ *
+ * All target hostIds must reside on the same worker as the sending host.
+ * Use a size-1 pool (`useFluxionWorkerPool({ size: 1 })`) to guarantee
+ * co-location of all hosts before calling `emitPoolStream`.
+ */
+export interface FluxionPoolStreamMsg {
+  mode: "pool-stream";
+  /** Each entry maps one engine (by hostId) to one layer (by layerId). */
+  targets: Array<{ hostId: string; layerId: string }>;
+  /** Transferred Float32 payload — decoded once, pushed to all targets. */
+  buffer: ArrayBuffer;
+  /** Number of valid Float32 elements (not bytes) in `buffer`. */
+  length: number;
+}
+
 // ────────────────────────────────────────────────────────────────────────
 // Worker → Main messages (posted via self.postMessage inside the worker)
 // ────────────────────────────────────────────────────────────────────────

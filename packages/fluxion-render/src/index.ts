@@ -61,7 +61,7 @@ export type {
 export { computeAxisTicks, formatTick } from "./shared/lib/axis-ticks";
 export type { TickFormatter } from "./shared/lib/time-format";
 export { formatClock, makeClockFormatter } from "./shared/lib/time-format";
-export type { DType, HostMsg, LayerKind } from "./shared/protocol";
+export type { DType, FluxionPoolStreamMsg, HostMsg, LayerKind } from "./shared/protocol";
 export {
   areaLayer,
   axisGridLayer,

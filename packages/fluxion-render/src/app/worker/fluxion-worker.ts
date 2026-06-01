@@ -1,5 +1,5 @@
 import { Engine } from "../../features/engine";
-import type { HostMsg } from "../../shared/protocol";
+import type { FluxionPoolStreamMsg, HostMsg } from "../../shared/protocol";
 import { Op } from "../../shared/protocol";
 
 const SOLO_HOST_ID = "__solo__";
@@ -29,6 +29,15 @@ self.onmessage = (e: MessageEvent<HostMsg>) => {
       if (engine) {
         engine.dispatch({ op: Op.DISPOSE });
         engines.delete(msg.hostId);
+      }
+      return;
+    }
+
+    if ((msg as unknown as { mode?: string }).mode === "pool-stream") {
+      const s = msg as unknown as FluxionPoolStreamMsg;
+      const decoded = new Float32Array(s.buffer, 0, s.length);
+      for (const { hostId, layerId } of s.targets) {
+        engines.get(hostId)?.pushRaw(layerId, decoded);
       }
       return;
     }

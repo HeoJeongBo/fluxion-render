@@ -29,9 +29,12 @@
 export { Engine } from "./features/engine";
 export { Op } from "./shared/protocol";
 export type {
+  FluxionPoolStreamMsg,
   HostMsg,
   LayerKind,
   DType,
+  PoolInitMsg,
+  PoolDisposeMsg,
   StreamDataMsg,
 } from "./shared/protocol";
 export {
