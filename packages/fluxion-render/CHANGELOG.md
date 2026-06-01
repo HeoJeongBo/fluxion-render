@@ -1,5 +1,17 @@
 # Changelog
 
+# [0.14.0](https://github-personal/HeoJeongBo/fluxion-render/compare/fluxion-render-v0.13.0...fluxion-render-v0.14.0) (2026-06-01)
+
+
+### Features
+
+* **render,examples:** add yAutoMinSpan to axis-grid and Friday 0x0001 packet demo ([57de13a](https://github-personal/HeoJeongBo/fluxion-render/commit/57de13aaef63f4c331768021b3ed69b57340442b))
+
+
+### Reverts
+
+* **examples:** remove Friday packet demo and restore pool fan-out stream demo ([b50a308](https://github-personal/HeoJeongBo/fluxion-render/commit/b50a308eed99c882d4ca34565b0eead9870d684d))
+
 # [0.13.0](https://github-personal/HeoJeongBo/fluxion-render/compare/fluxion-render-v0.12.1...fluxion-render-v0.13.0) (2026-06-01)
 
 
