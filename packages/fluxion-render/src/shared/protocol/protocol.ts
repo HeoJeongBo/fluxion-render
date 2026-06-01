@@ -189,6 +189,25 @@ export type HostMsg =
   | SetAxisStyleMsg
   | ClearDataMsg;
 
+/**
+ * Stream-channel message for custom worker scripts.
+ * Sent via `FluxionHost.emitStream()` / `FluxionWorkerHandle.emitStream()`.
+ * Not part of the `HostMsg` union — consumed by the user-defined streamHandler.
+ *
+ * The `buffer` is transferred (zero-copy). After `emitStream()` returns,
+ * the caller's ArrayBuffer is detached and must not be read.
+ */
+export interface StreamDataMsg {
+  /** Target layer id inside the Engine. */
+  id: string;
+  /** Transferred Float32 payload — detached on main thread after send. */
+  buffer: ArrayBuffer;
+  /** Number of valid Float32 elements (not bytes) in `buffer`. */
+  length: number;
+  /** Optional layout hint for the custom decoder (engine ignores this). */
+  stride?: number;
+}
+
 // ────────────────────────────────────────────────────────────────────────
 // Worker → Main messages (posted via self.postMessage inside the worker)
 // ────────────────────────────────────────────────────────────────────────

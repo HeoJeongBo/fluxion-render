@@ -4,6 +4,7 @@ import { WorkerHandle, WorkerPool } from "../worker-pool/model/worker-pool";
 import { useWorkerHandle } from "./use-worker-handle";
 import { useWorkerPool } from "./use-worker-pool";
 import { useWorkerRequest } from "./use-worker-request";
+import { useWorkerStream } from "./use-worker-stream";
 
 // ─── Fake Worker ─────────────────────────────────────────────────────────────
 
@@ -304,5 +305,108 @@ describe("useWorkerRequest", () => {
     await waitFor(() => expect(result.current.data).toEqual({ result: 2 }));
 
     handle.dispose();
+  });
+});
+
+// ─── useWorkerStream ──────────────────────────────────────────────────────────
+
+describe("useWorkerStream", () => {
+  afterEach(() => { vi.restoreAllMocks(); });
+
+  function makeHandleWithFake() {
+    const fake = makeFakeWorker();
+    const handle = new WorkerHandle<TestMsg>(() => fake as unknown as Worker);
+    return { handle, fake };
+  }
+
+  it("calls emit on mount with the provided msg", async () => {
+    const { handle, fake } = makeHandleWithFake();
+    const onData = vi.fn();
+    const msg: TestMsg = { op: "start" };
+
+    renderHook(() => useWorkerStream(handle, msg, onData));
+
+    await waitFor(() => {
+      const calls = fake.postMessage.mock.calls;
+      expect(calls.some((c) => (c[0] as Record<string, unknown>).mode === "stream")).toBe(true);
+    });
+
+    handle.dispose();
+  });
+
+  it("subscribes before emitting (onStream registered first)", async () => {
+    const { handle, fake } = makeHandleWithFake();
+    const received: number[] = [];
+    const msg: TestMsg = { op: "sub" };
+
+    renderHook(() =>
+      useWorkerStream<TestMsg, { value: number }>(handle, msg, (d) => {
+        received.push(d.value);
+      }),
+    );
+
+    await waitFor(() =>
+      fake.postMessage.mock.calls.some((c) => (c[0] as Record<string, unknown>).mode === "stream"),
+    );
+
+    act(() => {
+      fake._emit("message", { __fluxionStream: true, hostId: handle.hostId, value: 42 });
+    });
+
+    expect(received).toEqual([42]);
+    handle.dispose();
+  });
+
+  it("calls onData for each push received from the worker", async () => {
+    const { handle, fake } = makeHandleWithFake();
+    const onData = vi.fn();
+    const msg: TestMsg = { op: "stream" };
+
+    renderHook(() => useWorkerStream<TestMsg, TestResult>(handle, msg, onData));
+
+    await waitFor(() =>
+      fake.postMessage.mock.calls.some((c) => (c[0] as Record<string, unknown>).mode === "stream"),
+    );
+
+    act(() => {
+      fake._emit("message", { __fluxionStream: true, hostId: handle.hostId, result: 1 });
+      fake._emit("message", { __fluxionStream: true, hostId: handle.hostId, result: 2 });
+    });
+
+    expect(onData).toHaveBeenCalledTimes(2);
+    handle.dispose();
+  });
+
+  it("unsubscribes on unmount", async () => {
+    const { handle, fake } = makeHandleWithFake();
+    const onData = vi.fn();
+    const msg: TestMsg = { op: "unsub" };
+
+    const { unmount } = renderHook(() =>
+      useWorkerStream<TestMsg, TestResult>(handle, msg, onData),
+    );
+
+    await waitFor(() =>
+      fake.postMessage.mock.calls.some((c) => (c[0] as Record<string, unknown>).mode === "stream"),
+    );
+
+    unmount();
+
+    act(() => {
+      fake._emit("message", { __fluxionStream: true, hostId: handle.hostId, result: 99 });
+    });
+
+    expect(onData).not.toHaveBeenCalled();
+    handle.dispose();
+  });
+
+  it("does nothing when handle is null", () => {
+    const onData = vi.fn();
+    expect(() => {
+      renderHook(() =>
+        useWorkerStream<TestMsg, TestResult>(null, { op: "x" }, onData),
+      );
+    }).not.toThrow();
+    expect(onData).not.toHaveBeenCalled();
   });
 });

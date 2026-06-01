@@ -17,7 +17,8 @@ npm install @heojeongbo/fluxion-worker
 - **`WorkerPool`** — manages N workers, routes messages via `hostId`, least-busy scheduling
 - **`WorkerHandle`** — thin wrapper over a single Worker with `hostId` filtering and optional pool integration
 - **`defineWorker`** — worker-side helper that eliminates `self.onmessage` / `self.postMessage` boilerplate and auto-echoes `hostId`
-- **`/react` subpath** — `useWorkerHandle`, `useWorkerPool`, `useWorkerRequest` hooks (React 18+, optional)
+- **`defineWorkerWithState` stream mode** — optional second `streamHandler` argument for fire-and-forget high-frequency paths (no Promise, no GC pressure)
+- **`/react` subpath** — `useWorkerHandle`, `useWorkerPool`, `useWorkerRequest`, `useWorkerStream` hooks (React 18+, optional)
 
 ---
 
@@ -167,6 +168,44 @@ function Calc({ values }: { values: number[] }) {
 
 The in-flight request is automatically cancelled (via `AbortSignal`) when `handle` or `msg` changes, or when the component unmounts.
 
+### `useWorkerStream` — fire-and-forget emit, callback per push
+
+Emits a stream message on mount and subscribes to worker pushes via `handle.onStream()`. Unsubscribes on unmount. No Promise, no loading state.
+
+```tsx
+import { useWorkerStream } from "@heojeongbo/fluxion-worker/react";
+import { WorkerHandle } from "@heojeongbo/fluxion-worker";
+
+type StreamMsg = { start: true };
+type StreamResult = { value: number };
+
+function Live({ handle }: { handle: WorkerHandle<StreamMsg> | null }) {
+  useWorkerStream<StreamMsg, StreamResult>(
+    handle,
+    { start: true },           // emitted on mount (mode: "stream")
+    (data) => {
+      console.log(data.value); // called for every push from the worker
+    },
+  );
+
+  return null;
+}
+```
+
+```ts
+useWorkerStream<TMsg, TResult>(
+  handle: WorkerHandle<TMsg> | null,
+  msg: TMsg,                               // emitted on mount
+  onData: (result: TResult) => void,       // called per push; captured by ref — stable across renders
+  transfer?: Transferable[],               // optional transfer list for msg
+  deps?: DependencyList,                   // re-emit when deps change (default [])
+): void
+```
+
+- `onData` is always called with the latest closure — no stale ref issues
+- Subscription is registered **before** emit so no push is missed
+- Does nothing when `handle` is `null`
+
 ---
 
 ## API
@@ -206,47 +245,58 @@ defineWorker<{ url: string }, { data: string }>(async ({ url }, reply) => {
 });
 ```
 
-### `defineWorkerWithState(handler)`
+### `defineWorkerWithState(rpcHandler, streamHandler?)`
 
-Like `defineWorker`, but manages per-host state automatically.
+Like `defineWorker`, but manages per-host state automatically. An optional second `streamHandler` argument handles fire-and-forget messages sent via `WorkerHandle.emit()` — no Promise, no reply, no GC pressure.
 
 ```ts
-defineWorkerWithState<TMsg, TResult, TState>(
-  handler: (
+defineWorkerWithState<TMsg, TResult, TState, TStreamMsg, TStreamResult>(
+  rpcHandler: (
     msg: TMsg,
     reply: ReplyFn<TResult>,
-    ctx: HostContext<TState>  // { hostId, state }
-  ) => TState | null | void | Promise<TState | null | void>
+    ctx: HostContext<TState>  // { hostId, state, mode }
+  ) => TState | null | void | Promise<TState | null | void>,
+  streamHandler?: (
+    msg: TStreamMsg,
+    push: PushFn<TStreamResult>,
+    ctx: HostContext<TState>
+  ) => void | Promise<void>
 ): void
 ```
 
-- Return a new state value to update it for this host
+Messages with `mode: "stream"` are routed to `streamHandler`; all others go to `rpcHandler`. State is shared between both handlers via `ctx.state` — `rpcHandler` updates it, `streamHandler` reads it.
+
+- Return a new state value from `rpcHandler` to update it for this host
 - Return `null` to delete the state for this host (useful for session cleanup)
 - Return `undefined` (or void) to leave state unchanged
 - Works in standalone mode — messages without `hostId` share a `"__solo__"` slot
 
 ```ts
+// RPC only
 defineWorkerWithState<{ count: 1 }, { total: number }, { total: number }>(
   ({ }, reply, { state }) => {
     const s = state ?? { total: 0 };
     const next = { total: s.total + 1 };
     reply(next);
-    return next; // update state
+    return next;
   }
 );
 
-// Reset state for a host:
-defineWorkerWithState<{ reset?: boolean }, { total: number }, { total: number }>(
-  ({ reset }, reply, { state }) => {
-    if (reset) {
-      reply({ total: 0 });
-      return null; // delete state for this host
-    }
-    const s = state ?? { total: 0 };
-    const next = { total: s.total + 1 };
-    reply(next);
-    return next;
-  }
+// RPC + stream (high-frequency path, no Promise)
+type Msg = { init: true };
+type StreamMsg = { buffer: ArrayBuffer; length: number; id: string };
+type State = { count: number };
+
+defineWorkerWithState<Msg, object, State, StreamMsg>(
+  (_msg, _reply, ctx) => {
+    return ctx.state ?? { count: 0 };
+  },
+  (msg, _push, ctx) => {
+    const s = ctx.state;
+    if (!s) return;
+    const raw = new Float32Array(msg.buffer, 0, msg.length);
+    // process raw — no reply needed, runs entirely off main thread
+  },
 );
 ```
 

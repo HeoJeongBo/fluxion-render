@@ -53,10 +53,10 @@ function MiniChart({ index }: { index: number }) {
 
   useFluxionStream({
     host,
-    intervalMs: 1000 / 30,
+    intervalMs: 1000 / 120,
     setup: (h) => h.line("line"),
     tick: (t, handle) => {
-      const msgs = generateFloat32StampedBatch(t, 4, 1000 / (30 * 4), {
+      const msgs = generateFloat32StampedBatch(t, 1, 1000 / 120, {
         freqHz,
         amplitude: 0.8,
         seriesOffset: index * 0.4,

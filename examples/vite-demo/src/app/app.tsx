@@ -18,6 +18,7 @@ import { LidarDemoPage } from "../pages/lidar-demo";
 import { LineDemoPage } from "../pages/line-demo";
 import { PoolDemoPage } from "../pages/pool-demo";
 import { RobotDashboardPage } from "../pages/robot-dashboard";
+import { StreamWorkerDemoPage } from "../pages/stream-worker-demo";
 import { ScatterColoredDemoPage } from "../pages/scatter-colored-demo";
 import { ScatterDemoPage } from "../pages/scatter-demo";
 import { StaticXyDemoPage } from "../pages/static-xy-demo";
@@ -51,7 +52,8 @@ type Tab =
   | "robot-dashboard"
   | "reference-line"
   | "pose-arrow"
-  | "pie";
+  | "pie"
+  | "stream-worker";
 
 const groups: readonly SideBarGroup<Tab>[] = [
   {
@@ -93,6 +95,7 @@ const groups: readonly SideBarGroup<Tab>[] = [
       { id: "historical", label: "Historical" },
       { id: "lidar", label: "LiDAR 30k" },
       { id: "pool", label: "Pool (40 charts)" },
+      { id: "stream-worker", label: "Custom Worker Stream" },
       { id: "fluxion-worker", label: "fluxion-worker" },
       { id: "external-axes", label: "External axes" },
     ],
@@ -131,6 +134,7 @@ export function App() {
         {tab === "reference-line" && <ReferenceLineDemoPage />}
         {tab === "pose-arrow" && <PoseArrowDemoPage />}
         {tab === "pie" && <PieDemoPage />}
+        {tab === "stream-worker" && <StreamWorkerDemoPage />}
       </main>
     </div>
   );

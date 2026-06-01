@@ -469,4 +469,30 @@ describe("FluxionHost", () => {
     }).not.toThrow();
     host.dispose();
   });
+
+  it("emitStream transfers the ArrayBuffer with mode:stream and the given id/length", () => {
+    const { worker, posts } = makeFakeWorker();
+    const host = new FluxionHost(makeCanvas(), { workerFactory: () => worker });
+    posts.length = 0;
+    const buffer = new Float32Array([1, 2, 3, 4]).buffer;
+    host.emitStream("sensor", buffer, 4);
+    expect(posts).toHaveLength(1);
+    const [post] = posts;
+    const msg = post.msg as { id: string; length: number; mode: string; buffer: ArrayBuffer };
+    expect(msg.id).toBe("sensor");
+    expect(msg.length).toBe(4);
+    expect(msg.mode).toBe("stream");
+    expect(msg.buffer).toBe(buffer);
+    expect(post.transfer).toEqual([buffer]);
+    host.dispose();
+  });
+
+  it("emitStream is a no-op after dispose", () => {
+    const { worker, posts } = makeFakeWorker();
+    const host = new FluxionHost(makeCanvas(), { workerFactory: () => worker });
+    host.dispose();
+    posts.length = 0;
+    host.emitStream("sensor", new ArrayBuffer(8), 2);
+    expect(posts).toHaveLength(0);
+  });
 });

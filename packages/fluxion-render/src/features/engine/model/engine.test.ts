@@ -602,4 +602,38 @@ describe("Engine", () => {
     flushFrame();
     engine.dispatch({ op: Op.DISPOSE });
   });
+
+  it("pushRaw feeds data to the layer and marks dirty (renders a frame)", () => {
+    const engine = new Engine();
+    const canvas = newCanvas(100, 100);
+    engine.dispatch({ op: Op.INIT, canvas, width: 100, height: 100, dpr: 1 });
+    engine.dispatch({
+      op: Op.ADD_LAYER,
+      id: "axis",
+      kind: "axis-grid",
+      config: { xRange: [0, 1000], yRange: [-1, 1] },
+    });
+    engine.dispatch({
+      op: Op.ADD_LAYER,
+      id: "line",
+      kind: "line",
+      config: { color: "#0f0", capacity: 8 },
+    });
+    const samples = new Float32Array([0, 0, 200, 0.5, 400, -0.3, 600, 0.8]);
+    engine.pushRaw("line", samples);
+    flushFrame();
+    const ctx = (canvas as unknown as { getContext: () => FakeCtx }).getContext();
+    expect(ctx.calls.some((c) => c.name === "stroke")).toBe(true);
+    engine.dispatch({ op: Op.DISPOSE });
+  });
+
+  it("pushRaw silently ignores unknown layerId", () => {
+    const engine = new Engine();
+    const canvas = newCanvas(100, 100);
+    engine.dispatch({ op: Op.INIT, canvas, width: 100, height: 100, dpr: 1 });
+    expect(() => {
+      engine.pushRaw("nonexistent", new Float32Array([1, 2]));
+    }).not.toThrow();
+    engine.dispatch({ op: Op.DISPOSE });
+  });
 });

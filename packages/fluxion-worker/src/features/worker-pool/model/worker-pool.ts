@@ -142,12 +142,13 @@ export class WorkerHandle<TMsg extends object> implements WorkerLike {
   addEventListener(type: string, listener: EventListener): void {
     const id = this.hostId;
     const wrapper: EventListener = (evt: Event) => {
-      const msg = (evt as MessageEvent<{ hostId?: string; __fluxionError?: true }>).data;
+      const msg = (evt as MessageEvent<{ hostId?: string; __fluxionError?: true; __fluxionStream?: true }>).data;
       if (
         msg !== null &&
         typeof msg === "object" &&
         msg.hostId === id &&
-        !msg.__fluxionError
+        !msg.__fluxionError &&
+        !msg.__fluxionStream
       ) {
         listener(evt);
       }
@@ -323,6 +324,54 @@ export class WorkerHandle<TMsg extends object> implements WorkerLike {
     };
   }
 
+  /**
+   * Subscribe to worker→main stream push messages for this host.
+   * Fires whenever the worker calls `push()` from a stream handler.
+   * Returns an `off` unsubscribe function.
+   *
+   * @example
+   * ```ts
+   * const off = handle.onStream<ParsedFrame>((frame) => {
+   *   canvas.draw(frame);
+   * });
+   * handle.emit({ channel: "sensors" });
+   * // later: off();
+   * ```
+   */
+  onStream<TResult extends object = object>(
+    callback: (msg: Omit<TResult, "hostId" | "__fluxionStream">) => void,
+  ): () => void {
+    const id = this.hostId;
+    const raw: EventListener = (evt: Event) => {
+      const data = (evt as MessageEvent).data;
+      if (
+        data !== null &&
+        typeof data === "object" &&
+        (data as { __fluxionStream?: boolean }).__fluxionStream === true &&
+        (data as { hostId?: string }).hostId === id
+      ) {
+        const { hostId: _h, __fluxionStream: _s, ...msg } = data as Record<string, unknown>;
+        callback(msg as Omit<TResult, "hostId" | "__fluxionStream">);
+      }
+    };
+    let byType = this._listenerMap.get("message");
+    if (!byType) {
+      byType = new Map();
+      this._listenerMap.set("message", byType);
+    }
+    byType.set(raw, raw);
+    this._worker.addEventListener("message", raw);
+    return () => {
+      this._worker.removeEventListener("message", raw);
+      const map = this._listenerMap.get("message");
+      /* v8 ignore next 4 */
+      if (map) {
+        map.delete(raw);
+        if (map.size === 0) this._listenerMap.delete("message");
+      }
+    };
+  }
+
   removeEventListener(type: string, listener: EventListener): void {
     const byType = this._listenerMap.get(type);
     const wrapper = byType?.get(listener);
@@ -342,6 +391,26 @@ export class WorkerHandle<TMsg extends object> implements WorkerLike {
   postMessage(msg: TMsg, transfer?: Transferable[]): void {
     if (this._terminated) return;
     const stamped = { ...msg, hostId: this.hostId };
+    if (transfer && transfer.length > 0) {
+      this._worker.postMessage(stamped, transfer);
+    } else {
+      this._worker.postMessage(stamped);
+    }
+  }
+
+  /**
+   * Send a stream message to the worker.
+   * Stamps `mode: "stream"` so the worker routes to its stream handler.
+   * Fire-and-forget — no Promise, no reply expected.
+   *
+   * @example
+   * ```ts
+   * handle.emit({ type: "frame", data: buffer }, [buffer]);
+   * ```
+   */
+  emit(msg: TMsg, transfer?: Transferable[]): void {
+    if (this._terminated) return;
+    const stamped = { ...msg, hostId: this.hostId, mode: "stream" as const };
     if (transfer && transfer.length > 0) {
       this._worker.postMessage(stamped, transfer);
     } else {
@@ -493,6 +562,26 @@ export class WorkerPool<TMsg extends object> {
       return await handle.request<TResult>(msg, opts, transfer);
     } finally {
       handle.release();
+    }
+  }
+
+  /**
+   * Route a stream message to the least-busy worker.
+   * Fire-and-forget — no acquire/release lifecycle, no Promise, no hostId.
+   *
+   * Use this for one-way high-frequency fan-out (e.g. feeding raw packets to any
+   * available worker for parsing + rendering). For a bi-directional stream channel
+   * where the worker needs to push replies back to a specific subscriber, use
+   * `acquire()` + `handle.emit()` + `handle.onStream()` instead.
+   */
+  stream(msg: TMsg, transfer?: Transferable[]): void {
+    if (this._disposed) return;
+    const index = this._leastBusyIndex();
+    const stamped = { ...msg, mode: "stream" as const };
+    if (transfer && transfer.length > 0) {
+      this.workers[index]!.postMessage(stamped, transfer);
+    } else {
+      this.workers[index]!.postMessage(stamped);
     }
   }
 

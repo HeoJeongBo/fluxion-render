@@ -4,3 +4,4 @@ export {
   useWorkerRequest,
   type UseWorkerRequestResult,
 } from "./features/react-hooks/use-worker-request";
+export { useWorkerStream } from "./features/react-hooks/use-worker-stream";

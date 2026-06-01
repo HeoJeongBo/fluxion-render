@@ -144,3 +144,25 @@ describe("FluxionWorkerPool", () => {
     pool.dispose();
   });
 });
+
+// ─── FluxionWorkerHandle.emitStream ──────────────────────────────────────────
+
+describe("FluxionWorkerHandle.emitStream", () => {
+  it("posts with mode:stream, hostId, id, length and transfers the buffer", () => {
+    const { pool, fakeWorkers } = makePool();
+    const handle = pool.acquire();
+    const buffer = new Float32Array([1, 2, 3, 4]).buffer;
+    handle.emitStream("sensor", buffer, 4);
+
+    const [call] = fakeWorkers[0]!.postMessage.mock.calls;
+    const msg = call![0] as { id: string; length: number; mode: string; hostId: string; buffer: ArrayBuffer };
+    expect(msg.id).toBe("sensor");
+    expect(msg.length).toBe(4);
+    expect(msg.mode).toBe("stream");
+    expect(msg.hostId).toBe(handle.hostId);
+    expect(msg.buffer).toBe(buffer);
+    const transfer = call![1] as Transferable[];
+    expect(transfer).toEqual([buffer]);
+    pool.dispose();
+  });
+});

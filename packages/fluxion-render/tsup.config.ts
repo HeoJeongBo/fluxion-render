@@ -6,6 +6,7 @@ export default defineConfig({
     react: "src/react.ts",
     testing: "src/testing/index.ts",
     "fluxion-worker": "src/app/worker/fluxion-worker.ts",
+    worker: "src/worker.ts",
   },
   format: ["esm"],
   dts: true,

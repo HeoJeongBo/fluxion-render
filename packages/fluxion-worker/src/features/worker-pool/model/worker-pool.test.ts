@@ -1269,3 +1269,142 @@ describe("WorkerHandle.onError off — listenerMap cleanup", () => {
 afterEach(() => {
   vi.useRealTimers();
 });
+
+// ─── WorkerHandle.emit() ──────────────────────────────────────────────────────
+
+describe("WorkerHandle.emit()", () => {
+  it("stamps mode=stream and hostId onto the message", () => {
+    const { pool, fakeWorkers } = makePool(1);
+    const handle = pool.acquire();
+    handle.emit({ op: 1 });
+    const call = fakeWorkers[0]!.postMessage.mock.calls.at(-1)!;
+    expect((call[0] as Record<string, unknown>).mode).toBe("stream");
+    expect((call[0] as Record<string, unknown>).hostId).toBe(handle.hostId);
+    pool.dispose();
+  });
+
+  it("forwards transferables", () => {
+    const { pool, fakeWorkers } = makePool(1);
+    const handle = pool.acquire();
+    const buf = new ArrayBuffer(8);
+    handle.emit({ op: 1 }, [buf]);
+    const call = fakeWorkers[0]!.postMessage.mock.calls.at(-1)!;
+    expect(call[1]).toEqual([buf]);
+    pool.dispose();
+  });
+
+  it("is a no-op when handle is terminated", () => {
+    const { pool, fakeWorkers } = makePool(1);
+    const handle = pool.acquire();
+    pool.dispose();
+    const before = fakeWorkers[0]!.postMessage.mock.calls.length;
+    handle.emit({ op: 1 });
+    expect(fakeWorkers[0]!.postMessage.mock.calls.length).toBe(before);
+  });
+});
+
+// ─── WorkerHandle.onStream() ─────────────────────────────────────────────────
+
+describe("WorkerHandle.onStream()", () => {
+  it("fires callback for __fluxionStream messages matching hostId", () => {
+    const { pool, fakeWorkers } = makePool(1);
+    const handle = pool.acquire();
+    const cb = vi.fn();
+    handle.onStream(cb);
+    fakeWorkers[0]!._emit("message", { __fluxionStream: true, hostId: handle.hostId, value: 42 });
+    expect(cb).toHaveBeenCalledOnce();
+    expect(cb.mock.calls[0]![0]).toMatchObject({ value: 42 });
+    pool.dispose();
+  });
+
+  it("strips __fluxionStream and hostId from delivered message", () => {
+    const { pool, fakeWorkers } = makePool(1);
+    const handle = pool.acquire();
+    const cb = vi.fn();
+    handle.onStream(cb);
+    fakeWorkers[0]!._emit("message", { __fluxionStream: true, hostId: handle.hostId, parsed: 7 });
+    const delivered = cb.mock.calls[0]![0] as Record<string, unknown>;
+    expect(delivered.__fluxionStream).toBeUndefined();
+    expect(delivered.hostId).toBeUndefined();
+    expect(delivered.parsed).toBe(7);
+    pool.dispose();
+  });
+
+  it("does not fire for regular RPC replies", () => {
+    const { pool, fakeWorkers } = makePool(1);
+    const handle = pool.acquire();
+    const cb = vi.fn();
+    handle.onStream(cb);
+    fakeWorkers[0]!._emit("message", { hostId: handle.hostId, result: 1 });
+    expect(cb).not.toHaveBeenCalled();
+    pool.dispose();
+  });
+
+  it("does not fire for other hostIds", () => {
+    const { pool, fakeWorkers } = makePool(1);
+    const handle = pool.acquire();
+    const cb = vi.fn();
+    handle.onStream(cb);
+    fakeWorkers[0]!._emit("message", { __fluxionStream: true, hostId: "other-host", value: 1 });
+    expect(cb).not.toHaveBeenCalled();
+    pool.dispose();
+  });
+
+  it("onMessage does not fire for __fluxionStream messages (no bleeding)", () => {
+    const { pool, fakeWorkers } = makePool(1);
+    const handle = pool.acquire();
+    const rpcCb = vi.fn();
+    handle.onMessage(rpcCb);
+    fakeWorkers[0]!._emit("message", { __fluxionStream: true, hostId: handle.hostId, value: 99 });
+    expect(rpcCb).not.toHaveBeenCalled();
+    pool.dispose();
+  });
+
+  it("off() unsubscribes the stream listener", () => {
+    const { pool, fakeWorkers } = makePool(1);
+    const handle = pool.acquire();
+    const cb = vi.fn();
+    const off = handle.onStream(cb);
+    off();
+    fakeWorkers[0]!._emit("message", { __fluxionStream: true, hostId: handle.hostId, value: 1 });
+    expect(cb).not.toHaveBeenCalled();
+    pool.dispose();
+  });
+});
+
+// ─── WorkerPool.stream() ─────────────────────────────────────────────────────
+
+describe("WorkerPool.stream()", () => {
+  it("stamps mode=stream on the message", () => {
+    const { pool, fakeWorkers } = makePool(1);
+    pool.stream({ op: 1 });
+    const call = fakeWorkers[0]!.postMessage.mock.calls.at(-1)!;
+    expect((call[0] as Record<string, unknown>).mode).toBe("stream");
+    pool.dispose();
+  });
+
+  it("does not increment hostCounts (fire-and-forget)", () => {
+    const { pool } = makePool(2);
+    const before = pool.stats().totalActive;
+    pool.stream({ op: 1 });
+    expect(pool.stats().totalActive).toBe(before);
+    pool.dispose();
+  });
+
+  it("forwards transferables", () => {
+    const { pool, fakeWorkers } = makePool(1);
+    const buf = new ArrayBuffer(4);
+    pool.stream({ op: 1 }, [buf]);
+    const call = fakeWorkers[0]!.postMessage.mock.calls.at(-1)!;
+    expect(call[1]).toEqual([buf]);
+    pool.dispose();
+  });
+
+  it("is a no-op when pool is disposed", () => {
+    const { pool, fakeWorkers } = makePool(1);
+    pool.dispose();
+    const before = fakeWorkers[0]!.postMessage.mock.calls.length;
+    pool.stream({ op: 1 });
+    expect(fakeWorkers[0]!.postMessage.mock.calls.length).toBe(before);
+  });
+});

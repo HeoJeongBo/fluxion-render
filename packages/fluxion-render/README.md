@@ -520,6 +520,9 @@ const lidar  = host.addLidarLayer(id, config?)      // → LidarLayerHandle
 const line = host.line(id)
 const lidar = host.lidar(id, stride?)
 
+// Custom worker stream (solo mode only)
+host.emitStream(id, buffer, length)  // transfer raw ArrayBuffer to streamHandler
+
 // Canvas
 host.resize(width, height, dpr)
 host.setBgColor(color)
@@ -563,6 +566,92 @@ All data is transferred as `TypedArray` with zero-copy semantics. After calling 
 
 ---
 
+## Custom Worker Script (zero-copy stream)
+
+For high-frequency raw sensor data (200Hz+), you can bypass the default `HostMsg` protocol entirely. Write your own worker script that imports `Engine` as a library, decode the raw bytes inside the worker, and push directly into the ring buffer — the main thread never parses anything.
+
+### When to use
+
+- Sensor delivers a custom binary format (packed structs, µs timestamps, raw ADC values)
+- You want parsing + ring buffer + OffscreenCanvas draw all in one OS thread
+- `postMessage` serialization overhead is measurable at your sample rate
+
+### `"@heojeongbo/fluxion-render/worker"` sub-entry
+
+Exports `Engine`, `Op`, `defineWorker`, `defineWorkerWithState`, and all associated types:
+
+```ts
+import {
+  Engine,
+  Op,
+  defineWorkerWithState,
+  type HostMsg,
+  type StreamDataMsg,
+} from "@heojeongbo/fluxion-render/worker";
+```
+
+### Worker script
+
+```ts
+// my-sensor-worker.ts
+import {
+  Engine, Op, defineWorkerWithState,
+  type HostMsg, type StreamDataMsg,
+} from "@heojeongbo/fluxion-render/worker";
+
+// Wire format per sample: [timestamp_us: f32, raw_i16: f32]
+// Decode: us→ms, raw/32767 → [-1, 1]
+defineWorkerWithState<HostMsg, object, Engine, StreamDataMsg>(
+  // rpcHandler — receives INIT / ADD_LAYER / RESIZE / DISPOSE
+  (msg, _reply, ctx) => {
+    const engine = ctx.state ?? new Engine();
+    engine.dispatch(msg as HostMsg);
+    if ((msg as HostMsg).op === Op.DISPOSE) return null;
+    return engine;
+  },
+  // streamHandler — receives raw ArrayBuffer transferred from main thread
+  (msg, _push, ctx) => {
+    const engine = ctx.state;
+    if (!engine) return;
+
+    const sampleCount = msg.length >> 1;
+    const raw = new Float32Array(msg.buffer, 0, msg.length);
+    const decoded = new Float32Array(sampleCount * 2);
+    for (let i = 0; i < sampleCount; i++) {
+      decoded[i * 2]     = raw[i * 2]! / 1000;         // µs → ms
+      decoded[i * 2 + 1] = raw[i * 2 + 1]! / 32767;   // raw → [-1, 1]
+    }
+    engine.pushRaw(msg.id, decoded);
+  },
+);
+```
+
+### Main thread
+
+```ts
+const host = new FluxionHost(canvas, {
+  workerFactory: () =>
+    new Worker(new URL("./my-sensor-worker.ts", import.meta.url), { type: "module" }),
+});
+
+host.addLayer("sensor", "line", { color: "#4fc3f7", capacity: 2048 });
+
+// High-frequency loop — main thread only packs raw bytes, never parses
+const dtMs = 1000 / 200;
+setInterval(() => {
+  const buf = new Float32Array(2);
+  buf[0] = Date.now() * 1000;   // ms → µs
+  buf[1] = readADC() * 32767;   // normalize to raw i16 range
+
+  // Transfer ownership — buf.buffer is detached after this call
+  host.emitStream("sensor", buf.buffer, buf.length);
+}, dtMs);
+```
+
+**`host.emitStream(id, buffer, length)`** — transfers `buffer` to the worker's `streamHandler`. After the call, `buffer` is detached and must not be read. Only meaningful when `workerFactory` is set (solo mode). For pool mode, use `FluxionWorkerHandle.emitStream()`.
+
+---
+
 ## Architecture
 
 ```
@@ -573,6 +662,7 @@ FluxionHost                          FluxionWorkerPool
   │──POOL_INIT (OffscreenCanvas)──────►│  Engine (per host)
   │──ADD_LAYER ──────────────────────►│    LayerStack
   │──DATA (Float32Array transfer) ───►│      LineChartLayer
+  │──emitStream (ArrayBuffer) ────────►│      streamHandler → pushRaw()
   │──RESIZE ──────────────────────────►│      LidarScatterLayer
   │──DISPOSE ─────────────────────────►│      AxisGridLayer
                                        │

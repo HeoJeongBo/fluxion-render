@@ -395,6 +395,20 @@ export class FluxionHost {
   }
 
   /**
+   * Transfer a raw Float32Array to the custom worker's `streamHandler` (zero-copy).
+   * After this call, `buffer` is detached — do not read it again.
+   *
+   * Only meaningful when the host was created with `workerFactory` pointing at
+   * a custom worker script that uses `defineWorkerWithState(rpcHandler, streamHandler)`.
+   * The streamHandler receives `{ id, buffer, length, mode: "stream" }`.
+   */
+  emitStream(id: string, buffer: ArrayBuffer, length: number): void {
+    if (this.disposed) return;
+    const msg = { id, buffer, length, mode: "stream" as const };
+    this.worker.postMessage(msg, [buffer]);
+  }
+
+  /**
    * Clear a layer's data buffer (ring buffer for streaming layers) without
    * removing the layer or touching its config. Pass `latestT` to force the
    * worker's time-mode axis window to rewind — needed when a replay player

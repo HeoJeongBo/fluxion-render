@@ -1,5 +1,7 @@
 export type {
+  FluxionMode,
   HostContext,
+  PushFn,
   ReplyFn,
   WorkerErrorMsg,
   WorkerMsg,

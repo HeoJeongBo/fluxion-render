@@ -335,3 +335,149 @@ describe("defineWorkerWithState", () => {
     expect(call![1]).toBeUndefined();
   });
 });
+
+// ─── Stream mode ─────────────────────────────────────────────────────────────
+
+describe("defineWorker — stream mode", () => {
+  it("routes mode=stream message to streamHandler, not rpcHandler", () => {
+    const rpc = vi.fn();
+    const stream = vi.fn();
+    defineWorker(rpc, stream);
+    selfMock.emit({ hostId: "host-1", mode: "stream", value: 42 });
+    expect(stream).toHaveBeenCalledOnce();
+    expect(rpc).not.toHaveBeenCalled();
+  });
+
+  it("routes mode=rpc message to rpcHandler", () => {
+    const rpc = vi.fn();
+    const stream = vi.fn();
+    defineWorker(rpc, stream);
+    selfMock.emit({ hostId: "host-1", mode: "rpc", value: 1 });
+    expect(rpc).toHaveBeenCalledOnce();
+    expect(stream).not.toHaveBeenCalled();
+  });
+
+  it("routes message with no mode to rpcHandler (backward compat)", () => {
+    const rpc = vi.fn();
+    const stream = vi.fn();
+    defineWorker(rpc, stream);
+    selfMock.emit({ hostId: "host-1", value: 99 });
+    expect(rpc).toHaveBeenCalledOnce();
+    expect(stream).not.toHaveBeenCalled();
+  });
+
+  it("push() stamps __fluxionStream: true and echoes hostId", () => {
+    defineWorker(vi.fn(), (_msg, push) => {
+      push({ parsed: 7 });
+    });
+    selfMock.emit({ hostId: "host-1", mode: "stream" });
+    expect(selfMock.postMessage).toHaveBeenCalledOnce();
+    const out = selfMock.postMessage.mock.calls[0]![0] as Record<string, unknown>;
+    expect(out.__fluxionStream).toBe(true);
+    expect(out.hostId).toBe("host-1");
+    expect(out.parsed).toBe(7);
+  });
+
+  it("push() forwards transferables", () => {
+    const buf = new ArrayBuffer(4);
+    defineWorker(vi.fn(), (_msg, push) => {
+      push({ buf }, [buf]);
+    });
+    selfMock.emit({ hostId: "host-1", mode: "stream" });
+    const call = selfMock.postMessage.mock.calls[0]!;
+    expect(call[1]).toEqual([buf]);
+  });
+
+  it("falls back to rpcHandler when no streamHandler and mode=stream", () => {
+    const rpc = vi.fn();
+    defineWorker(rpc);
+    selfMock.emit({ hostId: "host-1", mode: "stream" });
+    expect(rpc).toHaveBeenCalledOnce();
+  });
+
+  it("catches stream handler errors and posts error message", async () => {
+    defineWorker(vi.fn(), () => {
+      throw new Error("stream boom");
+    });
+    selfMock.emit({ hostId: "host-1", mode: "stream" });
+    const call = selfMock.postMessage.mock.calls[0]!;
+    const out = call[0] as Record<string, unknown>;
+    expect(out.__fluxionError).toBe(true);
+    expect(out.message).toBe("stream boom");
+  });
+
+  it("push() forwards transferables in defineWorker stream handler", () => {
+    const buf = new ArrayBuffer(4);
+    defineWorker(vi.fn(), (_msg, push) => {
+      push({ buf }, [buf]);
+    });
+    selfMock.emit({ hostId: "host-1", mode: "stream" });
+    const call = selfMock.postMessage.mock.calls[0]!;
+    expect(call[1]).toEqual([buf]);
+  });
+
+  it("catches async stream handler rejection in defineWorker", async () => {
+    defineWorker(vi.fn(), async () => {
+      throw new Error("async stream boom");
+    });
+    selfMock.emit({ hostId: "host-1", mode: "stream" });
+    await Promise.resolve();
+    await Promise.resolve();
+    const call = selfMock.postMessage.mock.calls[0]!;
+    expect((call[0] as Record<string, unknown>).__fluxionError).toBe(true);
+  });
+});
+
+describe("defineWorkerWithState — stream mode", () => {
+  it("push() forwards transferables", () => {
+    const buf = new ArrayBuffer(4);
+    defineWorkerWithState(vi.fn(), (_msg, push) => {
+      push({ buf }, [buf]);
+    });
+    selfMock.emit({ hostId: "host-1", mode: "stream" });
+    const call = selfMock.postMessage.mock.calls[0]!;
+    expect(call[1]).toEqual([buf]);
+  });
+
+  it("catches async stream handler rejection", async () => {
+    defineWorkerWithState(vi.fn(), async () => {
+      throw new Error("async wstate boom");
+    });
+    selfMock.emit({ hostId: "host-1", mode: "stream" });
+    await Promise.resolve();
+    await Promise.resolve();
+    const call = selfMock.postMessage.mock.calls[0]!;
+    expect((call[0] as Record<string, unknown>).__fluxionError).toBe(true);
+  });
+
+  it("routes mode=stream to streamHandler and does not update state", () => {
+    const rpc = vi.fn().mockReturnValue({ count: 1 });
+    const stream = vi.fn();
+    defineWorkerWithState(rpc, stream);
+    selfMock.emit({ hostId: "host-1", mode: "stream" });
+    expect(stream).toHaveBeenCalledOnce();
+    expect(rpc).not.toHaveBeenCalled();
+  });
+
+  it("exposes mode in HostContext", () => {
+    const ctxCaptures: string[] = [];
+    defineWorkerWithState(
+      (_msg, _reply, ctx) => { ctxCaptures.push(ctx.mode); },
+      (_msg, _push, ctx) => { ctxCaptures.push(ctx.mode); },
+    );
+    selfMock.emit({ hostId: "h1", mode: "rpc" });
+    selfMock.emit({ hostId: "h1", mode: "stream" });
+    expect(ctxCaptures).toEqual(["rpc", "stream"]);
+  });
+
+  it("push() stamps __fluxionStream: true", () => {
+    defineWorkerWithState(vi.fn(), (_msg, push) => {
+      push({ value: 55 });
+    });
+    selfMock.emit({ hostId: "host-1", mode: "stream" });
+    const out = selfMock.postMessage.mock.calls[0]![0] as Record<string, unknown>;
+    expect(out.__fluxionStream).toBe(true);
+    expect(out.value).toBe(55);
+    expect(out.hostId).toBe("host-1");
+  });
+});

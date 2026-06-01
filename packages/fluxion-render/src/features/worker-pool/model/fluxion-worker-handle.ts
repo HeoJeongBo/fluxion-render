@@ -37,4 +37,14 @@ export class FluxionWorkerHandle extends WorkerHandle<HostMsg> {
 
     super.postMessage(msg, transfer);
   }
+
+  /**
+   * Transfer a raw Float32Array to the custom worker's `streamHandler` (zero-copy).
+   * Stamps `hostId` so the worker routes to the correct Engine instance in pool mode.
+   * After this call, `buffer` is detached — do not read it again.
+   */
+  emitStream(id: string, buffer: ArrayBuffer, length: number): void {
+    const msg = { id, buffer, length, hostId: this.hostId, mode: "stream" as const };
+    this._worker.postMessage(msg, [buffer]);
+  }
 }

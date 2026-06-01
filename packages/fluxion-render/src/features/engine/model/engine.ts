@@ -308,6 +308,18 @@ export class Engine {
     }
   }
 
+  /**
+   * Push a pre-parsed Float32Array directly into a layer's ring buffer.
+   * Called from a custom worker streamHandler — bypasses HostMsg serialization.
+   * Data layout must match what the layer expects (e.g. [t, y, t, y, …] for line).
+   */
+  pushRaw(layerId: string, data: Float32Array): void {
+    const layer = this.stack.get(layerId);
+    if (!layer) return;
+    layer.setData(data.buffer as ArrayBuffer, data.length, this.viewport);
+    this.scheduler.markDirty();
+  }
+
   private dispose() {
     this.scheduler.stop();
     this.stack.disposeAll();
