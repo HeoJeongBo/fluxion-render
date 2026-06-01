@@ -438,7 +438,7 @@ describe("AxisGridLayer", () => {
       layer.setConfig({
         xRange: [0, 10],
         yRange: [0, 10],
-        xTickFormat: (v) => `${v}!`,
+        xTickFormat: (v: number) => `${v}!`,
       });
       const v = makeViewport();
       frame(layer, v);

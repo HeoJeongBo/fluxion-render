@@ -92,7 +92,7 @@ describe("useFluxionGauge", () => {
     const { host, fireBounds } = makeMockHost();
     const { result, rerender } = renderHook(
       (props: { host: FluxionHost | null }) => useFluxionGauge({ host: props.host }),
-      { initialProps: { host: null } },
+      { initialProps: { host: null as FluxionHost | null } },
     );
 
     expect(result.current.value).toBe(0);
