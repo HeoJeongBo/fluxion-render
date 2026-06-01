@@ -59,6 +59,13 @@ export interface AxisGridConfig {
   yAutoMin?: number;
   /** Absolute upper clamp after padding. */
   yAutoMax?: number;
+  /**
+   * Minimum y span for auto mode. When the padded range is narrower than this
+   * value, the range is symmetrically expanded around its midpoint.
+   * Applied after `yAutoMin`/`yAutoMax` clamps.
+   * Example: `yAutoMinSpan: 0.1` ensures the axis always spans at least 0.1.
+   */
+  yAutoMinSpan?: number;
 
   // ─── Visual toggles (all default true) ────────────────────
   /** Show vertical grid lines at x ticks. */
@@ -122,6 +129,7 @@ export class AxisGridLayer implements Layer {
   private yAutoPadding = 0.1;
   private yAutoMin: number | undefined;
   private yAutoMax: number | undefined;
+  private yAutoMinSpan: number | undefined;
   private showXGrid = true;
   private showYGrid = true;
   private showAxes = true;
@@ -159,6 +167,7 @@ export class AxisGridLayer implements Layer {
     if (c.yAutoPadding !== undefined) this.yAutoPadding = c.yAutoPadding;
     if (c.yAutoMin !== undefined) this.yAutoMin = c.yAutoMin;
     if (c.yAutoMax !== undefined) this.yAutoMax = c.yAutoMax;
+    if (c.yAutoMinSpan !== undefined) this.yAutoMinSpan = c.yAutoMinSpan;
     if (c.showXGrid !== undefined) this.showXGrid = c.showXGrid;
     if (c.showYGrid !== undefined) this.showYGrid = c.showYGrid;
     if (c.showAxes !== undefined) this.showAxes = c.showAxes;
@@ -216,6 +225,11 @@ export class AxisGridLayer implements Layer {
       }
       if (this.yAutoMin !== undefined && yMin < this.yAutoMin) yMin = this.yAutoMin;
       if (this.yAutoMax !== undefined && yMax > this.yAutoMax) yMax = this.yAutoMax;
+      if (this.yAutoMinSpan !== undefined && yMax - yMin < this.yAutoMinSpan) {
+        const mid = (yMin + yMax) / 2;
+        yMin = mid - this.yAutoMinSpan / 2;
+        yMax = mid + this.yAutoMinSpan / 2;
+      }
       this.bounds.yMin = yMin;
       this.bounds.yMax = yMax;
       if (this.applyToViewport) viewport.setBounds(this.bounds);

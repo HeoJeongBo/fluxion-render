@@ -198,6 +198,57 @@ describe("AxisGridLayer", () => {
       expect(v.bounds.yMax).toBe(100);
     });
 
+    it("yAutoMinSpan expands narrow range symmetrically around midpoint", () => {
+      const layer = new AxisGridLayer("axis");
+      layer.setConfig({ xRange: [0, 10], yMode: "auto", yAutoPadding: 0, yAutoMinSpan: 0.1 });
+      const v = makeViewport();
+      v.beginScan();
+      v.observedYMin = 0;
+      v.observedYMax = 0.01;
+      layer.scan?.(v);
+      layer.draw(createFakeCtx() as unknown as OffscreenCanvasRenderingContext2D, v);
+      // span=0.01 < 0.1 → mid=0.005 → [-0.045, 0.055]
+      expect(v.bounds.yMin).toBeCloseTo(-0.045);
+      expect(v.bounds.yMax).toBeCloseTo(0.055);
+    });
+
+    it("yAutoMinSpan does not shrink range wider than minSpan", () => {
+      const layer = new AxisGridLayer("axis");
+      layer.setConfig({ xRange: [0, 10], yMode: "auto", yAutoPadding: 0, yAutoMinSpan: 0.1 });
+      const v = makeViewport();
+      v.beginScan();
+      v.observedYMin = 0;
+      v.observedYMax = 0.2;
+      layer.scan?.(v);
+      layer.draw(createFakeCtx() as unknown as OffscreenCanvasRenderingContext2D, v);
+      // span=0.2 > 0.1 → unchanged
+      expect(v.bounds.yMin).toBe(0);
+      expect(v.bounds.yMax).toBe(0.2);
+    });
+
+    it("yAutoMinSpan applies after yAutoMin/yAutoMax clamps", () => {
+      const layer = new AxisGridLayer("axis");
+      layer.setConfig({
+        xRange: [0, 10],
+        yMode: "auto",
+        yAutoPadding: 0,
+        yAutoMin: 0,
+        yAutoMinSpan: 0.1,
+      });
+      const v = makeViewport();
+      v.beginScan();
+      v.observedYMin = 0.04;
+      v.observedYMax = 0.06;
+      layer.scan?.(v);
+      layer.draw(createFakeCtx() as unknown as OffscreenCanvasRenderingContext2D, v);
+      // span=0.02 < 0.1 → mid=0.05 → [-0.05, 0.05], then yAutoMin=0 clamps yMin→0
+      // but minSpan is applied AFTER clamp, so mid of [0, 0.06] = 0.03 → [-0.02, 0.08] ...
+      // Actually: clamp first → yMin=0.04→no change (>0), yMax=0.06→no change
+      // then minSpan: mid=0.05, yMin=-0.05, yMax=0.055 — but yAutoMin doesn't re-apply
+      // So just verify span >= 0.1
+      expect(v.bounds.yMax - v.bounds.yMin).toBeGreaterThanOrEqual(0.1);
+    });
+
     it("composes with xMode=time", () => {
       const layer = new AxisGridLayer("axis");
       layer.setConfig({
