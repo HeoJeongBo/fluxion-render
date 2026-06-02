@@ -1,5 +1,26 @@
 # Changelog
 
+# [0.8.0](https://github-personal/HeoJeongBo/fluxion-render/compare/fluxion-replay-v0.7.2...fluxion-replay-v0.8.0) (2026-06-02)
+
+
+### Bug Fixes
+
+* **render,worker:** fix "WorkerPool has been disposed" in React StrictMode ([75bd076](https://github-personal/HeoJeongBo/fluxion-render/commit/75bd0762f3d66a52dc1150108a63420c1e78a1da))
+
+
+### Features
+
+* **render,examples:** add yAutoMinSpan to axis-grid and Friday 0x0001 packet demo ([57de13a](https://github-personal/HeoJeongBo/fluxion-render/commit/57de13aaef63f4c331768021b3ed69b57340442b))
+* **render,worker,examples:** add custom worker stream pattern and stream mode ([952aba3](https://github-personal/HeoJeongBo/fluxion-render/commit/952aba389ced294b4ff488dfcef02c73e7589b07))
+* **render,worker,examples:** add pool-level fan-out stream API ([6342d1b](https://github-personal/HeoJeongBo/fluxion-render/commit/6342d1b564533e7334626884fcbbe8b04936269e))
+* **render:** add useTimeOrigin, extend useSyncedTimeWindow with timeOrigin, fix broadcastStream grouping ([75f163f](https://github-personal/HeoJeongBo/fluxion-render/commit/75f163fb52aa41709717e7820535e61065751496))
+* **replay,examples:** add worker fan-out replay demo and fix prefetch boundary duplicate ([99d290e](https://github-personal/HeoJeongBo/fluxion-render/commit/99d290e4c3233b000c18e3e2ff17485e4fb5cbfc))
+
+
+### Reverts
+
+* **examples:** remove Friday packet demo and restore pool fan-out stream demo ([b50a308](https://github-personal/HeoJeongBo/fluxion-render/commit/b50a308eed99c882d4ca34565b0eead9870d684d))
+
 ## [0.7.2](https://github-personal/HeoJeongBo/fluxion-render/compare/fluxion-replay-v0.7.1...fluxion-replay-v0.7.2) (2026-06-01)
 
 ## [0.7.1](https://github-personal/HeoJeongBo/fluxion-render/compare/fluxion-replay-v0.7.0...fluxion-replay-v0.7.1) (2026-05-27)
