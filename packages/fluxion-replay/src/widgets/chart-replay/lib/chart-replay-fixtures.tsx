@@ -171,15 +171,9 @@ export function makeFakeSession(opts: MakeFakeSessionOpts = {}) {
   // useReplayDvr's exit() calls session.getTimeRange() in the background to
   // prefetch the post-exit IDB latest for the next enter() staleness check.
   let _timeRange = opts.timeRange ?? null;
-  let pendingGetTimeRangeResolvers: Array<() => void> | null = null;
   const session = {
     __fake: true,
-    getTimeRange: vi.fn(async () => {
-      if (pendingGetTimeRangeResolvers) {
-        await new Promise<void>((resolve) => pendingGetTimeRangeResolvers!.push(resolve));
-      }
-      return _timeRange;
-    }),
+    getTimeRange: vi.fn(async () => _timeRange),
     setTimeRange(r: { earliest: number; latest: number } | null) { _timeRange = r; },
   } as unknown as ReplaySession & { setTimeRange(r: { earliest: number; latest: number } | null): void };
 
