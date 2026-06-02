@@ -1,5 +1,17 @@
 # Changelog
 
+# [0.9.0](https://github-personal/HeoJeongBo/fluxion-render/compare/fluxion-replay-v0.8.0...fluxion-replay-v0.9.0) (2026-06-02)
+
+
+### Bug Fixes
+
+* **replay:** remove dead pendingGetTimeRangeResolvers causing TS2339 type error ([c4241cc](https://github-personal/HeoJeongBo/fluxion-render/commit/c4241cc596ece5e23a133b214986e6b6cec37dab))
+
+
+### Features
+
+* **replay,examples:** fix dvr re-entry/freeze bugs, add useScrubberControls and DvrScrubber ([b1c87f7](https://github-personal/HeoJeongBo/fluxion-render/commit/b1c87f78d3137a5699793da9d5964cc67760ab7d))
+
 ## [Unreleased]
 
 ### Fixed
