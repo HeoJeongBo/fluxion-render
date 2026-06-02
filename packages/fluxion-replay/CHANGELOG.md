@@ -1,5 +1,43 @@
 # Changelog
 
+## [Unreleased]
+
+### Fixed
+
+- **Prefetch boundary duplicate frames** — `ReplayStore.getFrames` now accepts a `lowerOpen` parameter (exclusive lower bound via `IDBKeyRange`). Previously, adjacent prefetch windows shared the same boundary timestamp, causing a frame to be fetched and emitted twice. ([`replay-store.ts`](src/features/store/model/replay-store.ts), [`replay-player.ts`](src/features/player/model/replay-player.ts))
+
+- **Second time-travel fails after auto-exit** — After `autoExitToLive` fires, `liveTimeRange` can still hold the previous `frozenLatest` for up to 500 ms (poll interval). A second `dvr.enter()` in that window would create a player bounded to the old range, silently skipping data recorded since the first DVR exit. Fixed by caching the recorder's in-memory latest at exit time (`postExitIdbLatestRef`) and detecting staleness before calling `enterReplay`. ([`use-replay-dvr.ts`](src/widgets/dvr/lib/use-replay-dvr.ts))
+
+- **Chrome freeze / unresponsive UI under high frame rates** — Three changes to `ReplayStore` reduce main-thread blocking when recording many channels at high Hz (e.g. 16 ch × 60 Hz = 960 frames/s): (1) `MAX_BATCH_SIZE = 200` caps the number of `store.add()` calls per IDB transaction; excess frames stay in the pending queue for the next interval tick. (2) `EVICT_EVERY_N_FLUSHES = 10` runs eviction only once every 10 timer-driven flushes instead of after every flush. (3) `MAX_DELETE_PER_EVICTION = 500` limits the cursor-delete loop to 500 records per pass, preventing multi-second stalls when tens of thousands of old frames need eviction. The public `flush()` method still drains the entire pending queue and runs eviction once. ([`replay-store.ts`](src/features/store/model/replay-store.ts))
+
+- **Chart "jump" on DVR→live transition** — When returning to live mode, `useChartLiveBackfill` synchronously resets the chart and then queries IDB asynchronously. During that window (1–50 ms) the live pump could push a single latest sample before the full backfill window arrived, producing a visible jump. Fixed by exposing `isBackfilling: boolean` from `useChartLiveBackfill` and suppressing `handle.push()` calls in `useChartReplayBridge` while the backfill is in flight. ([`use-chart-live-backfill.ts`](src/widgets/chart-replay/lib/use-chart-live-backfill.ts), [`use-chart-replay-bridge.ts`](src/widgets/chart-replay/lib/use-chart-replay-bridge.ts))
+
+### Added
+
+- **`useScrubberControls`** — New hook that encapsulates the drag-preview → release-commit state machine DVR scrubbers need. Returns `{ scrubT, onScrubChange, commitScrub }`. Handles five transitions: live→DVR speculative enter, live micro-drag no-op, commit live→DVR enter+play, commit DVR→live exit, commit DVR mid-seek+play. Pair with `useReplayScrubber` for the `min`/`max`/`value` bounds. ([`use-scrubber-controls.ts`](src/widgets/replay-timeline/lib/use-scrubber-controls.ts))
+
+- **`<DvrScrubber />`** — New component: `<input type="range">` with left/centre/right timestamp labels and live-vs-DVR colour theming. Accepts `liveAccentColor`, `dvrAccentColor`, `dvrTextColor`, `labelColor`, `liveBadgeText`, `formatTime`, and a `style` override for the container div. Wire directly from `useReplayScrubber` + `useScrubberControls`. ([`dvr-scrubber.tsx`](src/widgets/replay-timeline/ui/dvr-scrubber.tsx))
+
+- **`useChartLiveBackfill` now returns `{ isBackfilling }`** — Previously returned `void`. The boolean is `true` while the async IDB query is in-flight and lets callers suppress live chart pushes during that window. ([`use-chart-live-backfill.ts`](src/widgets/chart-replay/lib/use-chart-live-backfill.ts))
+
+- **Worker fan-out replay demo** — New tab in `fluxion-replay-demo`: combines `pool.broadcastStream()` (1 worker, 16 charts) with full DVR recording and playback. Demonstrates recording at the JS tick level before broadcasting, so the replay store captures data without decoding the Float32 wire format. ([`examples/fluxion-replay-demo/src/worker-fan-out.tsx`](../../examples/fluxion-replay-demo/src/worker-fan-out.tsx))
+
+- **Scenario 06: multi-chart fan-out** — 10 test cases verifying that a single `ReplayPlayer` fans out correctly to N independent typed `onFrame` listeners: storage, fan-out, channel isolation, timestamp synchronization, seek, frame ordering, `onEnd`, listener cleanup, sparse channel, and mid-playback partial unsubscribe. ([`06-multi-chart-fan-out.test.ts`](src/scenarios/06-multi-chart-fan-out.test.ts))
+
+- **`useScrubberControls` test suite** — 16 test cases covering all five mode transitions, custom `liveEdgeEpsMs`, rate forwarding, and null-scrubT no-op. ([`use-scrubber-controls.test.ts`](src/widgets/replay-timeline/lib/use-scrubber-controls.test.ts))
+
+### Changed
+
+- **`makeFakeSession`** (`chart-replay-fixtures.tsx`) — Accepts a new `timeRange?` option; exposes a `getTimeRange()` mock that returns it. Required by `useReplayDvr.enter()`, which now reads the current IDB range directly from the session to detect a stale `liveTimeRange` after DVR auto-exit.
+
+- **`makeFakePlayer`** (`chart-replay-fixtures.tsx`) — Added `seek: vi.fn()` so tests can assert on DVR mid-seek calls without wiring a real `ReplayPlayer`.
+
+- **`useReplayDvr` dependency array** — `enter()` callback no longer lists `liveTimeRange` as a dep (read via `liveTimeRangeRef` instead), preventing callback recreation on every 500 ms poll tick.
+
+- **Demo refactor** — `chart-replay.tsx` and `worker-fan-out.tsx` replace their ~50-line inline scrubber blocks with `useScrubberControls` + `<DvrScrubber />`.
+
+---
+
 # [0.8.0](https://github-personal/HeoJeongBo/fluxion-render/compare/fluxion-replay-v0.7.2...fluxion-replay-v0.8.0) (2026-06-02)
 
 

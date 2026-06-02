@@ -32,6 +32,7 @@ import {
   type ReplaySession,
 } from "@heojeongbo/fluxion-replay";
 import {
+  DvrScrubber,
   useChartLiveBackfill,
   useChartReplay,
   useLiveTimeRange,
@@ -41,6 +42,7 @@ import {
   useReplayPlayer,
   useReplayScrubber,
   useReplaySession,
+  useScrubberControls,
 } from "@heojeongbo/fluxion-replay/react";
 
 // ─── Layout ────────────────────────────────────────────────────────────────
@@ -78,8 +80,6 @@ const COLORS = [
   "#ffcc02",
   "#ef9a9a",
 ];
-
-const LIVE_EDGE_EPS_MS = 250;
 
 // ─── Channels ──────────────────────────────────────────────────────────────
 // Module-scope so identity is stable across renders.
@@ -251,7 +251,6 @@ export function WorkerFanOutApp() {
 
   const timeOrigin = useTimeOrigin();
   const [rate, setRate] = useState(1.0);
-  const [scrubT, setScrubT] = useState<number | null>(null);
 
   const { timeRange: liveTimeRange, seed: seedTimeRange } =
     useLiveTimeRange(session);
@@ -366,6 +365,9 @@ export function WorkerFanOutApp() {
   }, [pool, timeOrigin]);
 
   // ── Scrubber ───────────────────────────────────────────────────────────
+  // ── Scrubber ───────────────────────────────────────────────────────────
+  const { scrubT, onScrubChange, commitScrub } = useScrubberControls({ dvr, rate });
+
   const {
     min: scrubMin,
     max: scrubMax,
@@ -379,39 +381,6 @@ export function WorkerFanOutApp() {
     scrubT,
     recordingStartMs: timeOrigin,
   });
-
-  const onScrubChange = useCallback(
-    (e: React.ChangeEvent<HTMLInputElement>) => {
-      const range = dvr.effectiveTimeRange;
-      if (!range) return;
-      const t = Number(e.target.value);
-      setScrubT(t);
-      if (dvr.isDvr) {
-        dvr.player?.seek(t);
-      } else if (t < range.latest - LIVE_EDGE_EPS_MS) {
-        void dvr.enter(t);
-      }
-    },
-    [dvr],
-  );
-
-  const commitScrub = useCallback(() => {
-    const t = scrubT;
-    const range = dvr.effectiveTimeRange;
-    setScrubT(null);
-    if (t == null || !range) return;
-
-    if (!dvr.isDvr) {
-      if (t < range.latest - LIVE_EDGE_EPS_MS) {
-        void dvr.enter(t).then(() => dvr.player?.play(rate));
-      }
-    } else if (t >= (dvr.frozenLatest ?? range.latest) - LIVE_EDGE_EPS_MS) {
-      dvr.exit();
-    } else {
-      dvr.player?.seek(t);
-      dvr.player?.play(rate);
-    }
-  }, [dvr, scrubT, rate]);
 
   // ── Render ─────────────────────────────────────────────────────────────
   return (
@@ -539,55 +508,25 @@ export function WorkerFanOutApp() {
 
       {/* Timeline scrubber */}
       {dvr.effectiveTimeRange && (
-        <div
+        <DvrScrubber
+          min={scrubMin}
+          max={scrubMax}
+          value={scrubValue}
+          disabled={scrubDisabled}
+          onChange={onScrubChange}
+          onCommit={commitScrub}
+          isLive={isLive}
+          liveAccentColor={T.red}
+          dvrAccentColor={T.accent}
+          dvrTextColor={T.text}
+          labelColor={T.textMuted}
           style={{
             flexShrink: 0,
             padding: "8px 16px",
             background: T.panel,
             borderTop: `1px solid ${T.border}`,
-            display: "flex",
-            flexDirection: "column",
-            gap: 4,
           }}
-        >
-          <input
-            type="range"
-            min={scrubMin}
-            max={scrubMax}
-            step={1000}
-            value={scrubValue}
-            onChange={onScrubChange}
-            onMouseUp={commitScrub}
-            onTouchEnd={commitScrub}
-            onKeyUp={commitScrub}
-            disabled={scrubDisabled}
-            style={{
-              width: "100%",
-              accentColor: isLive ? T.red : T.accent,
-              cursor: scrubDisabled ? "not-allowed" : "pointer",
-            }}
-          />
-          <div
-            style={{
-              display: "flex",
-              justifyContent: "space-between",
-              fontSize: 10,
-              color: T.textMuted,
-              fontVariantNumeric: "tabular-nums",
-            }}
-          >
-            <span>
-              {new Date(scrubMin).toLocaleTimeString("en-US", { hour12: false })}
-            </span>
-            <span style={{ color: isLive ? T.red : T.text }}>
-              {isLive ? "● LIVE · " : ""}
-              {new Date(scrubValue).toLocaleTimeString("en-US", { hour12: false })}
-            </span>
-            <span>
-              {new Date(scrubMax).toLocaleTimeString("en-US", { hour12: false })}
-            </span>
-          </div>
-        </div>
+        />
       )}
     </div>
   );

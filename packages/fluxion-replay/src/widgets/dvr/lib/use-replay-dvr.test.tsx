@@ -22,7 +22,7 @@ describe("useReplayDvr", () => {
   afterEach(() => vi.useRealTimers());
 
   it("enter() calls enterReplay, sets isDvr, freezes latest, autoplays", async () => {
-    const ses = makeFakeSession();
+    const ses = makeFakeSession({ timeRange: LIVE });
     const { result } = setup({
       session: ses.session,
       enterReplay: ses.enterReplay,
@@ -48,7 +48,7 @@ describe("useReplayDvr", () => {
   });
 
   it("enter() with no seekT defaults to liveTimeRange.earliest", async () => {
-    const ses = makeFakeSession();
+    const ses = makeFakeSession({ timeRange: LIVE });
     const { result } = setup({
       session: ses.session,
       enterReplay: ses.enterReplay,
@@ -64,7 +64,7 @@ describe("useReplayDvr", () => {
   });
 
   it("enter() respects custom rate", async () => {
-    const ses = makeFakeSession();
+    const ses = makeFakeSession({ timeRange: LIVE });
     const { result } = setup({
       session: ses.session,
       enterReplay: ses.enterReplay,
@@ -79,7 +79,7 @@ describe("useReplayDvr", () => {
   });
 
   it("autoPlay: false skips the play() call", async () => {
-    const ses = makeFakeSession();
+    const ses = makeFakeSession({ timeRange: LIVE });
     const { result } = setup({
       session: ses.session,
       enterReplay: ses.enterReplay,
@@ -95,7 +95,7 @@ describe("useReplayDvr", () => {
   });
 
   it("autoExitToLive registers an onEnd handler on the player", async () => {
-    const ses = makeFakeSession();
+    const ses = makeFakeSession({ timeRange: LIVE });
     const { result } = setup({
       session: ses.session,
       enterReplay: ses.enterReplay,
@@ -108,7 +108,7 @@ describe("useReplayDvr", () => {
   });
 
   it("autoExitToLive: false skips the onEnd registration", async () => {
-    const ses = makeFakeSession();
+    const ses = makeFakeSession({ timeRange: LIVE });
     const { result } = setup({
       session: ses.session,
       enterReplay: ses.enterReplay,
@@ -126,7 +126,7 @@ describe("useReplayDvr", () => {
   });
 
   it("exit() stops the player, calls exitReplay, and resets state", async () => {
-    const ses = makeFakeSession();
+    const ses = makeFakeSession({ timeRange: LIVE });
     const { result } = setup({
       session: ses.session,
       enterReplay: ses.enterReplay,
@@ -169,7 +169,7 @@ describe("useReplayDvr", () => {
   });
 
   it("effectiveTimeRange equals liveTimeRange in live mode", () => {
-    const ses = makeFakeSession();
+    const ses = makeFakeSession({ timeRange: LIVE });
     const { result } = setup({
       session: ses.session,
       enterReplay: ses.enterReplay,
@@ -180,7 +180,7 @@ describe("useReplayDvr", () => {
   });
 
   it("effectiveTimeRange caps latest at frozenLatest while in DVR even if liveTimeRange.latest grows", async () => {
-    const ses = makeFakeSession();
+    const ses = makeFakeSession({ timeRange: LIVE });
     const { result, rerender } = setup({
       session: ses.session,
       enterReplay: ses.enterReplay,
@@ -209,7 +209,11 @@ describe("useReplayDvr", () => {
   });
 
   it("enter() is a no-op when liveTimeRange is null (not yet seeded)", async () => {
-    const ses = makeFakeSession();
+    // Both liveTimeRange AND getTimeRange() must be absent for enter() to no-op.
+    // liveTimeRange null alone is not sufficient: if IDB already has data,
+    // enter() uses it as a fallback so time-travel works even before the first
+    // useLiveTimeRange poll resolves.
+    const ses = makeFakeSession({ timeRange: null });
     const { result } = setup({
       session: ses.session,
       enterReplay: ses.enterReplay,
@@ -222,7 +226,7 @@ describe("useReplayDvr", () => {
   });
 
   it("enter() is a no-op when session is null", async () => {
-    const ses = makeFakeSession();
+    const ses = makeFakeSession({ timeRange: LIVE });
     const { result } = setup({
       session: null,
       enterReplay: ses.enterReplay,
@@ -398,7 +402,7 @@ describe("useReplayDvr", () => {
     });
 
     it("stale enter resolves AFTER fresh enter — stale player is disposed, fresh player wins", async () => {
-      const ses = makeFakeSession({ fresh: true });
+      const ses = makeFakeSession({ fresh: true, timeRange: LIVE });
       const { result } = setup({
         session: ses.session,
         enterReplay: ses.enterReplay,
@@ -471,7 +475,7 @@ describe("useReplayDvr", () => {
 
   // Callback identity guard — see Phase 10 bug class.
   it("returned callbacks (enter, exit) have stable identity across re-renders with the same liveTimeRange", () => {
-    const ses = makeFakeSession();
+    const ses = makeFakeSession({ timeRange: LIVE });
     const { result, rerender } = setup({
       session: ses.session,
       enterReplay: ses.enterReplay,
@@ -496,7 +500,7 @@ describe("useReplayDvr", () => {
   // before onEnd finally fires.
   describe("Phase 13: frozen timeRange propagation", () => {
     it("forwards liveTimeRange as opts.timeRange to enterReplay", async () => {
-      const ses = makeFakeSession();
+      const ses = makeFakeSession({ timeRange: LIVE });
       const live = { earliest: 1_000_000, latest: 1_045_000 };
       const { result } = setup({
         session: ses.session,
@@ -511,7 +515,7 @@ describe("useReplayDvr", () => {
     });
 
     it("frozenLatest matches the liveTimeRange.latest captured at enter() time", async () => {
-      const ses = makeFakeSession();
+      const ses = makeFakeSession({ timeRange: LIVE });
       const liveAtClick = { earliest: 1_000_000, latest: 1_045_000 };
       const { result, rerender } = setup({
         session: ses.session,
@@ -534,7 +538,7 @@ describe("useReplayDvr", () => {
     });
 
     it("a no-seekT enter still passes the full liveTimeRange as opts.timeRange", async () => {
-      const ses = makeFakeSession();
+      const ses = makeFakeSession({ timeRange: LIVE });
       const live = { earliest: 500_000, latest: 800_000 };
       const { result } = setup({
         session: ses.session,
@@ -551,7 +555,7 @@ describe("useReplayDvr", () => {
 
   // ── Unmount cleanup ────────────────────────────────────────────────────────
   it("unmounting while DVR is active calls offEnd cleanup (lines 192-193)", async () => {
-    const ses = makeFakeSession();
+    const ses = makeFakeSession({ timeRange: LIVE });
     const { result, unmount } = setup({
       session: ses.session,
       enterReplay: ses.enterReplay,
@@ -571,7 +575,7 @@ describe("useReplayDvr", () => {
   });
 
   it("enter() is a no-op when enterReplay returns null", async () => {
-    const ses = makeFakeSession();
+    const ses = makeFakeSession({ timeRange: LIVE });
     // Override enterReplay to return null (simulates session not ready)
     const enterReplayNull = vi.fn(async () => null as unknown as ReturnType<typeof ses.enterReplay> extends Promise<infer T> ? T : never);
     const { result } = setup({

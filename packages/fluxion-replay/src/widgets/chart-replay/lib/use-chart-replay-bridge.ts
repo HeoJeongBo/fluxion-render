@@ -90,6 +90,16 @@ export function useChartReplayBridge<T>(
   const pickRef = useRef(pickValue);
   pickRef.current = pickValue;
 
+  // Tracks whether useChartLiveBackfill's async IDB query is in-flight
+  // specifically during a DVR→Live transition (not on initial live mount).
+  // While true, live handle.push() calls are suppressed: the upcoming
+  // reset()+pushBatch() would wipe them anyway, and suppressing eliminates
+  // the visual "jump" from a single sample appearing before the full
+  // backfill window lands.
+  const isBackfillingRef = useRef(false);
+  // Track previous isLive to distinguish DVR→Live transition from initial mount.
+  const prevIsLiveRef = useRef(isLive);
+
   useFluxionStream({
     host,
     intervalMs: 1000 / liveHz,
@@ -97,7 +107,7 @@ export function useChartReplayBridge<T>(
     tick: (_t, handle) => {
       const wallT = Date.now();
       const data = produceRef.current(wallT);
-      if (isLiveRef.current) {
+      if (isLiveRef.current && !isBackfillingRef.current) {
         handle.push({ t: wallT - timeOrigin, y: pickRef.current(data) });
       }
       session?.record(channel.channelId, data, wallT);
@@ -119,7 +129,9 @@ export function useChartReplayBridge<T>(
 
   // DVR→Live re-entry: wipe the chart and refill with the most recent
   // `windowMs` of recorded data so live takes over without a blank gap.
-  useChartLiveBackfill<T>({
+  // isBackfilling is true while the async IDB query runs — the live pump
+  // reads this via isBackfillingRef to suppress pushes during that window.
+  const { isBackfilling } = useChartLiveBackfill<T>({
     host,
     store: session?.store ?? null,
     channel,
@@ -129,6 +141,12 @@ export function useChartReplayBridge<T>(
     pickValue,
     active: isLive,
   });
+  // Only suppress live pushes when transitioning FROM DVR (prevIsLive=false)
+  // TO live. On initial live mount there is no DVR data to race against, so
+  // suppression would block the very first live samples unnecessarily.
+  const isDvrToLiveTransition = !prevIsLiveRef.current && isLive;
+  prevIsLiveRef.current = isLive;
+  isBackfillingRef.current = isDvrToLiveTransition && isBackfilling;
 
   return replay;
 }

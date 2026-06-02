@@ -53,6 +53,18 @@ const DEFAULT_DB_NAME = "fluxion-replay";
 const DEFAULT_DB_VERSION = 1;
 const DEFAULT_RETENTION_MS = 10 * 60 * 1000;
 const DEFAULT_BATCH_INTERVAL_MS = 500;
+// Maximum records written per IDB transaction. Capping this prevents a single
+// flush from queuing hundreds of store.add() calls synchronously, which blocks
+// the main thread for several frames. Excess records stay in _pending and are
+// flushed on the next interval tick.
+const MAX_BATCH_SIZE = 200;
+// Run eviction only every N flushes to avoid calling navigator.storage.estimate()
+// and the deleteFramesBefore cursor loop on every 500 ms tick.
+const EVICT_EVERY_N_FLUSHES = 10;
+// Maximum number of IDB records deleted in a single eviction pass. Limits the
+// duration of the cursor-delete loop so it doesn't freeze the main thread when
+// there are tens of thousands of stale records to remove.
+const MAX_DELETE_PER_EVICTION = 500;
 
 interface FrameRecord {
   t: number;
@@ -73,6 +85,7 @@ export class ReplayStore {
   private _evictThresholdPct: number;
   private _storageLogIntervalMs: number;
   private _storageLogTimer: ReturnType<typeof setInterval> | null = null;
+  private _flushCount = 0;
 
   constructor(opts?: ReplayStoreOptions) {
     this._dbName = opts?.dbName ?? DEFAULT_DB_NAME;
@@ -102,7 +115,14 @@ export class ReplayStore {
   }
 
   async flush(): Promise<void> {
-    await this._flushPending();
+    // Public flush: drain the entire pending queue (possibly multiple batches
+    // of MAX_BATCH_SIZE) then evict once. The timer-driven path processes one
+    // batch per tick to avoid blocking the main thread; public flush must be
+    // complete so callers (e.g. enterReplay, tests) see all recorded frames.
+    while (this._pending.length > 0) {
+      await this._flushPending(false);
+    }
+    await this._maybeEvict();
   }
 
   async getFrames(fromMs: number, toMs: number, lowerOpen = false): Promise<SerializedFrame[]> {
@@ -185,20 +205,25 @@ export class ReplayStore {
     }));
   }
 
-  async deleteFramesBefore(cutoffMs: number): Promise<void> {
+  async deleteFramesBefore(cutoffMs: number, limit = MAX_DELETE_PER_EVICTION): Promise<void> {
     const db = this._assertOpen();
     return new Promise((resolve, reject) => {
       const tx = db.transaction("frames", "readwrite");
       const index = tx.objectStore("frames").index("by_t");
       const range = IDBKeyRange.upperBound(cutoffMs, true);
       const req = index.openCursor(range);
+      let deleted = 0;
       req.onsuccess = (e) => {
         const cursor = (e.target as IDBRequest<IDBCursorWithValue | null>).result;
-        if (!cursor) {
+        // Stop when there are no more records or the per-pass limit is reached.
+        // Limiting deletes per eviction keeps the cursor loop from blocking the
+        // main thread for seconds when tens of thousands of records are stale.
+        if (!cursor || deleted >= limit) {
           resolve();
           return;
         }
         cursor.delete();
+        deleted++;
         cursor.continue();
       };
       req.onerror = () => reject(req.error);
@@ -348,7 +373,7 @@ export class ReplayStore {
 
   private _startFlushTimer(): void {
     this._flushTimer = setInterval(() => {
-      void this._flushPending();
+      void this._flushPending(false);
     }, this._batchIntervalMs);
   }
 
@@ -359,11 +384,19 @@ export class ReplayStore {
     }
   }
 
-  private async _flushPending(): Promise<void> {
+  private async _flushPending(forceEvict: boolean): Promise<void> {
     if (this._pending.length === 0 || !this._db) return;
-    const batch = this._pending.splice(0, this._pending.length);
+    // Cap batch size so one transaction never queues hundreds of store.add()
+    // calls at once. Any remaining records stay in _pending for the next tick.
+    const batch = this._pending.splice(0, MAX_BATCH_SIZE);
     await this._writeBatch(batch);
-    await this._maybeEvict();
+    // Timer-driven flushes rate-limit eviction to every EVICT_EVERY_N_FLUSHES
+    // ticks to avoid running storage.estimate() + cursor deletion every 500 ms.
+    // Public flush() always evicts so callers see a consistent storage state.
+    const shouldEvict = forceEvict || ++this._flushCount % EVICT_EVERY_N_FLUSHES === 0;
+    if (shouldEvict) {
+      await this._maybeEvict();
+    }
   }
 
   private async _maybeEvict(): Promise<void> {

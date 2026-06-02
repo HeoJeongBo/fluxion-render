@@ -92,6 +92,7 @@ export function makeFakePlayer(initialT = 1000) {
       endListeners.add(l);
       return () => endListeners.delete(l);
     }),
+    seek: vi.fn((_t: number) => {}),
     play: vi.fn((_rate?: number) => {}),
     pause: vi.fn(() => {}),
     stop: vi.fn(() => {}),
@@ -133,6 +134,13 @@ export interface MakeFakeSessionOpts {
   player?: FakePlayer;
   /** If true, enterReplay creates a fresh fake player each call. */
   fresh?: boolean;
+  /**
+   * Value returned by `session.getTimeRange()`. Defaults to null (no
+   * recording yet). Pass the same object you pass as `liveTimeRange` so
+   * `useReplayDvr.enter()` sees a consistent range regardless of which
+   * path it reads it from.
+   */
+  timeRange?: { earliest: number; latest: number } | null;
 }
 
 export function makeFakeSession(opts: MakeFakeSessionOpts = {}) {
@@ -160,9 +168,20 @@ export function makeFakeSession(opts: MakeFakeSessionOpts = {}) {
     exitCalls.push(performance.now());
   });
 
-  // useReplayDvr only uses session as a truthy gate; supplying an object
-  // typed as ReplaySession (with no methods called) is enough.
-  const session = { __fake: true } as unknown as ReplaySession;
+  // useReplayDvr's exit() calls session.getTimeRange() in the background to
+  // prefetch the post-exit IDB latest for the next enter() staleness check.
+  let _timeRange = opts.timeRange ?? null;
+  let pendingGetTimeRangeResolvers: Array<() => void> | null = null;
+  const session = {
+    __fake: true,
+    getTimeRange: vi.fn(async () => {
+      if (pendingGetTimeRangeResolvers) {
+        await new Promise<void>((resolve) => pendingGetTimeRangeResolvers!.push(resolve));
+      }
+      return _timeRange;
+    }),
+    setTimeRange(r: { earliest: number; latest: number } | null) { _timeRange = r; },
+  } as unknown as ReplaySession & { setTimeRange(r: { earliest: number; latest: number } | null): void };
 
   return {
     session,

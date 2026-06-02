@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { FluxionHost, LineLayerHandle, LineSample } from "@heojeongbo/fluxion-render";
 import type { ReplayStore } from "../../../features/store/model/replay-store";
 import type { BaseChannel } from "../../../shared/model/base-channel";
@@ -58,12 +58,26 @@ export interface UseChartLiveBackfillOptions<T> {
  *   active: !dvr.isDvr,
  * });
  */
+export interface UseChartLiveBackfillResult {
+  /**
+   * True while the async IDB backfill (flush → query → pushBatch) is in
+   * flight. The bridge uses this to suppress live `handle.push()` calls
+   * during the window — they would be wiped by the upcoming `reset()` +
+   * `pushBatch()` anyway, so holding them prevents a visible "jump" when
+   * the backfill lands and the chart momentarily shows only a single
+   * latest sample before the full window arrives.
+   */
+  isBackfilling: boolean;
+}
+
 export function useChartLiveBackfill<T>(
   opts: UseChartLiveBackfillOptions<T>,
-): void {
+): UseChartLiveBackfillResult {
   const { host, store, channel, windowMs, pickValue, active } = opts;
   const layerId = opts.layerId ?? channel.channelId;
   const timeOrigin = opts.timeOrigin ?? 0;
+
+  const [isBackfilling, setIsBackfilling] = useState(false);
 
   // Capture pickValue in a ref so an inline-arrow callback doesn't churn
   // the effect on every render.
@@ -85,6 +99,7 @@ export function useChartLiveBackfill<T>(
     // sometimes loses to a late-arriving stale `handle.reset(dvrT)` from
     // useChartReplay.
     handle.reset(Date.now() - timeOrigin);
+    setIsBackfilling(true);
 
     let cancelled = false;
     void (async () => {
@@ -114,11 +129,16 @@ export function useChartLiveBackfill<T>(
         if (batch.length > 0) handle.pushBatch(batch);
       } catch {
         // Store may have been disposed mid-flight; ignore.
+      } finally {
+        if (!cancelled) setIsBackfilling(false);
       }
     })();
 
     return () => {
       cancelled = true;
+      setIsBackfilling(false);
     };
   }, [active, handle, store, channel, windowMs, timeOrigin]);
+
+  return { isBackfilling };
 }

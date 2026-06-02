@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import type { FluxionHost } from "@heojeongbo/fluxion-render";
 import { FluxionCanvas, useMiniChart } from "@heojeongbo/fluxion-render/react";
 import {
@@ -7,6 +7,7 @@ import {
   type ReplaySession,
 } from "@heojeongbo/fluxion-replay";
 import {
+  DvrScrubber,
   useChartReplayBridge,
   useLiveTimeRange,
   useRecordingSession,
@@ -15,6 +16,7 @@ import {
   useReplayPlayer,
   useReplayScrubber,
   useReplaySession,
+  useScrubberControls,
 } from "@heojeongbo/fluxion-replay/react";
 
 // ─── Layout ───────────────────────────────────────────────────────────────────
@@ -210,12 +212,6 @@ function MiniChart({ spec, isLive, session, dvr, timeOrigin }: MiniChartProps) {
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
-/**
- * How close to the live edge a scrub target must land to be treated as
- * "back to live" instead of "enter DVR". Lets users click near the right
- * end without accidentally jumping into time-travel.
- */
-const LIVE_EDGE_EPS_MS = 250;
 
 export function ChartReplayApp() {
   const { session, isReady, enterReplay, exitReplay } =
@@ -227,7 +223,6 @@ export function ChartReplayApp() {
   const timeOrigin = useMemo(() => Date.now(), []);
 
   const [rate, setRate] = useState(1.0);
-  const [scrubT, setScrubT] = useState<number | null>(null);
 
   // Poll the recording's time range — the scrubber's right edge tracks it
   // in live mode and uses it for the DVR freeze point.
@@ -266,16 +261,8 @@ export function ChartReplayApp() {
   const isLive = !dvr.isDvr;
 
   // ── Scrubber ──────────────────────────────────────────────────────────────
-  // Always rendered. Drag is a PREVIEW (just moves the cursor) — every mode
-  // transition (enter / exit / seek) is committed ONCE on release. Without
-  // this split, the native <input type=range> fires onChange every pixel
-  // mid-drag, which would call dvr.enter() dozens of times in parallel.
-  // useReplayDvr.enter cancellation handles that race, but committing on
-  // release is the right UX too: the user sees their target before anything
-  // happens.
-  // All scrubber bookkeeping lives in the library: snap to 1s, floor the bar
-  // width so a mount-time { now, now } range still renders visibly, resolve
-  // the cursor across live/DVR/drag modes.
+  const { scrubT, onScrubChange, commitScrub } = useScrubberControls({ dvr, rate });
+
   const {
     min: scrubMin,
     max: scrubMax,
@@ -287,57 +274,8 @@ export function ChartReplayApp() {
     isDvr: dvr.isDvr,
     replayPlayerT: replayPlayer.currentT,
     scrubT,
-    // Anchor the bar's left edge at the page mount = recording start.
-    // Without this the left edge would slide as `liveTimeRange.earliest`
-    // advances (retention / polling), leaving the scrubber visually
-    // "stuck in the past" after DVR exits.
     recordingStartMs: timeOrigin,
   });
-
-  const onScrubChange = useCallback(
-    (e: React.ChangeEvent<HTMLInputElement>) => {
-      const range = dvr.effectiveTimeRange;
-      if (!range) return;
-      const t = Number(e.target.value);
-      setScrubT(t);
-
-      if (dvr.isDvr) {
-        // Already in DVR — sync seek so the chart shows that moment as the
-        // user drags. seek() is synchronous and idempotent.
-        dvr.player?.seek(t);
-      } else if (t < range.latest - LIVE_EDGE_EPS_MS) {
-        // Live → DVR transition. enter() is async; Phase 9 cancellation
-        // handles the burst from subsequent onChanges this same drag.
-        void dvr.enter(t);
-      }
-    },
-    [dvr],
-  );
-
-  const commitScrub = useCallback(() => {
-    const t = scrubT;
-    const range = dvr.effectiveTimeRange;
-    setScrubT(null);
-    if (t == null || !range) return;
-
-    if (!dvr.isDvr) {
-      // Live → time travel. Ignore micro-drags that stay glued to the live
-      // edge to avoid entering DVR on a stray click. autoPlay is disabled
-      // on the DVR controller (Phase 18 scrub-then-play UX) so we manually
-      // kick off playback once the player exists.
-      if (t < range.latest - LIVE_EDGE_EPS_MS) {
-        void dvr.enter(t).then(() => dvr.player?.play(rate));
-      }
-    } else if (t >= (dvr.frozenLatest ?? range.latest) - LIVE_EDGE_EPS_MS) {
-      // Pulled the scrubber back to the live edge — drop DVR.
-      dvr.exit();
-    } else {
-      // Mid-DVR seek: snap to the released point AND resume playback so
-      // the chart smoothly extends forward from the backfill window.
-      dvr.player?.seek(t);
-      dvr.player?.play(rate);
-    }
-  }, [dvr, scrubT, rate]);
 
   // ── UI ────────────────────────────────────────────────────────────────────
   return (
@@ -456,54 +394,25 @@ export function ChartReplayApp() {
       {/* Timeline — always visible. Drag from the right edge to time-travel;
           drag back to the right edge to return to live. */}
       {dvr.effectiveTimeRange && (
-        <div
+        <DvrScrubber
+          min={scrubMin}
+          max={scrubMax}
+          value={scrubValue}
+          disabled={scrubDisabled}
+          onChange={onScrubChange}
+          onCommit={commitScrub}
+          isLive={isLive}
+          liveAccentColor={T.red}
+          dvrAccentColor={T.accent}
+          dvrTextColor={T.text}
+          labelColor={T.textMuted}
           style={{
             flexShrink: 0,
             padding: "8px 16px",
             background: T.panel,
             borderTop: `1px solid ${T.border}`,
-            display: "flex",
-            flexDirection: "column",
-            gap: 4,
           }}
-        >
-          <input
-            type="range"
-            min={scrubMin}
-            max={scrubMax}
-            // Time travel snaps to 1-second boundaries. Pairs with
-            // useReplayPlayer's 1-Hz cursor snap so a drag-and-release lands
-            // on the same wall second the user sees in the label.
-            step={1000}
-            value={scrubValue}
-            onChange={onScrubChange}
-            onMouseUp={commitScrub}
-            onTouchEnd={commitScrub}
-            onKeyUp={commitScrub}
-            disabled={scrubDisabled}
-            style={{
-              width: "100%",
-              accentColor: isLive ? T.red : T.accent,
-              cursor: scrubDisabled ? "not-allowed" : "pointer",
-            }}
-          />
-          <div
-            style={{
-              display: "flex",
-              justifyContent: "space-between",
-              fontSize: 10,
-              color: T.textMuted,
-              fontVariantNumeric: "tabular-nums",
-            }}
-          >
-            <span>{new Date(scrubMin).toLocaleTimeString("en-US", { hour12: false })}</span>
-            <span style={{ color: isLive ? T.red : T.text }}>
-              {isLive ? "● LIVE · " : ""}
-              {new Date(scrubValue).toLocaleTimeString("en-US", { hour12: false })}
-            </span>
-            <span>{new Date(scrubMax).toLocaleTimeString("en-US", { hour12: false })}</span>
-          </div>
-        </div>
+        />
       )}
     </div>
   );

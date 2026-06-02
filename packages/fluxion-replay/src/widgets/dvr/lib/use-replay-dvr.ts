@@ -91,6 +91,14 @@ export function useReplayDvr(opts: UseReplayDvrOptions): UseReplayDvrResult {
 
   const [player, setPlayer] = useState<ReplayPlayer | null>(null);
   const [frozenLatest, setFrozenLatest] = useState<number | null>(null);
+  // Ref mirror of frozenLatest so enter() can read it synchronously without
+  // listing it as a useCallback dep (which would recreate enter on every DVR
+  // state change).
+  const frozenLatestRef = useRef<number | null>(null);
+  // Cached IDB latest fetched after the previous DVR exit. enter() uses this
+  // to detect a stale liveTimeRange without an extra async getTimeRange() call
+  // inside the hot enter() path, which would shift test timing.
+  const postExitIdbLatestRef = useRef<number | null>(null);
 
   // Keep the latest scalar options in refs so the `enter` callback identity
   // is stable across re-renders while still seeing the freshest values.
@@ -100,6 +108,12 @@ export function useReplayDvr(opts: UseReplayDvrOptions): UseReplayDvrResult {
   autoPlayRef.current = autoPlay;
   autoExitRef.current = autoExitToLive;
   rateRef.current = rate;
+
+  // liveTimeRange in a ref so enter() can read it without listing it as a
+  // useCallback dep — avoids recreating enter() on every poll tick while
+  // still allowing enter() to see the latest value when it runs.
+  const liveTimeRangeRef = useRef(liveTimeRange);
+  liveTimeRangeRef.current = liveTimeRange;
 
   // Track the onEnd unsubscribe so a second enter() (without an exit first)
   // doesn't leak a stale listener on a now-disposed player.
@@ -123,13 +137,17 @@ export function useReplayDvr(opts: UseReplayDvrOptions): UseReplayDvrResult {
       current?.dispose();
       return null;
     });
+    frozenLatestRef.current = null;
     setFrozenLatest(null);
     exitReplay();
-  }, [exitReplay]);
+    // Prefetch the current IDB latest so the next enter() can detect a stale
+    // liveTimeRange without adding an async getTimeRange() to the hot path.
+    postExitIdbLatestRef.current = session?.recorder?.index?.latest ?? null;
+  }, [exitReplay, session]);
 
   const enter = useCallback(
     async (seekT?: number) => {
-      if (!session || !liveTimeRange) return;
+      if (!session) return;
 
       const myGen = ++enterGenRef.current;
 
@@ -137,8 +155,26 @@ export function useReplayDvr(opts: UseReplayDvrOptions): UseReplayDvrResult {
       offEndRef.current?.();
       offEndRef.current = null;
 
-      const frozen = liveTimeRange.latest;
-      const target = seekT ?? liveTimeRange.earliest;
+      const live = liveTimeRangeRef.current;
+      if (!live) return;
+
+      // liveTimeRange polls every 500 ms via useLiveTimeRange. After a DVR
+      // auto-exit (player.onEnd fires), the prop may still hold the previous
+      // frozenLatest for up to 500 ms. exit() kicks off a background
+      // getTimeRange() whose result is parked in postExitIdbLatestRef; we read
+      // it synchronously here — no extra async await in the hot path — to
+      // detect whether liveTimeRange is stale and, if so, use the IDB-fresh
+      // value as the new frozen upper bound.
+      const frozenPrev = frozenLatestRef.current;
+      const postExitLatest = postExitIdbLatestRef.current;
+      const isStale =
+        frozenPrev !== null &&
+        live.latest === frozenPrev &&
+        postExitLatest !== null &&
+        postExitLatest > live.latest;
+
+      const frozen = isStale ? postExitLatest : live.latest;
+      const target = seekT ?? live.earliest;
 
       // Pass the frozen range to enterReplay so player._timeRange.latest is
       // exactly `frozen` (after clamping into IDB's actual range). Without
@@ -147,7 +183,7 @@ export function useReplayDvr(opts: UseReplayDvrOptions): UseReplayDvrResult {
       // cursor visually clamps at the scrubber's right edge while onEnd
       // hasn't fired yet — the user reads it as "stuck".
       const p = await enterReplay(target, {
-        timeRange: { earliest: liveTimeRange.earliest, latest: frozen },
+        timeRange: { earliest: live.earliest, latest: frozen },
       });
       if (!p) return;
 
@@ -159,6 +195,7 @@ export function useReplayDvr(opts: UseReplayDvrOptions): UseReplayDvrResult {
         return;
       }
 
+      frozenLatestRef.current = frozen;
       setFrozenLatest(frozen);
       setPlayer(p);
 
@@ -172,8 +209,11 @@ export function useReplayDvr(opts: UseReplayDvrOptions): UseReplayDvrResult {
           offEndRef.current = null;
           p.dispose();
           setPlayer(null);
+          frozenLatestRef.current = null;
           setFrozenLatest(null);
           exitReplay();
+          // Capture the recorder's in-memory latest for the next enter() staleness check.
+          postExitIdbLatestRef.current = session?.recorder?.index?.latest ?? null;
         });
       }
 
@@ -181,7 +221,7 @@ export function useReplayDvr(opts: UseReplayDvrOptions): UseReplayDvrResult {
         p.play(rateRef.current);
       }
     },
-    [session, liveTimeRange, enterReplay, exitReplay],
+    [session, enterReplay, exitReplay],
   );
 
   // Cleanup on unmount: drop the onEnd handler. We deliberately do NOT call

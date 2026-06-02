@@ -322,13 +322,15 @@ All hooks live under `@heojeongbo/fluxion-replay/react`.
 | `useReplayDvr(opts)` | `{ isDvr, player, frozenLatest, effectiveTimeRange, enter, exit }` — high-level DVR controller. Captures a "frozen latest" on entry so the scrubber stops drifting forward, optionally auto-plays on enter, and auto-exits to live when playback reaches the frozen edge. |
 | `useLiveTimeRange(session, opts?)` | `{ timeRange, segments, seed }` — polls `session.getTimeRange()` and exposes recording segments. `seed()` lets you avoid the first-poll empty state. |
 | `useChartReplay(opts)` | `{ isHydrating, hydratedCount }` — bridges a `ReplayPlayer` into a `fluxion-render` line layer. Backfills the trailing window on enter / seek and streams `onFrame` events into `handle.push`. Uses a sequential queue + microtask yield to defeat seek-burst and exit races. |
-| `useChartLiveBackfill(opts)` | `void` — when `active` flips true (mount, DVR→live), flushes the store and rewrites the chart with the most recent window so the live chart picks up where DVR left off. Pairs with `useFluxionStream` for ongoing pushes. |
-| `useChartReplayBridge(opts)` | `{ isHydrating, hydratedCount }` — **convenience bundle**: combines `useFluxionStream` (live pump) + `useChartReplay` (DVR hydrate) + `useChartLiveBackfill` (DVR→live re-entry) + the stale-closure `isLiveRef` guard into one call. Reduces the 30-line MiniChart boilerplate to ~5 lines. |
+| `useChartLiveBackfill(opts)` | `{ isBackfilling }` — when `active` flips true (mount, DVR→live), flushes the store and rewrites the chart with the most recent window so the live chart picks up where DVR left off. `isBackfilling` is `true` while the async IDB query is in-flight; `useChartReplayBridge` uses it to suppress live `push()` calls during that window, preventing the visual "jump" that would otherwise appear between the sync `reset()` and the `pushBatch()`. |
+| `useChartReplayBridge(opts)` | `{ isHydrating, hydratedCount }` — **convenience bundle**: combines `useFluxionStream` (live pump) + `useChartReplay` (DVR hydrate) + `useChartLiveBackfill` (DVR→live re-entry) + the stale-closure `isLiveRef` guard into one call. Reduces the 30-line MiniChart boilerplate to ~5 lines. During DVR→live backfill the live pump is automatically silenced so the chart transitions smoothly without a flicker. |
+| `useScrubberControls(opts)` | `{ scrubT, onScrubChange, commitScrub }` — encapsulates the drag-preview → release-commit state machine for `<input type="range">` scrubbers. `onScrubChange` previews the drag position and speculatively enters DVR; `commitScrub` (call on `mouseUp`/`touchEnd`/`keyUp`) finalises: live→DVR enter+play, DVR→live exit, or mid-DVR seek+play. Pair with `useReplayScrubber` for the `min`/`max`/`value` bounds. |
 | `useRecordingSession(opts)` | `{ error, isRecording }` — encapsulates the start/stop recording lifecycle, the StrictMode-safe ref guard, and optional per-channel tickers. Use when the page **is** the recording. |
 | `useVideoReplayer(opts)` | `{ ref, isReady }` — drives a `<video>` element from a video-channel `ReplayPlayer`. |
 | `useStorageInfo(session, opts?)` | `{ usedBytes, quotaBytes, percentUsed, idbFrameCount }` — periodic IDB + OPFS quota inspector. |
 | `useDisplayMedia()` | `{ stream, start, stop }` — thin wrapper around `navigator.mediaDevices.getDisplayMedia` used by the screen-capture demos. |
 | `<ReplayTimeline />` | Headless scrubber built on `<input type="range">`. Styleable; uses `useReplayTimeline` under the hood. |
+| `<DvrScrubber />` | Compact `<input type="range">` with left/centre/right timestamp labels and live-vs-DVR colour theming. Wire from `useReplayScrubber` + `useScrubberControls` — replaces the ~50-line inline scrubber block most DVR demos need. Accepts `liveAccentColor`, `dvrAccentColor`, `labelColor`, `formatTime`, and a `style` override for the container. |
 
 ### `<ReplayTimeline />`
 
@@ -346,29 +348,32 @@ Headless scrubber built on `<input type="range">`. Fully styleable.
 
 ## DVR / Time-travel pattern
 
-`useReplayDvr` bundles the "freeze the live edge → seek → autoplay → auto-return to live" state machine that DVR-style UIs end up writing by hand. Combined with `useReplayScrubber` it gives you a video-timeline-style scrubber with 1-Hz cursor snap. The chart-replay demo wires it like this (paraphrased):
+`useReplayDvr` bundles the "freeze the live edge → seek → autoplay → auto-return to live" state machine that DVR-style UIs end up writing by hand. Combined with `useReplayScrubber` and `useScrubberControls` it gives you a video-timeline-style scrubber with 1-Hz cursor snap:
 
 ```tsx
-const { session, isReady, enterReplay, exitReplay, record } = useReplaySession(SESSION_OPTS);
+const { session, isReady, enterReplay, exitReplay } = useReplaySession(SESSION_OPTS);
 const { timeRange: liveTimeRange, seed } = useLiveTimeRange(session);
 
 const dvr = useReplayDvr({
   session, enterReplay, exitReplay, liveTimeRange,
   rate: 1,
-  // Phase-18 UX: scrub-then-play. Don't autoplay on enter — release of the
-  // scrubber commits a play() so the user can hold the mouse to inspect any
-  // past moment without the chart sliding out from under them.
+  // scrub-then-play UX: don't autoplay on enter — the commitScrub handler
+  // calls play() on release so the user can inspect any moment before committing.
   autoPlay: false,
 });
 
 const player = useReplayPlayer(dvr.player);
 
+// Drag-preview state and event handlers — encapsulates the live↔DVR transitions.
+const { scrubT, onScrubChange, commitScrub } = useScrubberControls({ dvr, rate: 1 });
+
+// Derives snapped min/max/value for <input type="range">.
 const { min, max, value, disabled } = useReplayScrubber({
   effectiveTimeRange: dvr.effectiveTimeRange,
   liveTimeRange,
   isDvr: dvr.isDvr,
   replayPlayerT: player.currentT,
-  scrubT,                       // local "user is currently dragging" state
+  scrubT,
   recordingStartMs: timeOrigin, // anchors the left edge for the whole session
 });
 
@@ -376,21 +381,10 @@ const { min, max, value, disabled } = useReplayScrubber({
   type="range"
   min={min} max={max} value={value} step={1000}
   disabled={disabled}
-  onChange={(e) => {
-    const t = Number(e.target.value);
-    setScrubT(t);
-    if (dvr.isDvr) dvr.player?.seek(t);          // mid-DVR live preview
-    else if (t < max - 250) void dvr.enter(t);   // first cross into DVR
-  }}
-  onMouseUp={() => {
-    if (dvr.isDvr) {
-      dvr.player?.seek(scrubT!);
-      dvr.player?.play(1);                       // release ⇒ play
-    } else {
-      void dvr.enter(scrubT!).then(() => dvr.player?.play(1));
-    }
-    setScrubT(null);
-  }}
+  onChange={onScrubChange}
+  onMouseUp={commitScrub}
+  onTouchEnd={commitScrub}
+  onKeyUp={commitScrub}
 />
 ```
 
@@ -399,8 +393,9 @@ What you get:
 - **Frozen right edge** — `dvr.effectiveTimeRange.latest` snapshots the live edge at the moment of `enter()` so the scrubber stops drifting forward while you scrub.
 - **Frozen left edge** — `useReplayScrubber.recordingStartMs` pins the bar's start to a wall-clock anchor (the page mount / session start), so the bar never "slides" as retention or polling moves the live earliest.
 - **1-Hz cursor** — `useReplayPlayer` polls `player.currentT` every 250 ms and exposes a whole-second value, so a 40-chart page won't starve scrubber updates.
-- **Scrub-then-play UX** — with `autoPlay: false`, the player stays idle while you drag; calling `play()` from `onMouseUp` resumes from the released point.
+- **Scrub-then-play UX** — with `autoPlay: false`, the player stays idle while you drag; `commitScrub` (called on `mouseUp`) enters DVR + `play()` in one step.
 - **Auto-return to live** — when `currentT` reaches `frozenLatest`, `useReplayDvr` calls `exitReplay()` and the UI snaps back to live without extra wiring.
+- **Smooth DVR→live transition** — `useChartReplayBridge` (and `useChartLiveBackfill` when wired manually) suppresses live `push()` calls while the IDB backfill query is in-flight, eliminating the single-sample "jump" that used to appear at Go-Live.
 
 ---
 
@@ -444,12 +439,37 @@ What the bridge takes care of internally:
 
 - **Live pump** (`useFluxionStream`) — pushes `produce(wallT)` to the chart layer while `isLive`, and records into the session **every** tick (so the store keeps growing during DVR).
 - **DVR hydrate** (`useChartReplay`) — backfills `[currentT - windowMs, currentT]` on enter/seek, then streams `onFrame` events. Sequential queue + microtask yield defeat seek-burst and exit races.
-- **Live re-entry** (`useChartLiveBackfill`) — synchronously `handle.reset(now)` plus an async batch refill so the chart never goes blank on Go-Live.
+- **Live re-entry** (`useChartLiveBackfill`) — synchronously `handle.reset(now)` plus an async IDB batch refill so the chart picks up where DVR left off. While the IDB query is in-flight (`isBackfilling: true`), the live pump suppresses `push()` calls — the refill will cover that window — preventing the visual "jump" from a single latest sample appearing before the full history arrives.
 - **Stale-closure guard** — reads `isLive` through a ref so the 50 ms tick that fires mid-`dvr.enter()` doesn't leak live samples into a DVR hydrate.
 
 ### Manual wiring (advanced)
 
-If you need finer control — e.g. multiple channels per chart, custom live pump, or no live recording — call `useChartReplay`, `useChartLiveBackfill`, and `useFluxionStream` individually. The bridge has no special access; it's a thin composition you can re-implement when the defaults don't fit. Match the `timeOrigin` between `axisGridLayer`, the bridge / underlying hooks, and `useMiniChart` so the Float32 wire-format quantisation stays consistent.
+If you need finer control — e.g. multiple channels per chart, custom live pump, or no live recording — call `useChartReplay`, `useChartLiveBackfill`, and `useFluxionStream` individually. The bridge has no special access; it's a thin composition you can re-implement when the defaults don't fit.
+
+When wiring manually, use `useChartLiveBackfill`'s returned `isBackfilling` to suppress live `push()` calls while the IDB query runs — otherwise a single sample will appear before the full backfill window arrives:
+
+```tsx
+const isBackfillingRef = useRef(false);
+
+const { isBackfilling } = useChartLiveBackfill({ host, store, channel, windowMs, timeOrigin, pickValue, active: isLive });
+isBackfillingRef.current = isBackfilling;
+
+useFluxionStream({
+  host,
+  intervalMs: 1000 / hz,
+  setup: (h) => h.line(layerId),
+  tick: (_t, handle) => {
+    const data = produce(Date.now());
+    if (isLiveRef.current && !isBackfillingRef.current) {
+      handle.push({ t: Date.now() - timeOrigin, y: pickValue(data) });
+    }
+    session?.record(channelId, data, Date.now());
+    return 1;
+  },
+});
+```
+
+Match the `timeOrigin` between `axisGridLayer`, the hooks, and `useMiniChart` so the Float32 wire-format quantisation stays consistent.
 
 ---
 
@@ -462,6 +482,49 @@ import { snapTimeToSegment } from "@heojeongbo/fluxion-replay";
 
 const snapped = snapTimeToSegment(scrubT, segments, liveTimeRange.latest);
 dvr.player?.seek(snapped);
+```
+
+---
+
+## Scrubber controls helper
+
+`useScrubberControls` extracts the drag-preview → release-commit pattern that every DVR scrubber ends up writing by hand. It encapsulates four mode transitions:
+
+| Scenario | Result |
+|---|---|
+| Live, drag to past (outside eps) | Speculatively enters DVR on `onChange` |
+| Live, drag near live edge (within `liveEdgeEpsMs`) | No-op — micro-drag ignored |
+| Commit while live, past edge | Enters DVR + `player.play(rate)` |
+| Commit while DVR, near frozen edge | Exits DVR → back to live |
+| Commit while DVR, mid-timeline | `player.seek(t)` + `player.play(rate)` |
+
+```tsx
+import { useScrubberControls, useReplayScrubber } from "@heojeongbo/fluxion-replay/react";
+
+const { scrubT, onScrubChange, commitScrub } = useScrubberControls({
+  dvr,
+  rate,               // forwarded to player.play() on commit. Default 1
+  liveEdgeEpsMs: 250, // how close to the live edge counts as "back to live". Default 250
+});
+
+const { min, max, value, disabled } = useReplayScrubber({
+  effectiveTimeRange: dvr.effectiveTimeRange,
+  liveTimeRange,
+  isDvr: dvr.isDvr,
+  replayPlayerT: replayPlayer.currentT,
+  scrubT,
+  recordingStartMs: timeOrigin,
+});
+
+<input
+  type="range"
+  min={min} max={max} value={value} step={1000}
+  disabled={disabled}
+  onChange={onScrubChange}
+  onMouseUp={commitScrub}
+  onTouchEnd={commitScrub}
+  onKeyUp={commitScrub}
+/>
 ```
 
 ---

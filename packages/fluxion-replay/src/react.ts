@@ -26,6 +26,9 @@ export type {
 export { ReplayTimeline } from "./widgets/replay-timeline/ui/replay-timeline";
 export type { ReplayTimelineProps } from "./widgets/replay-timeline/ui/replay-timeline";
 
+export { DvrScrubber } from "./widgets/replay-timeline/ui/dvr-scrubber";
+export type { DvrScrubberProps } from "./widgets/replay-timeline/ui/dvr-scrubber";
+
 export { useLiveTimeRange } from "./widgets/live/lib/use-live-time-range";
 export type {
   UseLiveTimeRangeOptions,
@@ -66,3 +69,9 @@ export type {
   UseReplayDvrOptions,
   UseReplayDvrResult,
 } from "./widgets/dvr/lib/use-replay-dvr";
+
+export { useScrubberControls } from "./widgets/replay-timeline/lib/use-scrubber-controls";
+export type {
+  UseScrubberControlsOptions,
+  UseScrubberControlsResult,
+} from "./widgets/replay-timeline/lib/use-scrubber-controls";
