@@ -77,7 +77,10 @@ export class ReplayPlayer {
     this._channels = opts.channels;
     this._timeRange = opts.timeRange;
     this._prefetchMs = opts.prefetchMs ?? DEFAULT_PREFETCH_MS;
-    this._prefetchedUpTo = opts.timeRange.earliest;
+    // Initialise to earliest - 1 so the first getFrames call uses an
+    // inclusive lower bound (covering earliest exactly) while all subsequent
+    // calls use lowerOpen=true to avoid re-fetching the boundary frame.
+    this._prefetchedUpTo = opts.timeRange.earliest - 1;
     this._clock = new VirtualClock();
   }
 
@@ -108,7 +111,7 @@ export class ReplayPlayer {
     // before the seek point — prevents VP8 decoder corruption from missing keyframes.
     const lookback = Math.max(this._prefetchMs, 3_000);
     this._prefetchBuffer = this._prefetchBuffer.filter((f) => f.t >= clamped - lookback);
-    this._prefetchedUpTo = Math.max(clamped - lookback, this._timeRange.earliest);
+    this._prefetchedUpTo = Math.max(clamped - lookback, this._timeRange.earliest) - 1;
     this._ended = false;
     for (const listener of this._seekListeners) listener(clamped);
   }
@@ -124,7 +127,7 @@ export class ReplayPlayer {
         this._timeRange.earliest,
         Math.min(this._timeRange.latest, this._clock.currentT),
       );
-      this._prefetchedUpTo = Math.max(startT - 3_000, this._timeRange.earliest);
+      this._prefetchedUpTo = Math.max(startT - 3_000, this._timeRange.earliest) - 1;
       this._prefetchBuffer = [];
       this._ended = false;
       this._offTick?.();
@@ -279,7 +282,10 @@ export class ReplayPlayer {
     this._prefetchedUpTo = to;
 
     try {
-      const frames = await this._store.getFrames(from, to);
+      // lowerOpen=true: the lower bound is the previously fetched upper edge,
+      // so using an exclusive lower bound prevents the boundary frame from
+      // being re-fetched and emitted twice when prefetch windows adjoin.
+      const frames = await this._store.getFrames(from, to, true);
       if (frames.length > 0) {
         mergeSorted(this._prefetchBuffer, frames);
       }

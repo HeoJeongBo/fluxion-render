@@ -4,6 +4,9 @@ import { defineConfig } from "vite";
 
 export default defineConfig({
   plugins: [react()],
+  worker: {
+    format: "es",
+  },
   resolve: {
     alias: [
       // fluxion-replay: resolve from source so Vite can tree-shake and HMR
@@ -11,6 +14,8 @@ export default defineConfig({
       { find: "@heojeongbo/fluxion-replay", replacement: path.resolve(__dirname, "../../packages/fluxion-replay/src/index.ts") },
       // fluxion-render: must use pre-built dist so the Worker URL resolves correctly
       { find: "@heojeongbo/fluxion-render/react", replacement: path.resolve(__dirname, "../../packages/fluxion-render/dist/react.js") },
+      { find: "@heojeongbo/fluxion-render/testing", replacement: path.resolve(__dirname, "../../packages/fluxion-render/dist/testing.js") },
+      { find: "@heojeongbo/fluxion-render/worker", replacement: path.resolve(__dirname, "../../packages/fluxion-render/dist/worker.js") },
       { find: "@heojeongbo/fluxion-render", replacement: path.resolve(__dirname, "../../packages/fluxion-render/dist/index.js") },
     ],
   },

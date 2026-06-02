@@ -105,12 +105,12 @@ export class ReplayStore {
     await this._flushPending();
   }
 
-  async getFrames(fromMs: number, toMs: number): Promise<SerializedFrame[]> {
+  async getFrames(fromMs: number, toMs: number, lowerOpen = false): Promise<SerializedFrame[]> {
     const db = this._assertOpen();
     return new Promise((resolve, reject) => {
       const tx = db.transaction("frames", "readonly");
       const index = tx.objectStore("frames").index("by_t");
-      const range = IDBKeyRange.bound(fromMs, toMs);
+      const range = IDBKeyRange.bound(fromMs, toMs, lowerOpen, false);
       const req = index.getAll(range);
       req.onsuccess = (e) => {
         const records = (e.target as IDBRequest<FrameRecord[]>).result;

@@ -84,6 +84,23 @@ fluxion-replay   fluxion-replay-v0.3.0      4   minor      pnpm release:replay:m
 
 Below the table, list the commit subjects per package so the user can sanity-check.
 
+### Step 4.5: README 업데이트 확인
+
+릴리즈 대상 패키지에 새 public API(훅, 옵션, 메서드 등)가 추가된 경우,
+`packages/<pkg>/README.md`가 이를 반영하는지 확인한다.
+
+커밋 목록에서 `feat` 타입 커밋을 찾아 실제로 새 API가 있는지 빠르게 확인:
+
+```bash
+git log <last-tag>..HEAD --pretty=format:'%h %s' --no-merges | grep 'feat'
+```
+
+누락된 문서가 있으면:
+1. 사용자에게 어떤 내용이 빠져 있는지 알린다
+2. README를 업데이트하고 `docs(<scope>):` 커밋을 만든 뒤 계속 진행한다
+
+이미 문서화되어 있거나 문서가 필요 없는 변경(내부 리팩터, 버그픽스)이면 그냥 넘어간다.
+
 ### Step 5: Run the dry-run first
 
 Unless the user said `--apply`, run the `:dry` variants in dependency order and stop:

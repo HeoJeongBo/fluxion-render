@@ -3,13 +3,15 @@ import { createRoot } from "react-dom/client";
 import { App } from "./app";
 import { ChartReplayApp } from "./chart-replay";
 import { DvrApp } from "./dvr";
+import { WorkerFanOutApp } from "./worker-fan-out";
 
-type Tab = "dvr" | "split" | "chart";
+type Tab = "dvr" | "split" | "chart" | "worker-fan-out";
 
 const TAB_LABEL: Record<Tab, string> = {
   dvr: "DVR Demo",
   split: "Split Demo",
   chart: "Chart Replay",
+  "worker-fan-out": "Worker Fan-Out",
 };
 
 function Root() {
@@ -17,7 +19,7 @@ function Root() {
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100vh", background: "#0f1117" }}>
       <div style={{ display: "flex", borderBottom: "1px solid #2a2d3a", background: "#1a1d27", flexShrink: 0 }}>
-        {(["dvr", "split", "chart"] as Tab[]).map((t) => (
+        {(["dvr", "split", "chart", "worker-fan-out"] as Tab[]).map((t) => (
           <button
             key={t}
             onClick={() => setTab(t)}
@@ -38,7 +40,10 @@ function Root() {
         ))}
       </div>
       <div style={{ flex: 1, minHeight: 0 }}>
-        {tab === "dvr" ? <DvrApp /> : tab === "split" ? <App /> : <ChartReplayApp />}
+        {tab === "dvr" && <DvrApp />}
+        {tab === "split" && <App />}
+        {tab === "chart" && <ChartReplayApp />}
+        {tab === "worker-fan-out" && <WorkerFanOutApp />}
       </div>
     </div>
   );
