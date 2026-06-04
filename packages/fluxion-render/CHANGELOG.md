@@ -1,5 +1,19 @@
 # Changelog
 
+# [0.15.0](https://github-personal/HeoJeongBo/fluxion-render/compare/fluxion-render-v0.14.0...fluxion-render-v0.15.0) (2026-06-04)
+
+
+### Bug Fixes
+
+* **replay:** remove dead pendingGetTimeRangeResolvers causing TS2339 type error ([c4241cc](https://github-personal/HeoJeongBo/fluxion-render/commit/c4241cc596ece5e23a133b214986e6b6cec37dab))
+
+
+### Features
+
+* **replay,examples:** add DVR controller/format/producer hooks, fix video seek, tailwind demo ([d23d31c](https://github-personal/HeoJeongBo/fluxion-render/commit/d23d31cef7237fb2f5eb9386d73677245a09394f))
+* **replay,examples:** add worker fan-out replay demo and fix prefetch boundary duplicate ([99d290e](https://github-personal/HeoJeongBo/fluxion-render/commit/99d290e4c3233b000c18e3e2ff17485e4fb5cbfc))
+* **replay,examples:** fix dvr re-entry/freeze bugs, add useScrubberControls and DvrScrubber ([b1c87f7](https://github-personal/HeoJeongBo/fluxion-render/commit/b1c87f78d3137a5699793da9d5964cc67760ab7d))
+
 # [0.14.0](https://github-personal/HeoJeongBo/fluxion-render/compare/fluxion-render-v0.13.0...fluxion-render-v0.14.0) (2026-06-01)
 
 
