@@ -42,7 +42,11 @@ export class VideoReplayer {
   }
 
   /** Seek to a specific time, re-decoding from the last keyframe. */
-  async seekTo(t: number, keyframeIndex: TimelineIndex, allFrames: ReplayPlayerFrame[]): Promise<void> {
+  async seekTo(
+    t: number,
+    keyframeIndex: TimelineIndex,
+    allFrames: ReplayPlayerFrame[],
+  ): Promise<void> {
     if (typeof VideoDecoder === "undefined") return;
 
     const keyframeT = keyframeIndex.floor(t);
@@ -69,7 +73,11 @@ export class VideoReplayer {
 
   private _resetDecoder(): void {
     if (this._decoder) {
-      try { this._decoder.close(); } catch { /* already closed */ }
+      try {
+        this._decoder.close();
+      } catch {
+        /* already closed */
+      }
       this._decoder = null;
     }
     this._lastFrame?.close();
@@ -132,9 +140,20 @@ export class VideoReplayer {
   }
 
   private _renderFrame(frame: VideoFrame): void {
-    const ctx = this._canvas.getContext("2d") as CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D | null;
+    const ctx = this._canvas.getContext("2d") as
+      | CanvasRenderingContext2D
+      | OffscreenCanvasRenderingContext2D
+      | null;
     if (!ctx) return;
-    ctx.drawImage(frame as unknown as CanvasImageSource, 0, 0, this._canvas.width, this._canvas.height);
-    frame.close();
+    // Don't close here — ownership stays with `_lastFrame`, which the `output`
+    // callback closes when the next frame arrives (and `_resetDecoder`/`dispose`
+    // close on teardown). Closing here too would double-close every frame.
+    ctx.drawImage(
+      frame as unknown as CanvasImageSource,
+      0,
+      0,
+      this._canvas.width,
+      this._canvas.height,
+    );
   }
 }

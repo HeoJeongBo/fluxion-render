@@ -206,6 +206,31 @@ player.onFrame((frame) => {
 player.play();
 ```
 
+> **Seeking:** `feedFrame` alone only handles forward playback. To seek (DVR /
+> time-travel) without garbled frames, also call `replayer.seekTo(t, keyframeIndex, allFrames)`
+> on `player.onSeek(...)` so the decoder restarts from the nearest keyframe — or just
+> use the [`useVideoReplayer`](#hooks) hook, which wires both for you (including paused
+> scrubbing).
+
+#### Canvas styling
+
+`VideoReplayer` sets the canvas **internal buffer** to the video's `codedWidth`/`codedHeight`.
+If the `<canvas>` has no explicit CSS size, the browser uses that buffer size as CSS
+pixels, so the video overflows its container and looks broken on seek. Always give the
+canvas explicit CSS sizing:
+
+```tsx
+<canvas
+  ref={canvasRef}
+  style={{
+    width: "100%",        // fit the container
+    height: "100%",
+    objectFit: "contain", // preserve aspect ratio, no stretch
+    display: "block",     // drop inline-element whitespace
+  }}
+/>
+```
+
 ### How encoding works (step by step)
 
 1. `MediaStreamTrackProcessor` converts the `MediaStreamTrack` into a `ReadableStream<VideoFrame>`.

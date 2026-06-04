@@ -85,7 +85,9 @@ describe("useScrubberControls", () => {
 
     it("while DVR → does not call enter again, stays in DVR", async () => {
       const { ses, result } = setup();
-      await act(async () => { await result.current.dvr.enter(1_030_000); });
+      await act(async () => {
+        await result.current.dvr.enter(1_030_000);
+      });
       expect(result.current.dvr.isDvr).toBe(true);
       vi.clearAllMocks();
 
@@ -100,7 +102,9 @@ describe("useScrubberControls", () => {
 
     it("while DVR → does NOT call dvr.enter again", async () => {
       const { ses, result } = setup();
-      await act(async () => { await result.current.dvr.enter(1_030_000); });
+      await act(async () => {
+        await result.current.dvr.enter(1_030_000);
+      });
       vi.clearAllMocks();
 
       await act(async () => {
@@ -131,7 +135,9 @@ describe("useScrubberControls", () => {
     it("with null scrubT → no-op", async () => {
       const { ses, result } = setup();
       // No drag initiated — scrubT is null
-      await act(async () => { result.current.controls.commitScrub(); });
+      await act(async () => {
+        result.current.controls.commitScrub();
+      });
       expect(ses.enterReplay).not.toHaveBeenCalled();
       expect(ses.exitReplay).not.toHaveBeenCalled();
     });
@@ -142,7 +148,12 @@ describe("useScrubberControls", () => {
       await act(async () => {
         result.current.controls.onScrubChange(fakeChange(1_030_000));
       });
-      await act(async () => { result.current.controls.commitScrub(); });
+      await act(async () => {
+        result.current.controls.commitScrub();
+        // Drain the dvr.enter(t).then(...) microtask chain so the play()
+        // callback (the live-commit branch) actually runs.
+        for (let i = 0; i < 10; i++) await Promise.resolve();
+      });
 
       expect(ses.enterReplay).toHaveBeenCalledWith(1_030_000, expect.any(Object));
       // autoPlay is false in the setup, but commitScrub manually calls play()
@@ -155,7 +166,9 @@ describe("useScrubberControls", () => {
       await act(async () => {
         result.current.controls.onScrubChange(fakeChange(nearEdge));
       });
-      await act(async () => { result.current.controls.commitScrub(); });
+      await act(async () => {
+        result.current.controls.commitScrub();
+      });
 
       expect(ses.enterReplay).not.toHaveBeenCalled();
       expect(result.current.controls.scrubT).toBeNull();
@@ -163,14 +176,18 @@ describe("useScrubberControls", () => {
 
     it("DVR + t near frozenLatest → exits DVR", async () => {
       const { ses, result } = setup();
-      await act(async () => { await result.current.dvr.enter(1_030_000); });
+      await act(async () => {
+        await result.current.dvr.enter(1_030_000);
+      });
 
       const frozenLatest = result.current.dvr.frozenLatest!;
       // Drag to within eps of frozen edge
       await act(async () => {
         result.current.controls.onScrubChange(fakeChange(frozenLatest - EPS + 1));
       });
-      await act(async () => { result.current.controls.commitScrub(); });
+      await act(async () => {
+        result.current.controls.commitScrub();
+      });
 
       expect(ses.exitReplay).toHaveBeenCalled();
       expect(result.current.dvr.isDvr).toBe(false);
@@ -178,12 +195,16 @@ describe("useScrubberControls", () => {
 
     it("DVR + t in middle → seeks to scrubT and plays at the given rate", async () => {
       const { ses, result } = setup(1.5);
-      await act(async () => { await result.current.dvr.enter(1_050_000); });
+      await act(async () => {
+        await result.current.dvr.enter(1_050_000);
+      });
 
       await act(async () => {
         result.current.controls.onScrubChange(fakeChange(1_025_000));
       });
-      await act(async () => { result.current.controls.commitScrub(); });
+      await act(async () => {
+        result.current.controls.commitScrub();
+      });
 
       expect(ses.player.seek).toHaveBeenCalledWith(1_025_000);
       expect(ses.player.play).toHaveBeenCalledWith(1.5);
@@ -198,7 +219,9 @@ describe("useScrubberControls", () => {
       });
       expect(result.current.controls.scrubT).toBe(1_030_000);
 
-      await act(async () => { result.current.controls.commitScrub(); });
+      await act(async () => {
+        result.current.controls.commitScrub();
+      });
       expect(result.current.controls.scrubT).toBeNull();
     });
 
@@ -208,22 +231,60 @@ describe("useScrubberControls", () => {
       await act(async () => {
         result.current.controls.onScrubChange(fakeChange(LIVE.latest - 4_999));
       });
-      await act(async () => { result.current.controls.commitScrub(); });
+      await act(async () => {
+        result.current.controls.commitScrub();
+      });
       expect(ses.enterReplay).not.toHaveBeenCalled();
     });
 
     it("DVR + t uses frozenLatest as fallback when frozenLatest is null", async () => {
       const { ses, result } = setup();
-      await act(async () => { await result.current.dvr.enter(1_030_000); });
+      await act(async () => {
+        await result.current.dvr.enter(1_030_000);
+      });
 
       // Drag to within eps of LIVE.latest (which equals frozenLatest after clamping)
       const frozenLatest = result.current.dvr.frozenLatest ?? LIVE.latest;
       await act(async () => {
         result.current.controls.onScrubChange(fakeChange(frozenLatest - EPS + 1));
       });
-      await act(async () => { result.current.controls.commitScrub(); });
+      await act(async () => {
+        result.current.controls.commitScrub();
+      });
 
       expect(ses.exitReplay).toHaveBeenCalled();
+    });
+
+    it("live-commit play() callback runs after dvr.enter resolves (isolated fake dvr)", async () => {
+      // Drive useScrubberControls with a hand-built dvr so the live-commit
+      // branch's `dvr.enter(t).then(() => dvr.player.play(rate))` callback is
+      // exercised deterministically (the real useReplayDvr path can mask it).
+      const player = makeFakePlayer(0);
+      const enter = vi.fn(async () => {});
+      const fakeDvr = {
+        isDvr: false,
+        player,
+        frozenLatest: null,
+        effectiveTimeRange: LIVE,
+        enter,
+        exit: vi.fn(),
+      };
+
+      const { result } = renderHook(() =>
+        // biome-ignore lint/suspicious/noExplicitAny: minimal fake dvr for isolation
+        useScrubberControls({ dvr: fakeDvr as any, rate: 3 }),
+      );
+
+      await act(async () => {
+        result.current.onScrubChange(fakeChange(LIVE.earliest + 5_000)); // far from edge
+      });
+      await act(async () => {
+        result.current.commitScrub();
+        for (let i = 0; i < 10; i++) await Promise.resolve();
+      });
+
+      expect(enter).toHaveBeenCalledWith(LIVE.earliest + 5_000);
+      expect(player.play).toHaveBeenCalledWith(3);
     });
   });
 
@@ -232,11 +293,15 @@ describe("useScrubberControls", () => {
   describe("rate forwarding", () => {
     it("default rate=1 is used when not specified", async () => {
       const { ses, result } = setup(); // no rate passed
-      await act(async () => { await result.current.dvr.enter(1_050_000); });
+      await act(async () => {
+        await result.current.dvr.enter(1_050_000);
+      });
       await act(async () => {
         result.current.controls.onScrubChange(fakeChange(1_025_000));
       });
-      await act(async () => { result.current.controls.commitScrub(); });
+      await act(async () => {
+        result.current.controls.commitScrub();
+      });
       expect(ses.player.play).toHaveBeenCalledWith(1);
     });
   });

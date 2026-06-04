@@ -429,7 +429,8 @@ describe("VideoReplayer", () => {
     const frame = { timestamp: 0, duration: null, displayWidth: 640, displayHeight: 480, close: vi.fn() } as unknown as VideoFrame;
     // Must not throw even though ctx is null
     expect(() => capturedOutput!(frame)).not.toThrow();
-    // close() should NOT have been called because we returned early
+    // close() should NOT have been called: _renderFrame never closes (ownership
+    // is on _lastFrame), and as the first frame there is no prior _lastFrame to close.
     expect((frame as unknown as { close: ReturnType<typeof vi.fn> }).close).not.toHaveBeenCalled();
 
     replayer.dispose();

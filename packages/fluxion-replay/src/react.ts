@@ -45,6 +45,9 @@ export type { UseDisplayMediaResult } from "./widgets/media/lib/use-display-medi
 export { useVideoReplayer } from "./widgets/video/lib/use-video-replayer";
 export type { UseVideoReplayerOptions } from "./widgets/video/lib/use-video-replayer";
 
+export { useVideoRecorder } from "./widgets/video/lib/use-video-recorder";
+export type { UseVideoRecorderOptions } from "./widgets/video/lib/use-video-recorder";
+
 export { useChartReplay } from "./widgets/chart-replay/lib/use-chart-replay";
 export type {
   UseChartReplayOptions,
@@ -64,11 +67,36 @@ export type {
   UseRecordingSessionResult,
 } from "./widgets/recording/lib/use-recording-session";
 
+export { useRecordingTimer } from "./widgets/recording/lib/use-recording-timer";
+export type {
+  UseRecordingTimerOptions,
+  UseRecordingTimerResult,
+} from "./widgets/recording/lib/use-recording-timer";
+
 export { useReplayDvr } from "./widgets/dvr/lib/use-replay-dvr";
 export type {
   UseReplayDvrOptions,
   UseReplayDvrResult,
 } from "./widgets/dvr/lib/use-replay-dvr";
+
+export { usePlaybackRate } from "./widgets/dvr/lib/use-playback-rate";
+export type {
+  UsePlaybackRateOptions,
+  UsePlaybackRateResult,
+} from "./widgets/dvr/lib/use-playback-rate";
+
+export { useDvrController } from "./widgets/dvr/lib/use-dvr-controller";
+export type {
+  DvrScrubberBundle,
+  UseDvrControllerOptions,
+  UseDvrControllerResult,
+} from "./widgets/dvr/lib/use-dvr-controller";
+
+export { PlaybackControls } from "./widgets/dvr/ui/playback-controls";
+export type { PlaybackControlsProps } from "./widgets/dvr/ui/playback-controls";
+
+export { DvrBadge } from "./widgets/dvr/ui/dvr-badge";
+export type { DvrBadgeProps } from "./widgets/dvr/ui/dvr-badge";
 
 export { useScrubberControls } from "./widgets/replay-timeline/lib/use-scrubber-controls";
 export type {

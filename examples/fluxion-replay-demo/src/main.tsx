@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import { App } from "./app";
 import { ChartReplayApp } from "./chart-replay";
 import { DvrApp } from "./dvr";
+import "./index.css";
 import { WorkerFanOutApp } from "./worker-fan-out";
 
 type Tab = "dvr" | "split" | "chart" | "worker-fan-out";
@@ -17,29 +18,24 @@ const TAB_LABEL: Record<Tab, string> = {
 function Root() {
   const [tab, setTab] = useState<Tab>("dvr");
   return (
-    <div style={{ display: "flex", flexDirection: "column", height: "100vh", background: "#0f1117" }}>
-      <div style={{ display: "flex", borderBottom: "1px solid #2a2d3a", background: "#1a1d27", flexShrink: 0 }}>
+    <div className="flex flex-col h-screen bg-app-bg">
+      <div className="flex border-b border-app-border bg-app-panel shrink-0">
         {(["dvr", "split", "chart", "worker-fan-out"] as Tab[]).map((t) => (
           <button
             key={t}
+            type="button"
             onClick={() => setTab(t)}
-            style={{
-              padding: "6px 16px",
-              fontSize: 12,
-              fontWeight: 600,
-              cursor: "pointer",
-              background: "transparent",
-              border: "none",
-              borderBottom: tab === t ? "2px solid #4f8ef7" : "2px solid transparent",
-              color: tab === t ? "#e2e8f0" : "#555e70",
-              transition: "color 0.15s",
-            }}
+            className={`px-4 py-1.5 text-xs font-semibold cursor-pointer bg-transparent border-none border-b-2 transition-colors ${
+              tab === t
+                ? "border-app-accent text-app-text"
+                : "border-transparent text-app-muted"
+            }`}
           >
             {TAB_LABEL[t]}
           </button>
         ))}
       </div>
-      <div style={{ flex: 1, minHeight: 0 }}>
+      <div className="flex-1 min-h-0">
         {tab === "dvr" && <DvrApp />}
         {tab === "split" && <App />}
         {tab === "chart" && <ChartReplayApp />}

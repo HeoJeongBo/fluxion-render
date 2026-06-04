@@ -1,4 +1,3 @@
-import { useMemo, useState } from "react";
 import type { FluxionHost } from "@heojeongbo/fluxion-render";
 import { FluxionCanvas, useMiniChart } from "@heojeongbo/fluxion-render/react";
 import {
@@ -7,17 +6,18 @@ import {
   type ReplaySession,
 } from "@heojeongbo/fluxion-replay";
 import {
+  DvrBadge,
   DvrScrubber,
+  PlaybackControls,
+  type UseReplayDvrResult,
   useChartReplayBridge,
+  useDvrController,
   useLiveTimeRange,
   useRecordingSession,
-  useReplayDvr,
-  type UseReplayDvrResult,
-  useReplayPlayer,
-  useReplayScrubber,
   useReplaySession,
-  useScrubberControls,
 } from "@heojeongbo/fluxion-replay/react";
+import { useMemo, useState } from "react";
+import { btn, T } from "./shared";
 
 // ─── Layout ───────────────────────────────────────────────────────────────────
 
@@ -82,40 +82,10 @@ export function sampleAt(tMs: number, freqHz: number, offset: number): number {
   return seconds * slope + intercept;
 }
 
-// ─── Theme ────────────────────────────────────────────────────────────────────
-
-const T = {
-  bg: "#0f1117",
-  panel: "#1a1d27",
-  border: "#2a2d3a",
-  text: "#e2e8f0",
-  textSub: "#8892a4",
-  textMuted: "#555e70",
-  accent: "#4f8ef7",
-  red: "#f87171",
-  yellow: "#fbbf24",
-  green: "#4ade80",
-} as const;
-
 const HZ = 20; // samples per chart per second
 const WINDOW_MS = 5_000; // matches pool-demo's 5s window
 
-function btn(active: boolean, danger = false): React.CSSProperties {
-  return {
-    padding: "5px 14px",
-    borderRadius: 6,
-    cursor: "pointer",
-    fontSize: 12,
-    fontWeight: 600,
-    border: `1px solid ${danger ? T.red : active ? T.accent : T.border}`,
-    background: danger
-      ? "rgba(248,113,113,0.15)"
-      : active
-        ? T.accent
-        : "rgba(255,255,255,0.04)",
-    color: danger ? T.red : active ? "#fff" : T.text,
-  };
-}
+// (theme `T` + `btn` now live in ./shared)
 
 // ─── MiniChart ────────────────────────────────────────────────────────────────
 // One chart per channel. Drives live data via useFluxionStream when isLive,
@@ -176,29 +146,8 @@ function MiniChart({ spec, isLive, session, dvr, timeOrigin }: MiniChartProps) {
   });
 
   return (
-    <div
-      style={{
-        position: "relative",
-        minWidth: 0,
-        minHeight: 0,
-        background: "#0a0c12",
-        border: `1px solid ${T.border}`,
-        borderRadius: 4,
-        overflow: "hidden",
-      }}
-    >
-      <div
-        style={{
-          position: "absolute",
-          top: 3,
-          left: 5,
-          fontSize: 9,
-          color: T.textMuted,
-          pointerEvents: "none",
-          zIndex: 1,
-          fontVariantNumeric: "tabular-nums",
-        }}
-      >
+    <div className="relative min-w-0 min-h-0 border border-app-border rounded overflow-hidden bg-[#0a0c12]">
+      <div className="absolute top-[3px] left-[5px] text-[9px] text-app-muted pointer-events-none z-[1] tabular-nums">
         #{spec.index + 1}
       </div>
       <FluxionCanvas
@@ -212,17 +161,13 @@ function MiniChart({ spec, isLive, session, dvr, timeOrigin }: MiniChartProps) {
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
-
 export function ChartReplayApp() {
-  const { session, isReady, enterReplay, exitReplay } =
-    useReplaySession(SESSION_OPTS);
+  const { session, isReady, enterReplay, exitReplay } = useReplaySession(SESSION_OPTS);
 
   // Shared timeOrigin across every chart on the page. Established once at
   // mount; the chart wire pushes `t - timeOrigin` to dodge Float32 quantisation
   // around `Date.now()` (≈1.78e12 → ~131,072ms bucket size).
   const timeOrigin = useMemo(() => Date.now(), []);
-
-  const [rate, setRate] = useState(1.0);
 
   // Poll the recording's time range — the scrubber's right edge tracks it
   // in live mode and uses it for the DVR freeze point.
@@ -241,142 +186,68 @@ export function ChartReplayApp() {
     // useChartReplayBridge's tick.
   });
 
-  // High-level DVR controller. Phase 18: `autoPlay: false` so the player
-  // stays idle while the user scrubs — the chart can hold its backfill
-  // window without being slid off by play-forward frames. `commitScrub`
-  // explicitly calls `player.play(rate)` on release, giving us a
-  // "scrub-then-play" UX: drag to inspect any past moment, release to
-  // resume playback from there.
-  const dvr = useReplayDvr({
+  // One combined controller replaces the session→dvr→rate→player→scrubber
+  // hook chain. `autoPlay: false` keeps the player idle while scrubbing so the
+  // chart holds its backfill window; the scrubber commit resumes playback.
+  const ctl = useDvrController({
     session,
     enterReplay,
     exitReplay,
     liveTimeRange,
-    rate,
     autoPlay: false,
-  });
-
-  const replayPlayer = useReplayPlayer(dvr.player);
-  const isPlaying = replayPlayer.state === "playing";
-  const isLive = !dvr.isDvr;
-
-  // ── Scrubber ──────────────────────────────────────────────────────────────
-  const { scrubT, onScrubChange, commitScrub } = useScrubberControls({ dvr, rate });
-
-  const {
-    min: scrubMin,
-    max: scrubMax,
-    value: scrubValue,
-    disabled: scrubDisabled,
-  } = useReplayScrubber({
-    effectiveTimeRange: dvr.effectiveTimeRange,
-    liveTimeRange,
-    isDvr: dvr.isDvr,
-    replayPlayerT: replayPlayer.currentT,
-    scrubT,
     recordingStartMs: timeOrigin,
   });
+  const { dvr, replayPlayer, isLive, isPlaying, rate, setRate } = ctl;
 
   // ── UI ────────────────────────────────────────────────────────────────────
   return (
-    <div
-      style={{
-        display: "flex",
-        flexDirection: "column",
-        height: "100%",
-        overflow: "hidden",
-        background: T.bg,
-        color: T.text,
-        fontFamily: "-apple-system, system-ui, sans-serif",
-        fontSize: 13,
-      }}
-    >
+    <div className="flex flex-col h-full overflow-hidden bg-app-bg text-app-text font-sans text-[13px]">
       {/* Top bar */}
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: 12,
-          padding: "8px 16px",
-          borderBottom: `1px solid ${T.border}`,
-          background: T.panel,
-          flexShrink: 0,
-          height: 44,
-        }}
-      >
-        <span style={{ fontWeight: 700, fontSize: 13 }}>chart-replay · 40 charts</span>
-        <span style={{ color: T.textMuted, fontSize: 11 }}>
-          {CHART_COUNT} mini charts · {HZ}Hz · {WINDOW_MS / 1000}s window · shared worker pool
+      <div className="flex items-center gap-3 px-4 py-2 border-b border-app-border bg-app-panel shrink-0 h-11">
+        <span className="font-bold text-[13px]">chart-replay · 40 charts</span>
+        <span className="text-app-muted text-[11px]">
+          {CHART_COUNT} mini charts · {HZ}Hz · {WINDOW_MS / 1000}s window · shared worker
+          pool
         </span>
 
-        {/* Mode badge — makes "am I in DVR or live?" unmissable. The Go Live
-            button can scroll out of view on narrow screens, but this stays
-            anchored next to the title. */}
         {!isLive && dvr.player && (
-          <span
-            style={{
-              padding: "3px 10px",
-              borderRadius: 12,
-              fontSize: 11,
-              fontWeight: 700,
-              letterSpacing: "0.04em",
-              background: "rgba(251,191,36,0.18)",
-              border: `1px solid ${T.yellow}`,
-              color: T.yellow,
-              fontVariantNumeric: "tabular-nums",
-            }}
-          >
-            ▶ TIME-TRAVEL @{" "}
-            {new Date(replayPlayer.currentT).toLocaleTimeString("en-US", { hour12: false })}
-          </span>
+          <DvrBadge
+            currentT={replayPlayer.currentT}
+            textColor={T.yellow}
+            backgroundColor="rgba(251,191,36,0.18)"
+          />
         )}
 
-        <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 8 }}>
-          {!isReady && <span style={{ color: T.textMuted, fontSize: 11 }}>Opening IDB…</span>}
+        <div className="ml-auto flex items-center gap-2">
+          {!isReady && <span className="text-app-muted text-[11px]">Opening IDB…</span>}
 
           {isReady && isLive && (
-            <span style={{ color: T.red, fontSize: 11, fontWeight: 600 }}>● REC</span>
+            <span className="text-app-red text-[11px] font-semibold">● REC</span>
           )}
 
           {!isLive && (
-            <>
-              <button
-                onClick={() => (isPlaying ? dvr.player?.pause() : dvr.player?.play(rate))}
-                style={btn(true)}
-              >
-                {isPlaying ? "⏸ Pause" : "▶ Play"}
-              </button>
-              {([0.5, 1, 2, 4] as const).map((r) => (
-                <button
-                  key={r}
-                  onClick={() => {
-                    setRate(r);
-                    if (isPlaying) dvr.player?.play(r);
-                  }}
-                  style={btn(rate === r)}
-                >
-                  {r}×
-                </button>
-              ))}
-              <button onClick={dvr.exit} style={btn(false, true)}>
-                ✕ Go Live
-              </button>
-            </>
+            <PlaybackControls
+              isPlaying={isPlaying}
+              rate={rate}
+              onPlayPause={() =>
+                isPlaying ? dvr.player?.pause() : dvr.player?.play(rate)
+              }
+              onRateChange={setRate}
+              onExit={dvr.exit}
+              activeStyle={btn(true)}
+              inactiveStyle={btn(false)}
+              dangerStyle={btn(false, true)}
+            />
           )}
         </div>
       </div>
 
       {/* Chart grid */}
       <div
+        className="flex-1 min-h-0 p-2 grid gap-1 bg-app-bg"
         style={{
-          flex: 1,
-          minHeight: 0,
-          padding: 8,
-          display: "grid",
           gridTemplateColumns: `repeat(${COLS}, 1fr)`,
           gridTemplateRows: `repeat(${ROWS}, 1fr)`,
-          gap: 4,
-          background: T.bg,
         }}
       >
         {SPECS.map((spec) => (
@@ -395,13 +266,7 @@ export function ChartReplayApp() {
           drag back to the right edge to return to live. */}
       {dvr.effectiveTimeRange && (
         <DvrScrubber
-          min={scrubMin}
-          max={scrubMax}
-          value={scrubValue}
-          disabled={scrubDisabled}
-          onChange={onScrubChange}
-          onCommit={commitScrub}
-          isLive={isLive}
+          {...ctl.scrubber}
           liveAccentColor={T.red}
           dvrAccentColor={T.accent}
           dvrTextColor={T.text}

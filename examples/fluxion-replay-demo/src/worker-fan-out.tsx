@@ -16,9 +16,8 @@
  *   chart-replay.tsx  — one JS tick per chart (useChartReplayBridge), no worker pool
  *   worker-fan-out.tsx — one shared setInterval tick for all charts, pool.broadcastStream
  */
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+
 import type { FluxionHost } from "@heojeongbo/fluxion-render";
-import { createSineSynth, mulberry32 } from "@heojeongbo/fluxion-render/testing";
 import {
   axisGridLayer,
   FluxionCanvas,
@@ -26,24 +25,26 @@ import {
   useFluxionWorkerPool,
   useTimeOrigin,
 } from "@heojeongbo/fluxion-render/react";
+import { createSineSynth, mulberry32 } from "@heojeongbo/fluxion-render/testing";
 import {
   MetricChannel,
   type MetricSample,
   type ReplaySession,
 } from "@heojeongbo/fluxion-replay";
 import {
+  DvrBadge,
   DvrScrubber,
+  PlaybackControls,
+  type UseReplayDvrResult,
   useChartLiveBackfill,
   useChartReplay,
+  useDvrController,
   useLiveTimeRange,
   useRecordingSession,
-  useReplayDvr,
-  type UseReplayDvrResult,
-  useReplayPlayer,
-  useReplayScrubber,
   useReplaySession,
-  useScrubberControls,
 } from "@heojeongbo/fluxion-replay/react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { btn, T } from "./shared";
 
 // ─── Layout ────────────────────────────────────────────────────────────────
 
@@ -55,20 +56,7 @@ const INTERVAL_MS = 1000 / SAMPLE_HZ;
 const TIME_WINDOW_MS = 5_000;
 const MAX_HZ = SAMPLE_HZ;
 
-// ─── Theme (matches other replay demos) ───────────────────────────────────
-
-const T = {
-  bg: "#0f1117",
-  panel: "#1a1d27",
-  border: "#2a2d3a",
-  text: "#e2e8f0",
-  textSub: "#8892a4",
-  textMuted: "#555e70",
-  accent: "#4f8ef7",
-  red: "#f87171",
-  yellow: "#fbbf24",
-  green: "#4ade80",
-} as const;
+// (theme `T` + `btn` now live in ./shared)
 
 const COLORS = [
   "#4fc3f7",
@@ -97,25 +85,6 @@ const SESSION_OPTS = {
 // ─── Noise ─────────────────────────────────────────────────────────────────
 
 const noise = mulberry32(0xdeadbeef);
-
-// ─── Button style helper ───────────────────────────────────────────────────
-
-function btn(active: boolean, danger = false): React.CSSProperties {
-  return {
-    padding: "5px 14px",
-    borderRadius: 6,
-    cursor: "pointer",
-    fontSize: 12,
-    fontWeight: 600,
-    border: `1px solid ${danger ? T.red : active ? T.accent : T.border}`,
-    background: danger
-      ? "rgba(248,113,113,0.15)"
-      : active
-        ? T.accent
-        : "rgba(255,255,255,0.04)",
-    color: danger ? T.red : active ? "#fff" : T.text,
-  };
-}
 
 // ─── SensorChart ───────────────────────────────────────────────────────────
 
@@ -201,29 +170,8 @@ function SensorChart({
   );
 
   return (
-    <div
-      style={{
-        position: "relative",
-        minWidth: 0,
-        minHeight: 0,
-        background: "#0a0c12",
-        border: `1px solid ${T.border}`,
-        borderRadius: 4,
-        overflow: "hidden",
-      }}
-    >
-      <div
-        style={{
-          position: "absolute",
-          top: 3,
-          left: 5,
-          fontSize: 9,
-          color: T.textMuted,
-          pointerEvents: "none",
-          zIndex: 1,
-          fontVariantNumeric: "tabular-nums",
-        }}
-      >
+    <div className="relative min-w-0 min-h-0 border border-app-border rounded overflow-hidden bg-[#0a0c12]">
+      <div className="absolute top-[3px] left-[5px] text-[9px] text-app-muted pointer-events-none z-[1] tabular-nums">
         #{index + 1}
       </div>
       <FluxionCanvas
@@ -246,40 +194,32 @@ function SensorChart({
 // ─── Page ──────────────────────────────────────────────────────────────────
 
 export function WorkerFanOutApp() {
-  const { session, isReady, enterReplay, exitReplay } =
-    useReplaySession(SESSION_OPTS);
+  const { session, isReady, enterReplay, exitReplay } = useReplaySession(SESSION_OPTS);
 
   const timeOrigin = useTimeOrigin();
-  const [rate, setRate] = useState(1.0);
 
-  const { timeRange: liveTimeRange, seed: seedTimeRange } =
-    useLiveTimeRange(session);
+  const { timeRange: liveTimeRange, seed: seedTimeRange } = useLiveTimeRange(session);
 
   // Start recording immediately when IDB is ready. Per-chart record() calls
   // happen inside the shared tick loop below (not via useChartReplayBridge).
   useRecordingSession({ session, enabled: isReady, seedTimeRange });
 
-  const dvr = useReplayDvr({
+  // One combined controller replaces the session→dvr→rate→player→scrubber chain.
+  const ctl = useDvrController({
     session,
     enterReplay,
     exitReplay,
     liveTimeRange,
-    rate,
     autoPlay: false,
+    recordingStartMs: timeOrigin,
   });
+  const { dvr, replayPlayer, isLive, isPlaying, rate, setRate } = ctl;
 
   const pool = useFluxionWorkerPool({
     size: 1,
     workerFactory: () =>
-      new Worker(
-        new URL("./pool-sensor-worker.ts", import.meta.url),
-        { type: "module" },
-      ),
+      new Worker(new URL("./pool-sensor-worker.ts", import.meta.url), { type: "module" }),
   });
-
-  const replayPlayer = useReplayPlayer(dvr.player);
-  const isPlaying = replayPlayer.state === "playing";
-  const isLive = !dvr.isDvr;
 
   // Keep isLive and session in refs so the setInterval closure stays fresh
   // without being recreated on every render.
@@ -313,7 +253,7 @@ export function WorkerFanOutApp() {
       const tEnd = Date.now() - timeOrigin;
       const tStart = lastT;
       lastT = tEnd;
-      const t = tStart;           // relative ms (for synths + chart wire)
+      const t = tStart; // relative ms (for synths + chart wire)
       const wallT = t + timeOrigin; // absolute ms (for session.record)
 
       // Collect only hosts that are registered in the current pool instance.
@@ -329,8 +269,8 @@ export function WorkerFanOutApp() {
       if (activeTargets.length === 0) return;
 
       // Compute synth values once — shared by both record() and broadcastStream
-      const values = activeTargets.map(({ idx }) =>
-        synths[idx]!(t) + idx * 0.2 + (noise() - 0.5) * 0.1,
+      const values = activeTargets.map(
+        ({ idx }) => synths[idx]!(t) + idx * 0.2 + (noise() - 0.5) * 0.1,
       );
 
       // 1. Record to session (always — enables DVR playback of this data)
@@ -364,130 +304,55 @@ export function WorkerFanOutApp() {
     return () => clearInterval(id);
   }, [pool, timeOrigin]);
 
-  // ── Scrubber ───────────────────────────────────────────────────────────
-  // ── Scrubber ───────────────────────────────────────────────────────────
-  const { scrubT, onScrubChange, commitScrub } = useScrubberControls({ dvr, rate });
-
-  const {
-    min: scrubMin,
-    max: scrubMax,
-    value: scrubValue,
-    disabled: scrubDisabled,
-  } = useReplayScrubber({
-    effectiveTimeRange: dvr.effectiveTimeRange,
-    liveTimeRange,
-    isDvr: dvr.isDvr,
-    replayPlayerT: replayPlayer.currentT,
-    scrubT,
-    recordingStartMs: timeOrigin,
-  });
-
   // ── Render ─────────────────────────────────────────────────────────────
   return (
-    <div
-      style={{
-        display: "flex",
-        flexDirection: "column",
-        height: "100%",
-        overflow: "hidden",
-        background: T.bg,
-        color: T.text,
-        fontFamily: "-apple-system, system-ui, sans-serif",
-        fontSize: 13,
-      }}
-    >
+    <div className="flex flex-col h-full overflow-hidden bg-app-bg text-app-text font-sans text-[13px]">
       {/* Top bar */}
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: 12,
-          padding: "8px 16px",
-          borderBottom: `1px solid ${T.border}`,
-          background: T.panel,
-          flexShrink: 0,
-          height: 44,
-        }}
-      >
-        <span style={{ fontWeight: 700, fontSize: 13 }}>
+      <div className="flex items-center gap-3 px-4 py-2 border-b border-app-border bg-app-panel shrink-0 h-11">
+        <span className="font-bold text-[13px]">
           worker fan-out · {CHART_COUNT} charts
         </span>
-        <span style={{ color: T.textMuted, fontSize: 11 }}>
-          1 pool · 1 worker · 1 postMessage/tick · {SAMPLE_HZ}Hz · {TIME_WINDOW_MS / 1000}s window
+        <span className="text-app-muted text-[11px]">
+          1 pool · 1 worker · 1 postMessage/tick · {SAMPLE_HZ}Hz · {TIME_WINDOW_MS / 1000}
+          s window
         </span>
 
-        {/* DVR badge */}
         {!isLive && dvr.player && (
-          <span
-            style={{
-              padding: "3px 10px",
-              borderRadius: 12,
-              fontSize: 11,
-              fontWeight: 700,
-              letterSpacing: "0.04em",
-              background: "rgba(251,191,36,0.18)",
-              border: `1px solid ${T.yellow}`,
-              color: T.yellow,
-              fontVariantNumeric: "tabular-nums",
-            }}
-          >
-            ▶ TIME-TRAVEL @{" "}
-            {new Date(replayPlayer.currentT).toLocaleTimeString("en-US", {
-              hour12: false,
-            })}
-          </span>
+          <DvrBadge
+            currentT={replayPlayer.currentT}
+            textColor={T.yellow}
+            backgroundColor="rgba(251,191,36,0.18)"
+          />
         )}
 
-        <div
-          style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 8 }}
-        >
-          {!isReady && (
-            <span style={{ color: T.textMuted, fontSize: 11 }}>Opening IDB…</span>
-          )}
+        <div className="ml-auto flex items-center gap-2">
+          {!isReady && <span className="text-app-muted text-[11px]">Opening IDB…</span>}
           {isReady && isLive && (
-            <span style={{ color: T.red, fontSize: 11, fontWeight: 600 }}>● REC</span>
+            <span className="text-app-red text-[11px] font-semibold">● REC</span>
           )}
           {!isLive && (
-            <>
-              <button
-                onClick={() =>
-                  isPlaying ? dvr.player?.pause() : dvr.player?.play(rate)
-                }
-                style={btn(true)}
-              >
-                {isPlaying ? "⏸ Pause" : "▶ Play"}
-              </button>
-              {([0.5, 1, 2, 4] as const).map((r) => (
-                <button
-                  key={r}
-                  onClick={() => {
-                    setRate(r);
-                    if (isPlaying) dvr.player?.play(r);
-                  }}
-                  style={btn(rate === r)}
-                >
-                  {r}×
-                </button>
-              ))}
-              <button onClick={dvr.exit} style={btn(false, true)}>
-                ✕ Go Live
-              </button>
-            </>
+            <PlaybackControls
+              isPlaying={isPlaying}
+              rate={rate}
+              onPlayPause={() =>
+                isPlaying ? dvr.player?.pause() : dvr.player?.play(rate)
+              }
+              onRateChange={setRate}
+              onExit={dvr.exit}
+              activeStyle={btn(true)}
+              inactiveStyle={btn(false)}
+              dangerStyle={btn(false, true)}
+            />
           )}
         </div>
       </div>
 
       {/* Chart grid */}
       <div
+        className="flex-1 min-h-0 p-2 grid gap-1 bg-app-bg"
         style={{
-          flex: 1,
-          minHeight: 0,
-          padding: 8,
-          display: "grid",
           gridTemplateColumns: `repeat(${COLS}, 1fr)`,
           gridTemplateRows: `repeat(${ROWS}, 1fr)`,
-          gap: 4,
-          background: T.bg,
         }}
       >
         {Array.from({ length: CHART_COUNT }, (_, i) => (
@@ -509,13 +374,7 @@ export function WorkerFanOutApp() {
       {/* Timeline scrubber */}
       {dvr.effectiveTimeRange && (
         <DvrScrubber
-          min={scrubMin}
-          max={scrubMax}
-          value={scrubValue}
-          disabled={scrubDisabled}
-          onChange={onScrubChange}
-          onCommit={commitScrub}
-          isLive={isLive}
+          {...ctl.scrubber}
           liveAccentColor={T.red}
           dvrAccentColor={T.accent}
           dvrTextColor={T.text}

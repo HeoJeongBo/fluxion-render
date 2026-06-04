@@ -1,0 +1,47 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html,
+  body,
+  #root {
+    @apply m-0 h-full bg-app-bg text-app-text font-sans;
+  }
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.2;
+  }
+}
+
+@layer components {
+  /* Button variants — replace the per-file btn() CSSProperties helper for plain
+     <button> elements. <PlaybackControls> still needs CSSProperties props, so the
+     btn() JS helper stays for those call sites only. */
+  .btn {
+    @apply px-3.5 py-[5px] rounded-md text-xs font-semibold cursor-pointer border;
+  }
+  .btn-default {
+    @apply border-app-border bg-white/[0.04] text-app-text;
+  }
+  .btn-active {
+    @apply border-app-accent bg-app-accent text-white;
+  }
+  .btn-danger {
+    @apply border-app-red bg-app-red/15 text-app-red;
+  }
+  .btn-highlight {
+    @apply border-app-green bg-app-green/15 text-app-green;
+  }
+
+  /* Repeated panel header strip. */
+  .panel-header {
+    @apply flex items-center gap-2 px-3 py-1.5 border-b border-app-border bg-app-panel shrink-0;
+  }
+}

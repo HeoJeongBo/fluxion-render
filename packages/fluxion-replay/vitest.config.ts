@@ -31,6 +31,8 @@ export default defineConfig({
         "src/**/*.bench.{ts,tsx}",
         "src/test/**",
         "src/scenarios/_helpers.ts",
+        // Test-only doubles (imported solely by *.test/*.bench). Not shipped.
+        "src/**/*-fixtures.tsx",
         "src/index.ts",
         "src/react.ts",
       ],

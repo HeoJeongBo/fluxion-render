@@ -16,6 +16,20 @@ export type { RosChannelOptions } from "./entities/ros-channel/ros-channel";
 export { VideoChannel } from "./entities/video-channel/video-channel";
 export type { VideoFrameInfo } from "./entities/video-channel/video-channel";
 
+// Format & producer utilities (pure, no React)
+export { formatBytes, formatMs } from "./shared/lib/format";
+export {
+  createNoisyMetricProducer,
+  createRandomLogProducer,
+} from "./shared/lib/producers";
+export type {
+  LogSample,
+  MetricSampleShape,
+  NoisyMetricProducerOptions,
+  RandomLogProducerOptions,
+  Rng,
+} from "./shared/lib/producers";
+
 // Timeline utilities
 export { TimelineIndex } from "./features/timeline/model/timeline-index";
 export { ThumbnailStore } from "./features/timeline/model/thumbnail-store";

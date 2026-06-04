@@ -1,6 +1,10 @@
 import { vi } from "vitest";
 import { MetricChannel } from "../../../entities/metric-channel/metric-channel";
-import type { ReplayPlayer, ReplayPlayerFrame } from "../../../features/player/model/replay-player";
+import type {
+  ReplayPlayer,
+  ReplayPlayerFrame,
+  ReplayPlayerState,
+} from "../../../features/player/model/replay-player";
 import type { ReplaySession } from "../../../features/session/model/replay-session";
 import type { BaseChannel } from "../../../shared/model/base-channel";
 import type { SerializedFrame } from "../../../shared/model/frame";
@@ -9,9 +13,18 @@ import { useChartReplay } from "./use-chart-replay";
 // Shared test doubles for useChartReplay's tests and benches. Kept in lib/ so
 // both .test.tsx and .bench.ts can import without circular paths.
 
-export interface PushCall { id: string; sample: { t: number; y: number }; }
-export interface PushBatchCall { id: string; samples: { t: number; y: number }[]; }
-export interface ResetCall { id: string; latestT?: number; }
+export interface PushCall {
+  id: string;
+  sample: { t: number; y: number };
+}
+export interface PushBatchCall {
+  id: string;
+  samples: { t: number; y: number }[];
+}
+export interface ResetCall {
+  id: string;
+  latestT?: number;
+}
 
 export function makeFakeHost() {
   const pushes: PushCall[] = [];
@@ -46,17 +59,27 @@ export type FrameListener = (frame: ReplayPlayerFrame) => void;
 export type SeekListener = (t: number) => void;
 export type TickListener = (t: number) => void;
 export type EndListener = () => void;
+export type StateListener = (state: ReplayPlayerState) => void;
 
 export function makeFakePlayer(initialT = 1000) {
   const frameListeners = new Set<FrameListener>();
   const seekListeners = new Set<SeekListener>();
   const tickListeners = new Set<TickListener>();
   const endListeners = new Set<EndListener>();
+  const stateListeners = new Set<StateListener>();
   let currentT = initialT;
+  let state: ReplayPlayerState = "idle";
 
   return {
-    get currentT() { return currentT; },
-    setCurrentT(t: number) { currentT = t; },
+    get currentT() {
+      return currentT;
+    },
+    setCurrentT(t: number) {
+      currentT = t;
+    },
+    get state() {
+      return state;
+    },
     // Supports both `onFrame(listener)` and
     // `onFrame(channel, listener)` (Phase 20-B-1 overloads). When called
     // with a channel, wraps the listener with a channelId filter so the
@@ -92,6 +115,10 @@ export function makeFakePlayer(initialT = 1000) {
       endListeners.add(l);
       return () => endListeners.delete(l);
     }),
+    onStateChange: vi.fn((l: StateListener) => {
+      stateListeners.add(l);
+      return () => stateListeners.delete(l);
+    }),
     seek: vi.fn((_t: number) => {}),
     play: vi.fn((_rate?: number) => {}),
     pause: vi.fn(() => {}),
@@ -101,6 +128,7 @@ export function makeFakePlayer(initialT = 1000) {
       seekListeners.clear();
       tickListeners.clear();
       endListeners.clear();
+      stateListeners.clear();
     }),
     emitFrame(frame: ReplayPlayerFrame) {
       for (const l of frameListeners) l(frame);
@@ -114,10 +142,25 @@ export function makeFakePlayer(initialT = 1000) {
     emitEnd() {
       for (const l of endListeners) l();
     },
-    frameListenerCount() { return frameListeners.size; },
-    seekListenerCount() { return seekListeners.size; },
-    tickListenerCount() { return tickListeners.size; },
-    endListenerCount() { return endListeners.size; },
+    emitState(s: ReplayPlayerState) {
+      state = s;
+      for (const l of stateListeners) l(s);
+    },
+    frameListenerCount() {
+      return frameListeners.size;
+    },
+    seekListenerCount() {
+      return seekListeners.size;
+    },
+    tickListenerCount() {
+      return tickListeners.size;
+    },
+    endListenerCount() {
+      return endListeners.size;
+    },
+    stateListenerCount() {
+      return stateListeners.size;
+    },
   };
 }
 
@@ -174,8 +217,12 @@ export function makeFakeSession(opts: MakeFakeSessionOpts = {}) {
   const session = {
     __fake: true,
     getTimeRange: vi.fn(async () => _timeRange),
-    setTimeRange(r: { earliest: number; latest: number } | null) { _timeRange = r; },
-  } as unknown as ReplaySession & { setTimeRange(r: { earliest: number; latest: number } | null): void };
+    setTimeRange(r: { earliest: number; latest: number } | null) {
+      _timeRange = r;
+    },
+  } as unknown as ReplaySession & {
+    setTimeRange(r: { earliest: number; latest: number } | null): void;
+  };
 
   return {
     session,
@@ -183,7 +230,9 @@ export function makeFakeSession(opts: MakeFakeSessionOpts = {}) {
     exitReplay,
     enterCalls,
     exitCalls,
-    get player() { return activePlayer; },
+    get player() {
+      return activePlayer;
+    },
     /** Park subsequent enterReplay calls until releaseEnter*. */
     holdEnter(): void {
       pendingEnterResolvers = [];
@@ -254,7 +303,9 @@ export function makeFakeStore(framesByChannel: Record<string, SerializedFrame[]>
     getFramesByChannel,
     flush,
     /** Hold subsequent getFramesByChannel calls until release(). */
-    hold(): void { isHeld = true; },
+    hold(): void {
+      isHeld = true;
+    },
     /** Resolve every currently-pending getFramesByChannel call. */
     async release(): Promise<void> {
       const resolvers = pendingResolvers;
@@ -264,7 +315,9 @@ export function makeFakeStore(framesByChannel: Record<string, SerializedFrame[]>
       // One microtask hop so awaiting code can advance.
       await Promise.resolve();
     },
-    pendingCount(): number { return pendingResolvers.length; },
+    pendingCount(): number {
+      return pendingResolvers.length;
+    },
   };
 }
 
@@ -272,7 +325,11 @@ export function makeFakeStore(framesByChannel: Record<string, SerializedFrame[]>
  * Build a SerializedFrame with a MetricChannel-encoded payload.
  * The decoded `value` becomes the chart y.
  */
-export function metricFrame(channelId: string, t: number, value: number): SerializedFrame {
+export function metricFrame(
+  channelId: string,
+  t: number,
+  value: number,
+): SerializedFrame {
   const ch = new MetricChannel(channelId);
   return { t, channelId, payload: ch.encode({ name: channelId, value }) };
 }
