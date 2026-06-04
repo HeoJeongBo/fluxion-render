@@ -1,5 +1,12 @@
 # Changelog
 
+# [0.10.0](https://github-personal/HeoJeongBo/fluxion-render/compare/fluxion-replay-v0.9.0...fluxion-replay-v0.10.0) (2026-06-04)
+
+
+### Features
+
+* **replay,examples:** add DVR controller/format/producer hooks, fix video seek, tailwind demo ([d23d31c](https://github-personal/HeoJeongBo/fluxion-render/commit/d23d31cef7237fb2f5eb9386d73677245a09394f))
+
 # [0.9.0](https://github-personal/HeoJeongBo/fluxion-render/compare/fluxion-replay-v0.8.0...fluxion-replay-v0.9.0) (2026-06-02)
 
 
