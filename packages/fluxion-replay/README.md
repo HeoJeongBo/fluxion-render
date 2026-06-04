@@ -345,17 +345,21 @@ All hooks live under `@heojeongbo/fluxion-replay/react`.
 | `useReplayScrubber(opts)` | `{ min, max, value, disabled }` — derives `<input type="range">` props snapped to 1 s, with a `recordingStartMs` anchor that pins the left edge and a `minSpanMs` floor that keeps the bar from collapsing at mount. |
 | `useReplayTimeline(player, timeRange)` | `{ fraction, buffered, seekTo }` — normalized 0–1 position for low-level scrubber UIs. Used internally by `<ReplayTimeline>`. |
 | `useReplayDvr(opts)` | `{ isDvr, player, frozenLatest, effectiveTimeRange, enter, exit }` — high-level DVR controller. Captures a "frozen latest" on entry so the scrubber stops drifting forward, optionally auto-plays on enter, and auto-exits to live when playback reaches the frozen edge. |
+| `useDvrController(opts)` | `{ dvr, replayPlayer, isLive, isDvr, isPlaying, rate, setRate, scrubber, effectiveTimeRange }` — **all-in-one DVR bundle**: composes `useReplayDvr` + `usePlaybackRate` + `useReplayPlayer` + `useScrubberControls` + `useReplayScrubber` into one call, collapsing the ~30-line hook chain. `scrubber` is a ready-to-spread props bundle for `<DvrScrubber {...ctl.scrubber} />`. Pass `recordingStartMs`/`autoPlay`/`initialRate` etc. straight through. Capture (recording/video/screen-share) stays separate — keep using `useRecordingSession`/`useVideoRecorder`/`useDisplayMedia` alongside. |
+| `usePlaybackRate(opts)` | `{ rate, setRate }` — playback-rate state that calls `player.play(rate)` immediately while playing so a speed change takes effect without an extra click. |
 | `useLiveTimeRange(session, opts?)` | `{ timeRange, segments, seed }` — polls `session.getTimeRange()` and exposes recording segments. `seed()` lets you avoid the first-poll empty state. |
 | `useChartReplay(opts)` | `{ isHydrating, hydratedCount }` — bridges a `ReplayPlayer` into a `fluxion-render` line layer. Backfills the trailing window on enter / seek and streams `onFrame` events into `handle.push`. Uses a sequential queue + microtask yield to defeat seek-burst and exit races. |
 | `useChartLiveBackfill(opts)` | `{ isBackfilling }` — when `active` flips true (mount, DVR→live), flushes the store and rewrites the chart with the most recent window so the live chart picks up where DVR left off. `isBackfilling` is `true` while the async IDB query is in-flight; `useChartReplayBridge` uses it to suppress live `push()` calls during that window, preventing the visual "jump" that would otherwise appear between the sync `reset()` and the `pushBatch()`. |
 | `useChartReplayBridge(opts)` | `{ isHydrating, hydratedCount }` — **convenience bundle**: combines `useFluxionStream` (live pump) + `useChartReplay` (DVR hydrate) + `useChartLiveBackfill` (DVR→live re-entry) + the stale-closure `isLiveRef` guard into one call. Reduces the 30-line MiniChart boilerplate to ~5 lines. During DVR→live backfill the live pump is automatically silenced so the chart transitions smoothly without a flicker. |
 | `useScrubberControls(opts)` | `{ scrubT, onScrubChange, commitScrub }` — encapsulates the drag-preview → release-commit state machine for `<input type="range">` scrubbers. `onScrubChange` previews the drag position and speculatively enters DVR; `commitScrub` (call on `mouseUp`/`touchEnd`/`keyUp`) finalises: live→DVR enter+play, DVR→live exit, or mid-DVR seek+play. Pair with `useReplayScrubber` for the `min`/`max`/`value` bounds. |
 | `useRecordingSession(opts)` | `{ error, isRecording }` — encapsulates the start/stop recording lifecycle, the StrictMode-safe ref guard, and optional per-channel tickers. Use when the page **is** the recording. |
-| `useVideoReplayer(opts)` | `{ ref, isReady }` — drives a `<video>` element from a video-channel `ReplayPlayer`. |
+| `useRecordingTimer(opts)` | `{ elapsedSec }` — elapsed-seconds counter that starts/stops with `isRecording`, for a "REC 02:14" display. |
+| `useVideoRecorder(opts)` | `void` — manages a `VideoRecorder` lifecycle: starts encoding `track` into `channelId` when `isRecording && session && track` are all present, stops on cleanup. Tune `width`/`height`/`bitrate`/`framerate`. |
+| `useVideoReplayer(player, canvasRef, store, channelId, opts?)` | `void` — decodes a video channel's frames onto a `<canvas>`. Subscribes to `player.onSeek` and re-decodes from the nearest keyframe (via `VideoReplayer.seekTo`) so a backward/paused scrub never shows garbled VP8 deltas. |
 | `useStorageInfo(session, opts?)` | `{ usedBytes, quotaBytes, percentUsed, idbFrameCount }` — periodic IDB + OPFS quota inspector. |
 | `useDisplayMedia()` | `{ stream, start, stop }` — thin wrapper around `navigator.mediaDevices.getDisplayMedia` used by the screen-capture demos. |
 | `<ReplayTimeline />` | Headless scrubber built on `<input type="range">`. Styleable; uses `useReplayTimeline` under the hood. |
-| `<DvrScrubber />` | Compact `<input type="range">` with left/centre/right timestamp labels and live-vs-DVR colour theming. Wire from `useReplayScrubber` + `useScrubberControls` — replaces the ~50-line inline scrubber block most DVR demos need. Accepts `liveAccentColor`, `dvrAccentColor`, `labelColor`, `formatTime`, and a `style` override for the container. |
+| `<DvrScrubber />` | Compact `<input type="range">` with left/centre/right timestamp labels and live-vs-DVR colour theming. Wire from `useReplayScrubber` + `useScrubberControls` (or spread `useDvrController().scrubber`) — replaces the ~50-line inline scrubber block most DVR demos need. Accepts `liveAccentColor`, `dvrAccentColor`, `labelColor`, `formatTime`, a `style` override, and an optional `segments` array that renders the recording's spans as accent-coloured bars behind the track (gaps show as blanks). |
 
 ### `<ReplayTimeline />`
 
@@ -495,6 +499,72 @@ useFluxionStream({
 ```
 
 Match the `timeOrigin` between `axisGridLayer`, the hooks, and `useMiniChart` so the Float32 wire-format quantisation stays consistent.
+
+---
+
+## Format & producer utilities
+
+Pure, dependency-free helpers exported from the package root (`@heojeongbo/fluxion-replay`, not `/react`):
+
+```ts
+import {
+  formatMs,
+  formatBytes,
+  createRandomLogProducer,
+  createNoisyMetricProducer,
+} from "@heojeongbo/fluxion-replay";
+
+formatMs(65_000);          // "01:05"  (mm:ss, clamps negatives to 0)
+formatBytes(5 * 1024 ** 2); // "5.0 MB" (KB / MB / GB)
+```
+
+`create*Producer` build `produce` callbacks for `useRecordingSession` channel tickers — they collapse the "synthesise a fake sample each tick" closures demos write by hand. `onEmit` folds a side effect (e.g. appending to a capped live-log buffer) into the producer so your `produce` stays a one-liner:
+
+```ts
+useRecordingSession({
+  session,
+  enabled,
+  channels: [
+    {
+      channelId: "cpu",
+      intervalMs: 200,
+      produce: createNoisyMetricProducer({ name: "cpu", base: 30, amplitude: 50 }),
+    },
+    {
+      channelId: "system",
+      intervalMs: 2000,
+      produce: createRandomLogProducer({
+        messages: SYSTEM_MSGS,
+        onEmit: (e) => setLiveLogs((prev) => [...prev.slice(-49), { ...e, channel: "system" }]),
+      }),
+    },
+  ],
+});
+```
+
+---
+
+## Combined DVR controller
+
+`useDvrController` composes the whole playback chain — `useReplayDvr` → `usePlaybackRate` → `useReplayPlayer` → `useScrubberControls` → `useReplayScrubber` — into one call, so the common DVR demo drops from ~30 lines of hook wiring to a single hook plus a spread:
+
+```tsx
+const ctl = useDvrController({
+  session, enterReplay, exitReplay, liveTimeRange,
+  autoPlay: false, recordingStartMs: timeOrigin,
+});
+
+<DvrScrubber {...ctl.scrubber} liveAccentColor="#f87171" dvrAccentColor="#4f8ef7" />
+<PlaybackControls
+  isPlaying={ctl.isPlaying}
+  rate={ctl.rate}
+  onRateChange={ctl.setRate}
+  onPlayPause={() => ctl.isPlaying ? ctl.dvr.player?.pause() : ctl.dvr.player?.play(ctl.rate)}
+  onExit={ctl.dvr.exit}
+/>
+```
+
+`ctl.dvr` is the raw `useReplayDvr` result — pass `ctl.dvr.player` to `useChartReplay`/`useVideoReplayer`. Recording/video/screen-share are intentionally **not** bundled; keep using `useRecordingSession`/`useVideoRecorder`/`useDisplayMedia` next to it.
 
 ---
 
