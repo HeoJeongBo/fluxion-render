@@ -54,6 +54,14 @@ export type {
   UseChartReplayResult,
 } from "./widgets/chart-replay/lib/use-chart-replay";
 
+export { useChartReplayFanOut } from "./widgets/chart-replay/lib/use-chart-replay-fan-out";
+export type {
+  ReplayFanOutLine,
+  ReplayFanOutSource,
+  UseChartReplayFanOutOptions,
+  UseChartReplayFanOutResult,
+} from "./widgets/chart-replay/lib/use-chart-replay-fan-out";
+
 export { useChartLiveBackfill } from "./widgets/chart-replay/lib/use-chart-live-backfill";
 export type { UseChartLiveBackfillOptions } from "./widgets/chart-replay/lib/use-chart-live-backfill";
 

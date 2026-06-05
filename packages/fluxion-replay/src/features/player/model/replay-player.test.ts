@@ -101,7 +101,9 @@ describe("ReplayPlayer", () => {
   it("emits onEnd when reaching latest", () => {
     const { player } = makePlayer(0, 100);
     let ended = false;
-    player.onEnd(() => { ended = true; });
+    player.onEnd(() => {
+      ended = true;
+    });
     player.play(100); // 100x speed so 1ms wall = 100ms virtual
     // RAF fires every 16ms; at 100x, 16ms wall = 1600ms virtual >> latest(100)
     vi.advanceTimersByTime(20);
@@ -235,7 +237,9 @@ describe("ReplayPlayer", () => {
   it("onEnd listener can be removed", () => {
     const { player } = makePlayer(0, 50);
     let ended = false;
-    const off = player.onEnd(() => { ended = true; });
+    const off = player.onEnd(() => {
+      ended = true;
+    });
     off();
     player.play(100);
     vi.advanceTimersByTime(20);
@@ -262,7 +266,7 @@ describe("ReplayPlayer", () => {
     expect(player.currentT).toBe(8000);
     player.seek(99999); // above latest — clamped
     expect(player.currentT).toBe(10_000);
-    player.seek(-999);  // below earliest — clamped
+    player.seek(-999); // below earliest — clamped
     expect(player.currentT).toBe(0);
     player.stop();
     player.dispose();
@@ -279,7 +283,11 @@ describe("ReplayPlayer", () => {
     });
 
     await store.open();
-    store.appendFrame({ t: 500, channelId: "unknown-channel", payload: new ArrayBuffer(8) });
+    store.appendFrame({
+      t: 500,
+      channelId: "unknown-channel",
+      payload: new ArrayBuffer(8),
+    });
     await store.flush();
 
     const frames: unknown[] = [];
@@ -304,7 +312,7 @@ describe("ReplayPlayer", () => {
     await store.open();
 
     const bigBatch = Array.from({ length: 100 }, (_, i) => ({
-      t: 100 + i * 5,    // 100, 105, … 595
+      t: 100 + i * 5, // 100, 105, … 595
       channelId: "cpu",
       payload: ch.encode({ name: "cpu", value: i }),
     }));
@@ -327,6 +335,42 @@ describe("ReplayPlayer", () => {
     for (let i = 1; i < frames.length; i++) {
       expect(frames[i]).toBeGreaterThanOrEqual(frames[i - 1]);
     }
+    player.stop();
+    player.dispose();
+  });
+
+  it("a later empty prefetch leaves the buffered frames intact (mergeSorted empty incoming)", async () => {
+    // First prefetch fills the buffer; a subsequent prefetch returns [] while the
+    // buffer is non-empty → mergeSorted's empty-incoming early return.
+    const { player, store, ch } = makePlayer(0, 10_000);
+    await store.open();
+
+    let call = 0;
+    vi.spyOn(store, "getFrames").mockImplementation(async () => {
+      call++;
+      if (call === 1) {
+        return [
+          { t: 200, channelId: "cpu", payload: ch.encode({ name: "cpu", value: 1 }) },
+          { t: 400, channelId: "cpu", payload: ch.encode({ name: "cpu", value: 2 }) },
+        ];
+      }
+      return []; // later prefetches: nothing new
+    });
+
+    const frames: number[] = [];
+    player.onFrame((f) => frames.push(f.t));
+    player.play(1.0);
+
+    vi.advanceTimersByTime(16);
+    for (let i = 0; i < 5; i++) await Promise.resolve();
+    // Advance to trigger more prefetch windows (which return []), then past the
+    // buffered frames so they emit despite the empty merges.
+    vi.advanceTimersByTime(500);
+    for (let i = 0; i < 5; i++) await Promise.resolve();
+
+    expect(call).toBeGreaterThan(1); // at least one empty prefetch happened
+    expect(frames).toContain(200);
+    expect(frames).toContain(400);
     player.stop();
     player.dispose();
   });
@@ -616,4 +660,198 @@ describe("ReplayPlayer", () => {
     });
   });
 
+  // ── prefetch generation / stale-seek guard ──────────────────────────────
+  // A prefetch issued before a seek must NOT merge its (now out-of-window)
+  // result after the seek — that would reintroduce frames the seek discarded
+  // and surface as out-of-order "tangled" chart data.
+  describe("prefetch generation / stale-seek guard", () => {
+    /** A getFrames mock whose resolution we control via the returned `resolve`. */
+    function deferredGetFrames(store: ReplayStore) {
+      let resolve!: (
+        frames: { t: number; channelId: string; payload: ArrayBuffer }[],
+      ) => void;
+      let reject!: (e: unknown) => void;
+      const spy = vi.spyOn(store, "getFrames").mockImplementation(
+        () =>
+          new Promise((res, rej) => {
+            resolve = res as typeof resolve;
+            reject = rej;
+          }),
+      );
+      return {
+        spy,
+        resolve: (f: typeof bufType) => resolve(f),
+        reject: (e: unknown) => reject(e),
+      };
+    }
+    // Type helper only; never used at runtime.
+    const bufType: { t: number; channelId: string; payload: ArrayBuffer }[] = [];
+
+    async function flush() {
+      for (let i = 0; i < 5; i++) await Promise.resolve();
+    }
+
+    it("REGRESSION: discards an in-flight prefetch that resolves after a seek", async () => {
+      const { player, store, ch } = makePlayer(0, 100_000);
+      await store.open();
+      const { resolve } = deferredGetFrames(store);
+
+      player.play(1.0);
+      vi.advanceTimersByTime(16); // fires a tick → starts the (suspended) prefetch
+      await flush();
+      // biome-ignore lint/suspicious/noExplicitAny: testing internals
+      expect((player as any)._isPrefetching).toBe(true);
+
+      player.seek(50_000); // invalidates the in-flight prefetch + rewinds cursor
+      // biome-ignore lint/suspicious/noExplicitAny: testing internals
+      expect((player as any)._prefetchedUpTo).toBe(Math.max(50_000 - 3_000, 0) - 1); // 46_999
+
+      // The stale fetch resolves with OLD-window frames (t=1000).
+      resolve([
+        { t: 1000, channelId: "cpu", payload: ch.encode({ name: "cpu", value: 1 }) },
+      ]);
+      await flush();
+
+      // biome-ignore lint/suspicious/noExplicitAny: testing internals
+      const buf = (player as any)._prefetchBuffer as { t: number }[];
+      expect(buf.some((f) => f.t === 1000)).toBe(false); // stale frame discarded
+      expect(buf.every((f) => f.t >= 47_000)).toBe(true);
+      // biome-ignore lint/suspicious/noExplicitAny: testing internals
+      expect((player as any)._prefetchedUpTo).toBe(46_999); // seek's value, not stale `to`
+
+      player.stop();
+      player.dispose();
+    });
+
+    it("CONTRAST: a non-stale prefetch (no seek) merges normally", async () => {
+      const { player, store, ch } = makePlayer(0, 100_000);
+      await store.open();
+      const { resolve } = deferredGetFrames(store);
+
+      player.play(1.0);
+      vi.advanceTimersByTime(16);
+      await flush();
+
+      resolve([
+        { t: 500, channelId: "cpu", payload: ch.encode({ name: "cpu", value: 2 }) },
+      ]);
+      await flush();
+
+      // biome-ignore lint/suspicious/noExplicitAny: testing internals
+      const buf = (player as any)._prefetchBuffer as { t: number }[];
+      expect(buf.some((f) => f.t === 500)).toBe(true); // merged (generation matched)
+
+      player.stop();
+      player.dispose();
+    });
+
+    it("a fresh prefetch after the seek still merges", async () => {
+      const { player, store, ch } = makePlayer(0, 100_000);
+      await store.open();
+
+      // Each prefetch gets its own deferred resolver, captured per call.
+      const resolvers: ((
+        f: { t: number; channelId: string; payload: ArrayBuffer }[],
+      ) => void)[] = [];
+      vi.spyOn(store, "getFrames").mockImplementation(
+        () => new Promise((res) => resolvers.push(res as (typeof resolvers)[number])),
+      );
+
+      player.play(1.0);
+      vi.advanceTimersByTime(16);
+      await flush();
+      player.seek(50_000); // bumps generation → first prefetch (resolvers[0]) is now stale
+
+      // Resolve the stale prefetch first so it releases the _isPrefetching mutex
+      // (its result is discarded by the generation guard).
+      resolvers[0]?.([
+        { t: 1000, channelId: "cpu", payload: ch.encode({ name: "cpu", value: 0 }) },
+      ]);
+      await flush();
+
+      // Next tick starts a fresh prefetch (captures the post-seek generation).
+      vi.advanceTimersByTime(16);
+      await flush();
+
+      resolvers[1]?.([
+        { t: 49_000, channelId: "cpu", payload: ch.encode({ name: "cpu", value: 3 }) },
+      ]);
+      await flush();
+
+      // biome-ignore lint/suspicious/noExplicitAny: testing internals
+      const buf = (player as any)._prefetchBuffer as { t: number }[];
+      expect(buf.some((f) => f.t === 1000)).toBe(false); // stale discarded
+      expect(buf.some((f) => f.t === 49_000)).toBe(true); // fresh merged
+
+      player.stop();
+      player.dispose();
+    });
+
+    it("a stale rejection does not roll back the post-seek prefetchedUpTo", async () => {
+      const { player, store } = makePlayer(0, 100_000);
+      await store.open();
+      const { reject } = deferredGetFrames(store);
+
+      player.play(1.0);
+      vi.advanceTimersByTime(16);
+      await flush();
+
+      player.seek(50_000);
+      reject(new Error("idb")); // stale fetch fails after the seek
+      await flush();
+
+      // biome-ignore lint/suspicious/noExplicitAny: testing internals
+      expect((player as any)._prefetchedUpTo).toBe(46_999); // unchanged (not rolled back)
+      expect(player.state).toBe("playing");
+
+      player.stop();
+      player.dispose();
+    });
+
+    it("stop() invalidates an in-flight prefetch", async () => {
+      const { player, store, ch } = makePlayer(0, 100_000);
+      await store.open();
+      const { resolve } = deferredGetFrames(store);
+
+      player.play(1.0);
+      vi.advanceTimersByTime(16);
+      await flush();
+      player.stop(); // bumps generation + clears buffer
+
+      resolve([
+        { t: 500, channelId: "cpu", payload: ch.encode({ name: "cpu", value: 4 }) },
+      ]);
+      await flush();
+
+      // biome-ignore lint/suspicious/noExplicitAny: testing internals
+      expect((player as any)._prefetchBuffer).toHaveLength(0); // stale frame not merged
+
+      player.dispose();
+    });
+
+    it("play() invalidates a prefetch left in flight from a prior session", async () => {
+      const { player, store, ch } = makePlayer(0, 100_000);
+      await store.open();
+      const { resolve } = deferredGetFrames(store);
+
+      player.play(1.0);
+      vi.advanceTimersByTime(16);
+      await flush();
+      player.stop();
+      player.play(1.0); // bumps generation again
+
+      resolve([
+        { t: 500, channelId: "cpu", payload: ch.encode({ name: "cpu", value: 5 }) },
+      ]);
+      await flush();
+
+      // biome-ignore lint/suspicious/noExplicitAny: testing internals
+      expect(
+        (player as any)._prefetchBuffer.some((f: { t: number }) => f.t === 500),
+      ).toBe(false);
+
+      player.stop();
+      player.dispose();
+    });
+  });
 });

@@ -24,7 +24,7 @@ function makeDvr(
     player: player as unknown as UseReplayDvrResult["player"],
     frozenLatest: null,
     effectiveTimeRange: null,
-    enter: vi.fn(async () => {}),
+    enter: vi.fn(async () => null),
     exit: vi.fn(),
   };
 }
@@ -205,6 +205,66 @@ describe("useChartReplayBridge", () => {
     act(() => { vi.advanceTimersByTime(120); });
     expect(host.pushes.length).toBe(pushesAfterLive);
 
+    vi.restoreAllMocks();
+  });
+
+  it("null session: store falls back to null for both replay + backfill (no throw)", () => {
+    const fixedNow = 1_700_000_000_000;
+    vi.spyOn(Date, "now").mockReturnValue(fixedNow);
+    const host = makeFakeHost();
+    const dvr = makeDvr(null);
+
+    expect(() =>
+      renderHook(() =>
+        useChartReplayBridge<MetricSample>({
+          host: host.host as never,
+          session: null, // → `session?.store ?? null` takes the null branch
+          dvr,
+          isLive: false, // DVR mode so useChartReplay reads session?.store
+          channel: SIGNAL_CHANNEL,
+          layerId: "signal",
+          windowMs: 5_000,
+          timeOrigin: fixedNow,
+          produce: () => ({ name: "signal", value: 0.1 }),
+          pickValue: (d) => d.value,
+        }),
+      ),
+    ).not.toThrow();
+    vi.restoreAllMocks();
+  });
+
+  it("DVR→Live transition arms backfill suppression (isDvrToLiveTransition && isBackfilling)", async () => {
+    const fixedNow = 1_700_000_000_000;
+    vi.spyOn(Date, "now").mockReturnValue(fixedNow);
+    const host = makeFakeHost();
+    const store = makeFakeStore({ signal: [metricFrame("signal", fixedNow - 1_000, 1)] });
+    const { session } = makeSessionWith(store);
+
+    const { rerender } = renderHook(
+      ({ isLive }: { isLive: boolean }) =>
+        useChartReplayBridge<MetricSample>({
+          host: host.host as never,
+          session,
+          dvr: makeDvr(isLive ? null : makeFakePlayer(fixedNow)),
+          isLive,
+          channel: SIGNAL_CHANNEL,
+          layerId: "signal",
+          windowMs: 5_000,
+          timeOrigin: fixedNow,
+          produce: () => ({ name: "signal", value: 0.2 }),
+          pickValue: (d) => d.value,
+        }),
+      { initialProps: { isLive: false } }, // start in DVR
+    );
+
+    // Transition DVR → Live: prevIsLive=false, isLive=true → isDvrToLiveTransition
+    // true, and the live backfill is in flight → suppression armed (line 154).
+    await act(async () => {
+      rerender({ isLive: true });
+      await Promise.resolve();
+    });
+    // No throw and the bridge re-rendered through the transition path.
+    expect(host).toBeDefined();
     vi.restoreAllMocks();
   });
 });

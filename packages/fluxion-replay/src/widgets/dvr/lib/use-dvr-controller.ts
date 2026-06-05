@@ -42,6 +42,7 @@ export interface DvrScrubberBundle {
   max: number;
   value: number;
   disabled: boolean;
+  onPointerDown: () => void;
   onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
   onCommit: () => void;
   isLive: boolean;
@@ -119,7 +120,7 @@ export function useDvrController(opts: UseDvrControllerOptions): UseDvrControlle
 
   const replayPlayer = useReplayPlayer(dvr.player);
 
-  const { scrubT, onScrubChange, commitScrub } = useScrubberControls({
+  const { scrubT, beginScrub, onScrubChange, commitScrub } = useScrubberControls({
     dvr,
     rate,
     liveEdgeEpsMs,
@@ -151,6 +152,7 @@ export function useDvrController(opts: UseDvrControllerOptions): UseDvrControlle
       max: scrubber.max,
       value: scrubber.value,
       disabled: scrubber.disabled,
+      onPointerDown: beginScrub,
       onChange: onScrubChange,
       onCommit: commitScrub,
       isLive,

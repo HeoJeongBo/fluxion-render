@@ -14,7 +14,7 @@ export interface ReplaySessionOptions {
   storeOptions?: ReplayStoreOptions;
   /**
    * Storage usage percentage (0–100) at which old IDB frames are automatically
-   * evicted after each flush. Set to 100 or above to disable. Default: 60.
+   * evicted after each flush. Set to 100 or above to disable. Default: 70.
    */
   evictThresholdPct?: number;
   /**

@@ -394,4 +394,185 @@ describe("LineChartLayer (streaming)", () => {
       expect(ctx.calls.filter((c) => c.name === "lineTo").length).toBe(1);
     });
   });
+
+  // Regression for the DVR→Live "all charts blank" bug. `viewport.latestT` is
+  // GLOBAL — shared by every layer of a host. The live backfill clears a
+  // layer's ring with `reset()` (CLEAR_DATA with NO latestT) precisely so it
+  // does NOT rewind the shared latestT and yank every sibling layer's time
+  // window. These tests pin that contract: clearing layer A must not blank
+  // sibling layer B; rewinding latestT (the old buggy path) does.
+  describe("shared-host multi-layer: clearing one layer must not blank siblings", () => {
+    const WINDOW_MS = 30_000;
+
+    function makeAxisAndViewport() {
+      const axis = new AxisGridLayer("axis");
+      axis.setConfig({
+        xMode: "time",
+        timeWindowMs: WINDOW_MS,
+        yMode: "auto",
+        applyToViewport: true,
+      });
+      const v = new Viewport();
+      v.setSize(1000, 100, 1);
+      return { axis, v };
+    }
+
+    // Fill a layer with `count` samples ending exactly at `endT` (50 ms apart),
+    // advancing the shared latestT to `endT` via setData (monotonic-up).
+    function fill(layer: LineChartLayer, endT: number, count: number, v: Viewport) {
+      const buf = new Float32Array(count * 2);
+      for (let i = 0; i < count; i++) {
+        buf[i * 2] = endT - (count - 1 - i) * 50;
+        buf[i * 2 + 1] = i / 10;
+      }
+      layer.setData(buf.buffer, buf.length, v);
+    }
+
+    // A line is actually visible only if a path was built — `draw` always calls
+    // stroke(), even with no in-window samples, so count moveTo instead.
+    function drawsLine(layer: LineChartLayer, v: Viewport): boolean {
+      const ctx = createFakeCtx();
+      layer.draw(ctx as unknown as OffscreenCanvasRenderingContext2D, v);
+      return ctx.calls.some((c) => c.name === "moveTo");
+    }
+
+    it("reset() without latestT on layer A leaves sibling B drawing", () => {
+      const NOW = 200_000;
+      const { axis, v } = makeAxisAndViewport();
+      const a = new LineChartLayer("a");
+      const b = new LineChartLayer("b");
+      a.setConfig({ capacity: 1024 });
+      b.setConfig({ capacity: 1024 });
+
+      // Both layers hold a recent window; latestT advances to NOW.
+      fill(a, NOW, 100, v);
+      fill(b, NOW, 100, v);
+      v.beginScan();
+      axis.scan?.(v);
+      expect(v.bounds.xMin).toBe(NOW - WINDOW_MS);
+      expect(v.bounds.xMax).toBe(NOW);
+      expect(drawsLine(a, v)).toBe(true);
+      expect(drawsLine(b, v)).toBe(true);
+
+      // Live backfill for A: ring-only clear (NO latestT rewind), then refill.
+      a.clearData(); // CLEAR_DATA with latestT undefined → latestT untouched
+      // B is untouched. Its samples must still be in-window — the window did
+      // not move because clearData() left latestT alone.
+      fill(a, NOW, 100, v); // A's fresh window lands, latestT stays NOW
+
+      v.beginScan();
+      axis.scan?.(v);
+      expect(v.bounds.xMin).toBe(NOW - WINDOW_MS); // window unchanged
+      expect(v.bounds.xMax).toBe(NOW);
+      // The whole point: B never blanked.
+      expect(drawsLine(b, v)).toBe(true);
+      expect(drawsLine(a, v)).toBe(true);
+    });
+
+    it("CONTRAST: rewinding latestT forward (the old buggy path) DOES blank sibling B", () => {
+      // Demonstrates the failure mode the no-latestT reset avoids: if A's clear
+      // had forced latestT far forward while B still held only older samples,
+      // B's data falls outside [latestT - windowMs, latestT] and B blanks.
+      const PAST = 100_000;
+      const { axis, v } = makeAxisAndViewport();
+      const a = new LineChartLayer("a");
+      const b = new LineChartLayer("b");
+      a.setConfig({ capacity: 1024 });
+      b.setConfig({ capacity: 1024 });
+
+      fill(a, PAST, 100, v);
+      fill(b, PAST, 100, v);
+      v.beginScan();
+      axis.scan?.(v);
+      expect(drawsLine(b, v)).toBe(true);
+
+      // Simulate the buggy forward rewind: clear A AND jam latestT to a much
+      // later "now" (as `reset(now - timeOrigin)` did). B's window-relative
+      // data is now far in the past → outside the window → B draws nothing.
+      const FUTURE = PAST + WINDOW_MS * 4;
+      a.clearData();
+      v.latestT = FUTURE; // the destructive global rewind
+
+      v.beginScan();
+      axis.scan?.(v);
+      expect(v.bounds.xMin).toBe(FUTURE - WINDOW_MS);
+      expect(drawsLine(b, v)).toBe(false); // ← the all-charts-blank symptom
+    });
+  });
+
+  describe("draw decimation (decimate: true)", () => {
+    // Viewport is 1000px wide over [0, 5000]. 5000 samples → 5 per pixel.
+    function fill5000(layer: LineChartLayer, vp: Viewport, spikeAt?: number) {
+      layer.setConfig({ capacity: 6000 });
+      const buf = new Float32Array(5000 * 2);
+      for (let i = 0; i < 5000; i++) {
+        buf[i * 2] = i; // t = 0..4999 (1px ≈ 5 samples)
+        // Mostly ~0, with one big spike if requested.
+        buf[i * 2 + 1] = i === spikeAt ? 0.9 : Math.sin(i * 0.01) * 0.05;
+      }
+      layer.setData(buf.buffer, buf.length, vp);
+    }
+
+    it("emits far fewer path points than samples (≈ O(width), not O(samples))", () => {
+      const layer = new LineChartLayer("l");
+      const vp = makeViewport();
+      layer.setConfig({ decimate: true });
+      fill5000(layer, vp);
+
+      const ctx = createFakeCtx();
+      layer.draw(ctx as unknown as OffscreenCanvasRenderingContext2D, vp);
+      const points =
+        ctx.calls.filter((c) => c.name === "moveTo").length +
+        ctx.calls.filter((c) => c.name === "lineTo").length;
+      // 5000 samples → bounded to ~a few per 1000px column, well under 5000.
+      expect(points).toBeGreaterThan(0);
+      expect(points).toBeLessThan(5000);
+      expect(points).toBeLessThanOrEqual(1000 * 4); // ≤ ~4 points/pixel
+    });
+
+    it("preserves a spike's peak in the decimated path (visually lossless)", () => {
+      const layer = new LineChartLayer("l");
+      const vp = makeViewport();
+      layer.setConfig({ decimate: true });
+      fill5000(layer, vp, 2500); // spike of y=0.9 at t=2500
+
+      const ctx = createFakeCtx();
+      layer.draw(ctx as unknown as OffscreenCanvasRenderingContext2D, vp);
+      // The spike's y (0.9) maps to a px via yToPx; it must appear among the
+      // drawn points (the min/max bucket keeps the column's extreme).
+      const spikePy = vp.yToPx(0.9);
+      const ys = ctx.calls
+        .filter((c) => c.name === "moveTo" || c.name === "lineTo")
+        .map((c) => (c.args as number[])[1]);
+      expect(ys.some((y) => Math.abs(y - spikePy) < 0.5)).toBe(true);
+    });
+
+    it("decimate does NOT change the ring — scan still sees full-resolution y extremes", () => {
+      const layer = new LineChartLayer("l");
+      const vp = makeViewport();
+      layer.setConfig({ decimate: true });
+      fill5000(layer, vp, 2500); // spike 0.9
+      vp.setBounds({ xMin: 0, xMax: 5000, yMin: -1, yMax: 1 });
+      vp.beginScan();
+      layer.scan?.(vp);
+      // The full-resolution spike is still observed for y-auto bounds.
+      expect(vp.observedYMax).toBeCloseTo(0.9, 5);
+    });
+
+    it("decimate: false (default) draws every sample", () => {
+      const layer = new LineChartLayer("l");
+      const vp = makeViewport();
+      layer.setConfig({ capacity: 6000 }); // decimate stays false
+      const buf = new Float32Array(3000 * 2);
+      for (let i = 0; i < 3000; i++) {
+        buf[i * 2] = i;
+        buf[i * 2 + 1] = 0;
+      }
+      layer.setData(buf.buffer, buf.length, vp);
+      const ctx = createFakeCtx();
+      layer.draw(ctx as unknown as OffscreenCanvasRenderingContext2D, vp);
+      const lineTos = ctx.calls.filter((c) => c.name === "lineTo").length;
+      expect(lineTos).toBe(2999); // 1 moveTo + 2999 lineTo = every sample
+    });
+  });
 });

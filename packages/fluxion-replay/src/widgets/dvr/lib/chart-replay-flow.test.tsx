@@ -563,11 +563,11 @@ describe("chart-replay full hook chain (Phase 11 sticky-cursor + frozen-edge e2e
     );
 
     // Initial active=true → one backfill on mount.
-    // Phase 16: each backfill emits TWO resets (sync immediate + async
-    // post-query) to defeat the DVR-exit race.
+    // Each backfill emits ONE reset (the atomic post-query reset+pushBatch);
+    // there is no premature clear, so the chart never renders empty.
     await act(async () => { await Promise.resolve(); await Promise.resolve(); });
     expect(store.flush).toHaveBeenCalledTimes(1);
-    expect(host.resets.length).toBe(2);
+    expect(host.resets.length).toBe(1);
 
     // DVR enter → active=false. No additional backfill.
     await act(async () => {
@@ -576,14 +576,14 @@ describe("chart-replay full hook chain (Phase 11 sticky-cursor + frozen-edge e2e
     });
     expect(store.flush).toHaveBeenCalledTimes(1);
 
-    // DVR exit → active=true again. One more backfill round = 2 more resets.
+    // DVR exit → active=true again. One more backfill round = 1 more reset.
     await act(async () => {
       rerender({ active: true });
       await Promise.resolve();
       await Promise.resolve();
     });
     expect(store.flush).toHaveBeenCalledTimes(2);
-    expect(host.resets.length).toBe(4);
+    expect(host.resets.length).toBe(2);
     expect(host.batches.length).toBe(2);
     expect(host.batches.at(-1)?.samples.length).toBe(2);
 

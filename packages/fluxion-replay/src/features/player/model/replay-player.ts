@@ -1,6 +1,6 @@
+import { VirtualClock } from "../../../shared/lib/virtual-clock";
 import type { BaseChannel } from "../../../shared/model/base-channel";
 import type { SerializedFrame } from "../../../shared/model/frame";
-import { VirtualClock } from "../../../shared/lib/virtual-clock";
 import type { ReplayStore } from "../../store/model/replay-store";
 
 export type ReplayPlayerState = "idle" | "playing" | "paused" | "stopped";
@@ -38,12 +38,18 @@ function upperBound(arr: SerializedFrame[], value: number): number {
   return lo;
 }
 
-/** Merges sorted `incoming` into sorted `target` in-place — O(n+m). */
+/**
+ * Merges sorted `incoming` into sorted `target` in-place — O(n+m).
+ * Callers only invoke this with a non-empty `incoming` (see `_prefetch`).
+ */
 function mergeSorted(target: SerializedFrame[], incoming: SerializedFrame[]): void {
-  if (incoming.length === 0) return;
-  if (target.length === 0) { target.push(...incoming); return; }
+  if (target.length === 0) {
+    target.push(...incoming);
+    return;
+  }
   const result: SerializedFrame[] = [];
-  let i = 0, j = 0;
+  let i = 0,
+    j = 0;
   while (i < target.length && j < incoming.length) {
     if (target[i].t <= incoming[j].t) result.push(target[i++]);
     else result.push(incoming[j++]);
@@ -69,6 +75,11 @@ export class ReplayPlayer {
   private _prefetchBuffer: SerializedFrame[] = [];
   private _prefetchedUpTo: number;
   private _isPrefetching = false;
+  // Bumped whenever the prefetch buffer is reset (seek/play/stop). An in-flight
+  // _prefetch captures this at start and discards its result if it changed —
+  // preventing a fetch issued before a seek from reintroducing frames the seek
+  // just discarded (which would surface as out-of-window "tangled" chart data).
+  private _prefetchGeneration = 0;
   private _offTick: (() => void) | null = null;
   private _ended = false;
 
@@ -105,11 +116,16 @@ export class ReplayPlayer {
   }
 
   seek(t: number): void {
-    const clamped = Math.max(this._timeRange.earliest, Math.min(this._timeRange.latest, t));
+    const clamped = Math.max(
+      this._timeRange.earliest,
+      Math.min(this._timeRange.latest, t),
+    );
     this._clock.seek(clamped);
     // Use at least 3s lookback so a keyframe (default interval = 2s) is always included
     // before the seek point — prevents VP8 decoder corruption from missing keyframes.
     const lookback = Math.max(this._prefetchMs, 3_000);
+    // Invalidate any in-flight prefetch so it can't merge stale pre-seek frames.
+    this._prefetchGeneration++;
     this._prefetchBuffer = this._prefetchBuffer.filter((f) => f.t >= clamped - lookback);
     this._prefetchedUpTo = Math.max(clamped - lookback, this._timeRange.earliest) - 1;
     this._ended = false;
@@ -127,6 +143,7 @@ export class ReplayPlayer {
         this._timeRange.earliest,
         Math.min(this._timeRange.latest, this._clock.currentT),
       );
+      this._prefetchGeneration++;
       this._prefetchedUpTo = Math.max(startT - 3_000, this._timeRange.earliest) - 1;
       this._prefetchBuffer = [];
       this._ended = false;
@@ -154,6 +171,7 @@ export class ReplayPlayer {
     this._clock.stop();
     this._offTick?.();
     this._offTick = null;
+    this._prefetchGeneration++;
     this._prefetchBuffer = [];
     this._prefetchedUpTo = this._timeRange.earliest;
     this._ended = false;
@@ -280,18 +298,28 @@ export class ReplayPlayer {
     if (from >= to) return;
     this._isPrefetching = true;
     this._prefetchedUpTo = to;
+    // Snapshot the generation; a seek/play/stop during the await bumps it and
+    // means our result is stale (covers a window the player no longer wants).
+    const generation = this._prefetchGeneration;
 
     try {
       // lowerOpen=true: the lower bound is the previously fetched upper edge,
       // so using an exclusive lower bound prevents the boundary frame from
       // being re-fetched and emitted twice when prefetch windows adjoin.
       const frames = await this._store.getFrames(from, to, true);
+      // Discard if the buffer was reset while we were fetching — merging here
+      // would reintroduce frames the seek/play/stop just dropped. Leave
+      // `_prefetchedUpTo` to the newer generation (seek/play/stop already set it).
+      if (this._prefetchGeneration !== generation) return;
       if (frames.length > 0) {
         mergeSorted(this._prefetchBuffer, frames);
       }
     } catch {
-      // Roll back so the range is retried next tick
-      this._prefetchedUpTo = from;
+      // Roll back so the range is retried next tick — but only if still current;
+      // a stale rejection must not clobber the post-seek `_prefetchedUpTo`.
+      if (this._prefetchGeneration === generation) {
+        this._prefetchedUpTo = from;
+      }
     } finally {
       this._isPrefetching = false;
     }

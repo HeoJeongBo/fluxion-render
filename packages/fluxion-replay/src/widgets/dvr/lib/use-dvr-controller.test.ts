@@ -73,10 +73,18 @@ describe("useDvrController", () => {
   it("enters DVR when the user scrubs back from the live edge", async () => {
     const { result } = setup();
     await act(async () => {
-      // Scrub well back from the live edge → speculative DVR entry.
+      // Drag back from the live edge → enters DVR mid-drag (paused preview).
       result.current.scrubber.onChange(fakeChange(LIVE.earliest + 10_000));
+      for (let i = 0; i < 10; i++) await Promise.resolve();
     });
-    // After a back-scrub the controller should report DVR / not-live.
+    // Already in DVR after the drag — before release.
+    expect(result.current.isDvr).toBe(true);
+
+    await act(async () => {
+      // Release → resumes playback from the drop point.
+      result.current.scrubber.onCommit();
+      for (let i = 0; i < 10; i++) await Promise.resolve();
+    });
     expect(result.current.isDvr).toBe(true);
     expect(result.current.isLive).toBe(false);
     expect(result.current.scrubber.isLive).toBe(false);

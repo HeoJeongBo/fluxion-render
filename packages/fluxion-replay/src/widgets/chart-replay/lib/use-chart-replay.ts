@@ -4,6 +4,9 @@ import type { ReplayPlayer, ReplayPlayerFrame } from "../../../features/player/m
 import type { DecodedFrame, ReplayStore } from "../../../features/store/model/replay-store";
 import type { BaseChannel } from "../../../shared/model/base-channel";
 
+/** Default ms fetched + cached on each side of the visible window. */
+const DEFAULT_PREFETCH_MARGIN_MS = 3000;
+
 export interface UseChartReplayOptions<T> {
   /** Host returned by `<FluxionCanvas onReady={setHost}>`. `null` while mounting. */
   host: FluxionHost | null;
@@ -42,6 +45,13 @@ export interface UseChartReplayOptions<T> {
    * i.e. tests with small values or session-relative timelines).
    */
   timeOrigin?: number;
+  /**
+   * Extra ms fetched + cached on BOTH sides of the visible window so a
+   * subsequent seek within ±prefetchMarginMs is an instant cache hit (no IDB
+   * round-trip / decode). Only the visible window `[t - windowMs, t]` is ever
+   * rendered; the margin lives in the cache only. Default 3000.
+   */
+  prefetchMarginMs?: number;
 }
 
 export interface UseChartReplayResult {
@@ -72,6 +82,7 @@ export function useChartReplay<T>(
   const { host, player, store, channel, windowMs, pickValue } = opts;
   const layerId = opts.layerId ?? channel.channelId;
   const timeOrigin = opts.timeOrigin ?? 0;
+  const marginMs = opts.prefetchMarginMs ?? DEFAULT_PREFETCH_MARGIN_MS;
 
   const [isHydrating, setIsHydrating] = useState(false);
   const [hydratedCount, setHydratedCount] = useState(0);
@@ -151,21 +162,25 @@ export function useChartReplay<T>(
           pending.length = 0;
           setIsHydrating(true);
 
-          // Fix 1: if the entire [t-windowMs, t] window sits within the
-          // last cached query range, skip the IDB round-trip and slice
-          // locally. This makes rapid scrubs within the same windowMs
-          // nearly free (no IDB, no decode).
-          const from = t - windowMs;
+          // Visible window actually drawn — the seek point is its right edge.
+          const visibleFrom = t - windowMs;
+          // Fetch + cache a wider span (±marginMs) so a re-seek within the
+          // margin is a pure cache hit (no IDB, no decode) — instant scrub.
+          // Only the visible window is ever pushed (filtered below).
+          const fetchFrom = visibleFrom - marginMs;
+          const fetchTo = t + marginMs;
           const cache = cacheRef.current;
           let frames: DecodedFrame<T>[];
-          if (cache && cache.from <= from && cache.to >= t) {
-            frames = cache.frames.filter((f) => f.t >= from && f.t <= t);
+          if (cache && cache.from <= visibleFrom && cache.to >= t) {
+            // Cache hit: the cached span covers the visible window. Keep the
+            // whole cached span; the visible-window filter below narrows it.
+            frames = cache.frames;
           } else {
             // Store keeps absolute t; query in that space. Pass the channel
             // (not the channelId) so the store decodes payloads up-front and
             // we don't need to `as T` the result. Phase 20-B-3.
-            frames = await store.getFramesByChannel(channel, from, t);
-            cacheRef.current = { from, to: t, frames };
+            frames = await store.getFramesByChannel(channel, fetchFrom, fetchTo);
+            cacheRef.current = { from: fetchFrom, to: fetchTo, frames };
           }
           // Yield once so a React cleanup that sets `cancelled = true` has a
           // chance to run before we touch the chart. Without this yield, a
@@ -176,15 +191,25 @@ export function useChartReplay<T>(
           if (cancelled) return;
 
           // Shift into the chart's host-relative timeline so the Float32 wire
-          // format doesn't quantise away the resolution.
-          const batch: LineSample[] = frames.map((f) => ({
-            t: f.t - timeOrigin,
-            y: pickRef.current(f.data),
-          }));
+          // format doesn't quantise away the resolution. Render ONLY the
+          // visible window [visibleFrom, t] — the ±margin frames live in the
+          // cache (for instant re-seeks) but are never pushed to the chart.
+          const batch: LineSample[] = [];
+          for (const f of frames) {
+            if (f.t < visibleFrom || f.t > t) continue;
+            batch.push({ t: f.t - timeOrigin, y: pickRef.current(f.data) });
+          }
           // 1) Drop stale data + force the worker-side axis to rewind to the
           //    seek point in host-relative space.
           // 2) Re-push backfill — settles the window at
           //    [t - windowMs - timeOrigin, t - timeOrigin].
+          // Re-check cancellation in the SAME synchronous tick as the chart
+          // write. A DVR→Live transition tears this effect down (cancelled =
+          // true) and useChartLiveBackfill takes over; a hydrate whose final
+          // await resolved in the cleanup's microtask batch could otherwise
+          // emit a stale reset(dvrT) here, forcing the backfill to fight it.
+          // This guard is what lets useChartLiveBackfill drop its sync reset.
+          if (cancelled) return;
           handle.reset(t - timeOrigin);
           if (batch.length > 0) handle.pushBatch(batch);
           setHydratedCount(batch.length);
@@ -258,7 +283,7 @@ export function useChartReplay<T>(
       offFrame();
       offTick();
     };
-  }, [handle, player, store, channel, windowMs, timeOrigin]);
+  }, [handle, player, store, channel, windowMs, timeOrigin, marginMs]);
 
   return { isHydrating, hydratedCount };
 }

@@ -239,29 +239,74 @@ class FakeIDBDatabase {
     return new FakeIDBTransaction(this._stores);
   }
 
-  close(): void {}
+  // Count close() calls so tests can assert a connection was (not) leaked.
+  closeCount = 0;
+  close(): void {
+    this.closeCount++;
+  }
 }
+
+// Test-only toggles for the IDB open path — set via globalThis.__fakeIDBControls.
+let __forceBlocked = false;
+let __deferOpen = false;
+let __pendingOpens: FakeIDBOpenRequest[] = [];
 
 class FakeIDBOpenRequest {
   result: FakeIDBDatabase | null = null;
   onsuccess: ((e: Event) => void) | null = null;
   onerror: ((e: Event) => void) | null = null;
+  onblocked: ((e: Event) => void) | null = null;
   onupgradeneeded: ((e: IDBVersionChangeEvent) => void) | null = null;
 
   constructor() {
-    queueMicrotask(() => {
-      const db = new FakeIDBDatabase();
-      this.result = db;
-      const upgradeEvent = {
-        target: { result: db },
-        oldVersion: 0,
-        newVersion: 1,
-      } as unknown as IDBVersionChangeEvent;
-      this.onupgradeneeded?.(upgradeEvent);
-      this.onsuccess?.({ target: this } as unknown as Event);
-    });
+    if (__forceBlocked) {
+      queueMicrotask(() => this.onblocked?.({ target: this } as unknown as Event));
+      return;
+    }
+    if (__deferOpen) {
+      // Park until the test calls resolvePendingOpens() — models "dispose ran
+      // before open resolved".
+      __pendingOpens.push(this);
+      return;
+    }
+    queueMicrotask(() => this._fire());
+  }
+
+  _fire(): void {
+    const db = new FakeIDBDatabase();
+    this.result = db;
+    const upgradeEvent = {
+      target: { result: db },
+      oldVersion: 0,
+      newVersion: 1,
+    } as unknown as IDBVersionChangeEvent;
+    this.onupgradeneeded?.(upgradeEvent);
+    this.onsuccess?.({ target: this } as unknown as Event);
   }
 }
+
+// Exposed on globalThis (setup.ts is a side-effect-only setupFiles entry with no
+// exports). Tests do `(globalThis as any).__fakeIDBControls`.
+(globalThis as unknown as { __fakeIDBControls: unknown }).__fakeIDBControls = {
+  setForceBlocked: (v: boolean) => {
+    __forceBlocked = v;
+  },
+  setDeferOpen: (v: boolean) => {
+    __deferOpen = v;
+  },
+  /** Resolve all parked deferred opens, returning their produced databases. */
+  resolvePendingOpens: (): FakeIDBDatabase[] => {
+    const pending = __pendingOpens;
+    __pendingOpens = [];
+    for (const req of pending) req._fire();
+    return pending.map((r) => r.result!).filter(Boolean);
+  },
+  reset: () => {
+    __forceBlocked = false;
+    __deferOpen = false;
+    __pendingOpens = [];
+  },
+};
 
 const fakeIndexedDB = {
   open: (_name: string, _version?: number) => new FakeIDBOpenRequest(),

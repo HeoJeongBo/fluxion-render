@@ -94,6 +94,37 @@ describe("ReplaySession", () => {
     session.dispose();
   });
 
+  it("enterReplay() clamps a caller-supplied timeRange into the IDB range", async () => {
+    const session = new ReplaySession({ channels: [new MetricChannel("cpu")] });
+    await session.open();
+    await session.startRecording();
+    // Record so IDB has a real [1000, 3000] range.
+    session.record("cpu", { name: "cpu", value: 1 }, 1000);
+    session.record("cpu", { name: "cpu", value: 2 }, 3000);
+    await session.store.flush();
+
+    // Caller asks for [0, 5000] — wider than IDB; should clamp to [1000, 3000].
+    const player = await session.enterReplay(2000, {
+      timeRange: { earliest: 0, latest: 5000 },
+    });
+    expect(player.timeRange.earliest).toBe(1000);
+    expect(player.timeRange.latest).toBe(3000);
+    session.dispose();
+  });
+
+  it("enterReplay() uses the caller timeRange directly when IDB is empty", async () => {
+    const session = new ReplaySession({ channels: [new MetricChannel("cpu")] });
+    await session.open();
+    // No frames → getTimeRange() is null → the `idbRange ? … : opts.timeRange`
+    // false branch uses the caller range as-is.
+    const player = await session.enterReplay(1500, {
+      timeRange: { earliest: 1000, latest: 2000 },
+    });
+    expect(player.timeRange.earliest).toBe(1000);
+    expect(player.timeRange.latest).toBe(2000);
+    session.dispose();
+  });
+
   it("dispose() stops recording and disposes player", async () => {
     const session = new ReplaySession({ channels: [] });
     await session.open();

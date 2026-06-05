@@ -27,6 +27,9 @@ export interface UseChartReplayBridgeOptions<T> {
   layerId?: string;
   /** Visible window in ms — must match `axisGridLayer({ timeWindowMs })`. */
   windowMs: number;
+  /** Forwarded to `useChartReplay`: ±ms fetched + cached around the window so a
+   *  re-seek within the margin is an instant cache hit. Default 3000. */
+  prefetchMarginMs?: number;
   /** Sample rate (Hz) for the live pump. Default `20`. */
   liveHz?: number;
   /** Live data producer. Called every tick of the live pump (regardless of
@@ -73,6 +76,7 @@ export function useChartReplayBridge<T>(
     channel,
     layerId = channel.channelId,
     windowMs,
+    prefetchMarginMs,
     liveHz = 20,
     timeOrigin,
     produce,
@@ -123,6 +127,7 @@ export function useChartReplayBridge<T>(
     channel,
     layerId,
     windowMs,
+    prefetchMarginMs,
     timeOrigin,
     pickValue,
   });

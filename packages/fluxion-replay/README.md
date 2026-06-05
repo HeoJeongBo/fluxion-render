@@ -348,7 +348,8 @@ All hooks live under `@heojeongbo/fluxion-replay/react`.
 | `useDvrController(opts)` | `{ dvr, replayPlayer, isLive, isDvr, isPlaying, rate, setRate, scrubber, effectiveTimeRange }` — **all-in-one DVR bundle**: composes `useReplayDvr` + `usePlaybackRate` + `useReplayPlayer` + `useScrubberControls` + `useReplayScrubber` into one call, collapsing the ~30-line hook chain. `scrubber` is a ready-to-spread props bundle for `<DvrScrubber {...ctl.scrubber} />`. Pass `recordingStartMs`/`autoPlay`/`initialRate` etc. straight through. Capture (recording/video/screen-share) stays separate — keep using `useRecordingSession`/`useVideoRecorder`/`useDisplayMedia` alongside. |
 | `usePlaybackRate(opts)` | `{ rate, setRate }` — playback-rate state that calls `player.play(rate)` immediately while playing so a speed change takes effect without an extra click. |
 | `useLiveTimeRange(session, opts?)` | `{ timeRange, segments, seed }` — polls `session.getTimeRange()` and exposes recording segments. `seed()` lets you avoid the first-poll empty state. |
-| `useChartReplay(opts)` | `{ isHydrating, hydratedCount }` — bridges a `ReplayPlayer` into a `fluxion-render` line layer. Backfills the trailing window on enter / seek and streams `onFrame` events into `handle.push`. Uses a sequential queue + microtask yield to defeat seek-burst and exit races. |
+| `useChartReplay(opts)` | `{ isHydrating, hydratedCount }` — bridges a `ReplayPlayer` into a `fluxion-render` line layer. Backfills the trailing window on enter / seek and streams `onFrame` events into `handle.push`. Uses a sequential queue + microtask yield to defeat seek-burst and exit races. **One channel → one chart.** |
+| `useChartReplayFanOut(opts)` | `{ isHydrating, hydratedCount }` — fans **ONE recorded channel out to MANY chart lines/cells**. Runs a single windowed `getFramesByChannel` per enter/seek and feeds N lines, each extracting its own y via `pick(data)`. Use it when a "snapshot" channel drives a grid of cells — N per-cell `useChartReplay` calls would decode the same payload N times. Mirrors `useChartReplay`'s sequential-queue + microtask-yield machine but resolves a per-line `host.line(id)` / `host.scatter(id)` handle from a fresh `getSources()` each push. Pool-agnostic via an optional `isHostLive(host)` predicate (e.g. `(h) => pool.hasHost(h.hostId)`). |
 | `useChartLiveBackfill(opts)` | `{ isBackfilling }` — when `active` flips true (mount, DVR→live), flushes the store and rewrites the chart with the most recent window so the live chart picks up where DVR left off. `isBackfilling` is `true` while the async IDB query is in-flight; `useChartReplayBridge` uses it to suppress live `push()` calls during that window, preventing the visual "jump" that would otherwise appear between the sync `reset()` and the `pushBatch()`. |
 | `useChartReplayBridge(opts)` | `{ isHydrating, hydratedCount }` — **convenience bundle**: combines `useFluxionStream` (live pump) + `useChartReplay` (DVR hydrate) + `useChartLiveBackfill` (DVR→live re-entry) + the stale-closure `isLiveRef` guard into one call. Reduces the 30-line MiniChart boilerplate to ~5 lines. During DVR→live backfill the live pump is automatically silenced so the chart transitions smoothly without a flicker. |
 | `useScrubberControls(opts)` | `{ scrubT, onScrubChange, commitScrub }` — encapsulates the drag-preview → release-commit state machine for `<input type="range">` scrubbers. `onScrubChange` previews the drag position and speculatively enters DVR; `commitScrub` (call on `mouseUp`/`touchEnd`/`keyUp`) finalises: live→DVR enter+play, DVR→live exit, or mid-DVR seek+play. Pair with `useReplayScrubber` for the `min`/`max`/`value` bounds. |
@@ -499,6 +500,28 @@ useFluxionStream({
 ```
 
 Match the `timeOrigin` between `axisGridLayer`, the hooks, and `useMiniChart` so the Float32 wire-format quantisation stays consistent.
+
+### Fan-out: one channel → many lines
+
+`useChartReplay` is one channel → one chart. When a SINGLE recorded channel (e.g. a per-tick "snapshot" of many sensors) drives a GRID of chart cells — each cell/line plotting a different field of the same payload — reach for `useChartReplayFanOut`. It runs the windowed query **once** per enter/seek and feeds every line, so the payload is decoded once instead of once-per-cell:
+
+```tsx
+import { useChartReplayFanOut } from "@heojeongbo/fluxion-replay/react";
+
+// `cells[i]` describes the lines drawn on host[i]; each line picks its own field.
+useChartReplayFanOut<Snapshot>({
+  player: isDvr ? dvr.player : null,   // idle (no fetch/push) until time-travelling
+  store,
+  channel: snapshotChannel,            // the one recorded channel, shared by all cells
+  windowMs: 5_000,
+  timeOrigin,
+  getSources: () =>
+    cells.map((lines, i) => ({ host: hosts[i] ?? null, lines })),
+  isHostLive: (h) => pool.hasHost(h.hostId), // optional pool-agnostic seam
+});
+```
+
+Each `line` is `{ layerId, type?: "line" | "scatter", pick: (data) => number | null }` — return `null` (or a non-finite number) from `pick` to skip a frame for that line. `getSources` is read through a ref and called fresh on every push, so hosts mounting/unmounting between pushes are picked up without re-subscribing. The hook mirrors `useChartReplay`'s hydrate machine (sequential queue, microtask yield, park-then-flush of frames that arrive mid-hydrate) and benefits from the same player-level prefetch correctness.
 
 ---
 

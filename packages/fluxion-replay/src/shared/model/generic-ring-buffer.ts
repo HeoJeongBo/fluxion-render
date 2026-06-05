@@ -31,9 +31,8 @@ export class GenericRingBuffer<T> {
   /** Iterate from oldest to newest. */
   forEach(fn: (item: T, index: number) => void): void {
     for (let i = 0; i < this._count; i++) {
-      const item = this._buf[this._oldestSlot(i)];
-      /* v8 ignore next */
-      if (item !== undefined) fn(item, i);
+      // Slots [0, _count) are always filled, so the read is non-null.
+      fn(this._buf[this._oldestSlot(i)] as T, i);
     }
   }
 

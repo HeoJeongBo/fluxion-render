@@ -54,9 +54,13 @@ export interface UseReplayDvrResult {
    * Enter DVR mode. If `seekT` is omitted, seeks to `liveTimeRange.earliest`
    * (the start of the recording).
    *
-   * No-op if `session` is null or `liveTimeRange` hasn't seeded yet.
+   * Resolves with the newly-created `ReplayPlayer` on success, or `null` if the
+   * call was a no-op (`session`/`liveTimeRange` not ready) or lost a race to a
+   * newer `enter()`/`exit()`. Returning the player lets callers act on the
+   * fresh instance (e.g. `play()`) without reading the still-stale `player`
+   * field from the render that issued the call.
    */
-  enter: (seekT?: number) => Promise<void>;
+  enter: (seekT?: number) => Promise<ReplayPlayer | null>;
   /** Stop the player, exit replay mode, and reset all DVR state. */
   exit: () => void;
 }
@@ -95,10 +99,6 @@ export function useReplayDvr(opts: UseReplayDvrOptions): UseReplayDvrResult {
   // listing it as a useCallback dep (which would recreate enter on every DVR
   // state change).
   const frozenLatestRef = useRef<number | null>(null);
-  // Cached IDB latest fetched after the previous DVR exit. enter() uses this
-  // to detect a stale liveTimeRange without an extra async getTimeRange() call
-  // inside the hot enter() path, which would shift test timing.
-  const postExitIdbLatestRef = useRef<number | null>(null);
 
   // Keep the latest scalar options in refs so the `enter` callback identity
   // is stable across re-renders while still seeing the freshest values.
@@ -140,14 +140,11 @@ export function useReplayDvr(opts: UseReplayDvrOptions): UseReplayDvrResult {
     frozenLatestRef.current = null;
     setFrozenLatest(null);
     exitReplay();
-    // Prefetch the current IDB latest so the next enter() can detect a stale
-    // liveTimeRange without adding an async getTimeRange() to the hot path.
-    postExitIdbLatestRef.current = session?.recorder?.index?.latest ?? null;
-  }, [exitReplay, session]);
+  }, [exitReplay]);
 
   const enter = useCallback(
-    async (seekT?: number) => {
-      if (!session) return;
+    async (seekT?: number): Promise<ReplayPlayer | null> => {
+      if (!session) return null;
 
       const myGen = ++enterGenRef.current;
 
@@ -156,24 +153,10 @@ export function useReplayDvr(opts: UseReplayDvrOptions): UseReplayDvrResult {
       offEndRef.current = null;
 
       const live = liveTimeRangeRef.current;
-      if (!live) return;
+      if (!live) return null;
 
-      // liveTimeRange polls every 500 ms via useLiveTimeRange. After a DVR
-      // auto-exit (player.onEnd fires), the prop may still hold the previous
-      // frozenLatest for up to 500 ms. exit() kicks off a background
-      // getTimeRange() whose result is parked in postExitIdbLatestRef; we read
-      // it synchronously here — no extra async await in the hot path — to
-      // detect whether liveTimeRange is stale and, if so, use the IDB-fresh
-      // value as the new frozen upper bound.
-      const frozenPrev = frozenLatestRef.current;
-      const postExitLatest = postExitIdbLatestRef.current;
-      const isStale =
-        frozenPrev !== null &&
-        live.latest === frozenPrev &&
-        postExitLatest !== null &&
-        postExitLatest > live.latest;
-
-      const frozen = isStale ? postExitLatest : live.latest;
+      // Freeze the scrubber's upper bound at the live edge captured on entry.
+      const frozen = live.latest;
       const target = seekT ?? live.earliest;
 
       // Pass the frozen range to enterReplay so player._timeRange.latest is
@@ -185,14 +168,14 @@ export function useReplayDvr(opts: UseReplayDvrOptions): UseReplayDvrResult {
       const p = await enterReplay(target, {
         timeRange: { earliest: live.earliest, latest: frozen },
       });
-      if (!p) return;
+      if (!p) return null;
 
       // A newer enter() (or exit()) ran while we awaited. Drop this player
       // — without dispose, its rAF loop / event listeners would leak even
       // though we never expose it via React state.
       if (myGen !== enterGenRef.current) {
         p.dispose();
-        return;
+        return null;
       }
 
       frozenLatestRef.current = frozen;
@@ -212,14 +195,14 @@ export function useReplayDvr(opts: UseReplayDvrOptions): UseReplayDvrResult {
           frozenLatestRef.current = null;
           setFrozenLatest(null);
           exitReplay();
-          // Capture the recorder's in-memory latest for the next enter() staleness check.
-          postExitIdbLatestRef.current = session?.recorder?.index?.latest ?? null;
         });
       }
 
       if (autoPlayRef.current) {
         p.play(rateRef.current);
       }
+
+      return p;
     },
     [session, enterReplay, exitReplay],
   );

@@ -38,6 +38,91 @@ describe("ReplayStore", () => {
     });
   });
 
+  describe("open lifecycle (StrictMode race / blocked)", () => {
+    // Test-only IDB controls installed by src/test/setup.ts.
+    const idb = (globalThis as unknown as {
+      __fakeIDBControls: {
+        setForceBlocked: (v: boolean) => void;
+        setDeferOpen: (v: boolean) => void;
+        resolvePendingOpens: () => Array<{ closeCount: number }>;
+        reset: () => void;
+      };
+    }).__fakeIDBControls;
+
+    afterEach(() => idb.reset());
+
+    it("open() rejects (does not hang) when the IDB open is blocked", async () => {
+      idb.setForceBlocked(true);
+      const s = new ReplayStore();
+      await expect(s.open()).rejects.toThrow(/blocked/);
+    });
+
+    it("dispose() during an in-flight open closes the connection and starts no flush timer", async () => {
+      idb.setDeferOpen(true);
+      const s = new ReplayStore({ batchIntervalMs: 100 });
+      const startSpy = vi.spyOn(
+        s as unknown as { _startFlushTimer: () => void },
+        "_startFlushTimer",
+      );
+
+      const p = s.open(); // suspended — open hasn't resolved
+      s.dispose(); // dispose BEFORE the open resolves
+      const dbs = idb.resolvePendingOpens(); // now let _openIDB resolve
+      await p; // resolves to a no-op (does not reject)
+
+      // The produced connection was closed (not leaked as a zombie)…
+      expect(dbs).toHaveLength(1);
+      expect(dbs[0]!.closeCount).toBe(1);
+      // …and the dead store never started its flush timer.
+      expect(startSpy).not.toHaveBeenCalled();
+      expect((s as unknown as { _db: unknown })._db).toBeNull();
+    });
+
+    it("dispose() during the OPFS await closes the connection and starts no flush timer", async () => {
+      // IDB resolves synchronously (default fake) — hold the OPFS getDirectory()
+      // so dispose() lands while open() is suspended AFTER _db was assigned.
+      let releaseOpfs!: () => void;
+      const opfsHeld = new Promise<FileSystemDirectoryHandle>((resolve) => {
+        releaseOpfs = () => resolve({} as FileSystemDirectoryHandle);
+      });
+      const origStorage = navigator.storage;
+      Object.defineProperty(globalThis.navigator, "storage", {
+        value: { getDirectory: () => opfsHeld },
+        writable: true,
+        configurable: true,
+      });
+
+      const s = new ReplayStore({ batchIntervalMs: 100 });
+      const startSpy = vi.spyOn(
+        s as unknown as { _startFlushTimer: () => void },
+        "_startFlushTimer",
+      );
+      try {
+        const p = s.open();
+        // Let _openIDB resolve and open() advance to the (held) OPFS await.
+        for (let i = 0; i < 10; i++) await Promise.resolve();
+        const db = (s as unknown as { _db: { closeCount: number } | null })._db;
+        expect(db).not.toBeNull();
+
+        s.dispose(); // dispose while suspended on the OPFS await
+        releaseOpfs(); // the OPFS await resolves → re-check branch runs
+        await p;
+
+        expect(db!.closeCount).toBe(1); // the assigned connection was closed
+        expect((s as unknown as { _db: unknown })._db).toBeNull();
+        expect(startSpy).not.toHaveBeenCalled();
+      } finally {
+        // Always restore — otherwise a held getDirectory() poisons later tests.
+        releaseOpfs();
+        Object.defineProperty(globalThis.navigator, "storage", {
+          value: origStorage,
+          writable: true,
+          configurable: true,
+        });
+      }
+    });
+  });
+
   describe("after open()", () => {
     beforeEach(async () => {
       await store.open();
@@ -291,6 +376,35 @@ describe("ReplayStore", () => {
 
       // earliest=1000, latest=5000, span=4000, cutoff = 1000 + floor(4000 * 0.1) = 1400
       expect(deleteSpy).toHaveBeenCalledWith(1400);
+      evictStore.dispose();
+      deleteSpy.mockRestore();
+    });
+
+    it("_maybeEvict over threshold but empty store → no delete (null time range)", async () => {
+      const evictStore = new ReplayStore({ batchIntervalMs: 9999, evictThresholdPct: 0 });
+      await evictStore.open();
+      const deleteSpy = vi.spyOn(evictStore, "deleteFramesBefore");
+      vi.spyOn(evictStore, "getStorageInfo").mockResolvedValue({
+        usedBytes: 100, quotaBytes: 100, percentUsed: 50, idbFrameCount: 0,
+      });
+      // No frames recorded → getTimeRange() returns null → eviction bails.
+      await evictStore.flush();
+      expect(deleteSpy).not.toHaveBeenCalled();
+      evictStore.dispose();
+      deleteSpy.mockRestore();
+    });
+
+    it("_maybeEvict over threshold with a zero-span range → no delete", async () => {
+      const evictStore = new ReplayStore({ batchIntervalMs: 9999, evictThresholdPct: 0 });
+      await evictStore.open();
+      const deleteSpy = vi.spyOn(evictStore, "deleteFramesBefore");
+      vi.spyOn(evictStore, "getStorageInfo").mockResolvedValue({
+        usedBytes: 100, quotaBytes: 100, percentUsed: 50, idbFrameCount: 1,
+      });
+      // A single frame → earliest === latest → spanMs <= 0 → eviction bails.
+      evictStore.appendFrame({ t: 1000, channelId: "ch", payload: new ArrayBuffer(4) });
+      await evictStore.flush();
+      expect(deleteSpy).not.toHaveBeenCalled();
       evictStore.dispose();
       deleteSpy.mockRestore();
     });

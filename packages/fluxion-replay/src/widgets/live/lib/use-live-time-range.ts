@@ -50,13 +50,12 @@ export function useLiveTimeRange(
     };
 
     void poll();
-    timerRef.current = setInterval(poll, intervalMs);
+    const timer = setInterval(poll, intervalMs);
+    timerRef.current = timer;
 
     return () => {
-      if (timerRef.current != null) {
-        clearInterval(timerRef.current);
-        timerRef.current = null;
-      }
+      clearInterval(timer);
+      timerRef.current = null;
     };
   }, [session, intervalMs]);
 

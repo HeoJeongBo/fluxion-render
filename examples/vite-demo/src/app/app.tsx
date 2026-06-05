@@ -10,6 +10,7 @@ import { ExternalAxesDemoPage } from "../pages/external-axes-demo";
 import { FluxionWorkerDemoPage } from "../pages/fluxion-worker-demo";
 import { GaugeDemoPage } from "../pages/gauge-demo";
 import { HeatmapDemoPage } from "../pages/heatmap-demo";
+import { HighRateDemoPage } from "../pages/high-rate-demo";
 import { PieDemoPage } from "../pages/pie-demo";
 import { PoseArrowDemoPage } from "../pages/pose-arrow-demo";
 import { ReferenceLineDemoPage } from "../pages/reference-line-demo";
@@ -39,6 +40,7 @@ type Tab =
   | "bar"
   | "candlestick"
   | "heatmap"
+  | "high-rate"
   | "historical"
   | "lidar"
   | "pool"
@@ -65,6 +67,7 @@ const groups: readonly SideBarGroup<Tab>[] = [
     items: [
       { id: "all", label: "All" },
       { id: "line", label: "Stream" },
+      { id: "high-rate", label: "500 Hz Stream" },
       { id: "stream", label: "Multi-stream" },
       { id: "crosshair", label: "Crosshair" },
       { id: "static", label: "Static XY" },
@@ -120,6 +123,7 @@ export function App() {
         {tab === "bar" && <BarDemoPage />}
         {tab === "candlestick" && <CandlestickDemoPage />}
         {tab === "heatmap" && <HeatmapDemoPage />}
+        {tab === "high-rate" && <HighRateDemoPage />}
         {tab === "historical" && <HistoricalDemoPage />}
         {tab === "lidar" && <LidarDemoPage />}
         {tab === "pool" && <PoolDemoPage />}

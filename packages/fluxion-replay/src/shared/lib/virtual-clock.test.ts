@@ -205,4 +205,67 @@ describe("VirtualClock", () => {
     globalThis.requestAnimationFrame = origRaf;
     globalThis.cancelAnimationFrame = origCaf;
   });
+
+  describe("visibility pause/resume", () => {
+    const setVisibility = (state: "hidden" | "visible") => {
+      Object.defineProperty(document, "visibilityState", {
+        value: state,
+        configurable: true,
+      });
+      document.dispatchEvent(new Event("visibilitychange"));
+    };
+
+    afterEach(() => {
+      Object.defineProperty(document, "visibilityState", {
+        value: "visible",
+        configurable: true,
+      });
+    });
+
+    it("pauses while the tab is hidden and resumes when visible", () => {
+      const clock = new VirtualClock();
+      clock.start(0, 1.0);
+      vi.advanceTimersByTime(100);
+      const beforeHidden = clock.currentT;
+
+      setVisibility("hidden");
+      expect(clock.isRunning).toBe(false); // paused by visibility
+      vi.advanceTimersByTime(500);
+      expect(clock.currentT).toBeCloseTo(beforeHidden, 0); // frozen while hidden
+
+      setVisibility("visible");
+      expect(clock.isRunning).toBe(true); // resumed
+      vi.advanceTimersByTime(100);
+      expect(clock.currentT).toBeGreaterThan(beforeHidden);
+      clock.stop();
+    });
+
+    it("a visible event without a prior visibility-pause is a no-op", () => {
+      const clock = new VirtualClock();
+      clock.start(0, 1.0);
+      // 'visible' while not paused-by-visibility → neither branch fires.
+      setVisibility("visible");
+      expect(clock.isRunning).toBe(true);
+      clock.stop();
+    });
+  });
+
+  describe("non-DOM environment guards", () => {
+    it("attach/detach/visibility-change are no-ops when document is undefined", () => {
+      const origDoc = globalThis.document;
+      // @ts-expect-error — simulate a non-DOM (worker-like) global.
+      delete globalThis.document;
+      try {
+        const clock = new VirtualClock();
+        // start() → _attachVisibilityListener, stop() → _detachVisibilityListener,
+        // both guarded by `typeof document !== "undefined"`.
+        expect(() => {
+          clock.start(0, 1.0);
+          clock.stop();
+        }).not.toThrow();
+      } finally {
+        globalThis.document = origDoc;
+      }
+    });
+  });
 });

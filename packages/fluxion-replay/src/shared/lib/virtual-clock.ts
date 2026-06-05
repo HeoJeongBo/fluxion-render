@@ -108,7 +108,6 @@ export class VirtualClock {
   }
 
   private _attachVisibilityListener(): void {
-    /* v8 ignore next 4 */
     if (typeof document !== "undefined") {
       document.removeEventListener("visibilitychange", this._onVisibilityChange);
       document.addEventListener("visibilitychange", this._onVisibilityChange);
@@ -116,15 +115,13 @@ export class VirtualClock {
   }
 
   private _detachVisibilityListener(): void {
-    /* v8 ignore next 3 */
     if (typeof document !== "undefined") {
       document.removeEventListener("visibilitychange", this._onVisibilityChange);
     }
   }
 
   private _onVisibilityChange = (): void => {
-    /* v8 ignore next */
-    if (typeof document === "undefined") return;
+    // Only registered when document exists, so it's always defined here.
     if (document.visibilityState === "hidden" && this._running) {
       this._pausedByVisibility = true;
       this.pause();

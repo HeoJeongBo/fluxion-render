@@ -44,10 +44,11 @@ describe("useChartReplay", () => {
       await Promise.resolve();
     });
 
+    // Fetches the visible window [3000,5000] widened by the ±3000ms prefetch margin.
     expect(store.getFramesByChannel).toHaveBeenCalledWith(
       expect.objectContaining({ channelId: "signal" }),
-      3000,
-      5000,
+      0,
+      8000,
     );
     // Reset must fire BEFORE pushBatch so the worker axis rewinds first.
     expect(order[0]).toBe("reset:5000");
@@ -94,8 +95,8 @@ describe("useChartReplay", () => {
 
     expect(store.getFramesByChannel).toHaveBeenLastCalledWith(
       expect.objectContaining({ channelId: "signal" }),
-      7000,
-      9000,
+      4000,
+      12000,
     );
     expect(resets[initialResets]).toEqual({ id: "signal", latestT: 9000 });
     expect(batches[initialBatches].samples.map((s) => s.t)).toEqual([8500, 9000]);
@@ -238,6 +239,31 @@ describe("useChartReplay", () => {
     expect(batches.length).toBe(baseBatches);
   });
 
+  it("a hydrate cancelled mid-query writes nothing to the chart (cancelled guard)", async () => {
+    const { host, resets, batches } = makeFakeHost();
+    const player = makeFakePlayer(5000);
+    const store = makeFakeStore({ signal: [metricFrame("signal", 4000, 0.5)] });
+    store.hold(); // suspend the hydrate's getFramesByChannel
+
+    let unmount: () => void = () => {};
+    await act(async () => {
+      const r = render(<ChartReplayProbe host={host} player={player} store={store} windowMs={2000} />);
+      unmount = r.unmount;
+      await Promise.resolve(); // effect runs; hydrate parked at the await
+    });
+    expect(store.pendingCount()).toBe(1);
+
+    // Unmount (sets cancelled) BEFORE releasing the query → the post-await
+    // `if (cancelled) return` must skip reset/pushBatch.
+    await act(async () => { unmount(); });
+    await act(async () => {
+      await store.release();
+      await Promise.resolve();
+    });
+    expect(resets).toHaveLength(0);
+    expect(batches).toHaveLength(0);
+  });
+
   it("hydrate with empty backfill still resets (so the axis rewinds even with no data)", async () => {
     const { host, batches, resets } = makeFakeHost();
     const player = makeFakePlayer(5000);
@@ -285,8 +311,8 @@ describe("useChartReplay", () => {
       // Store query stays in absolute t.
       expect(store.getFramesByChannel).toHaveBeenCalledWith(
         expect.objectContaining({ channelId: "signal" }),
-        ORIGIN + 3000,
-        ORIGIN + 5000,
+        ORIGIN + 0,
+        ORIGIN + 8000,
       );
       // reset/push are host-relative (origin-subtracted).
       expect(resets[0]).toEqual({ id: "signal", latestT: 5000 });
@@ -384,8 +410,8 @@ describe("useChartReplay", () => {
       // 1) Store queried with absolute t bounds [seekT - 5s, seekT].
       expect(store.getFramesByChannel).toHaveBeenCalledWith(
         expect.objectContaining({ channelId: "signal" }),
-        seekT - WINDOW_MS,
-        seekT,
+        seekT - WINDOW_MS - 3000,
+        seekT + 3000,
       );
 
       // 2) Layer rewound to the host-relative seek point.
@@ -452,8 +478,8 @@ describe("useChartReplay", () => {
       // Fresh query at the new bounds.
       expect(store.getFramesByChannel).toHaveBeenLastCalledWith(
         expect.objectContaining({ channelId: "signal" }),
-        newT - WINDOW_MS,
-        newT,
+        newT - WINDOW_MS - 3000,
+        newT + 3000,
       );
       expect(resets[baseResets]).toEqual({ id: "signal", latestT: 20_000 });
 
@@ -497,8 +523,8 @@ describe("useChartReplay", () => {
       // Store is queried with the underflow bound — IDB returns what exists.
       expect(store.getFramesByChannel).toHaveBeenLastCalledWith(
         expect.objectContaining({ channelId: "signal" }),
-        seekT - WINDOW_MS,
-        seekT,
+        seekT - WINDOW_MS - 3000,
+        seekT + 3000,
       );
       expect(resets[baseResets]).toEqual({ id: "signal", latestT: 2_000 });
 

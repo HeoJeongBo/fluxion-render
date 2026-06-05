@@ -21,7 +21,7 @@ export interface ReplayStoreOptions {
    * Storage usage percentage (0–100) at which old frames are automatically
    * evicted. When `percentUsed` exceeds this value after each flush, the
    * oldest 10 % of the recorded time span is deleted from IDB.
-   * Set to 100 (or above) to disable automatic eviction. Default: 60.
+   * Set to 100 (or above) to disable automatic eviction. Default: 70.
    */
   evictThresholdPct?: number;
   /**
@@ -74,6 +74,11 @@ interface FrameRecord {
 
 export class ReplayStore {
   private _db: IDBDatabase | null = null;
+  // Latched in dispose(). If dispose() runs while open() is suspended on an
+  // await (StrictMode mount→cleanup→mount), open() closes the connection it
+  // just produced and bails — otherwise that connection leaks as a zombie that
+  // can block (and hang) every subsequent open.
+  private _disposed = false;
   private _opfsRoot: FileSystemDirectoryHandle | null = null;
   private _pending: FrameRecord[] = [];
   private _flushTimer: ReturnType<typeof setInterval> | null = null;
@@ -92,18 +97,30 @@ export class ReplayStore {
     this._dbVersion = opts?.dbVersion ?? DEFAULT_DB_VERSION;
     this._retentionMs = opts?.retentionMs ?? DEFAULT_RETENTION_MS;
     this._batchIntervalMs = opts?.batchIntervalMs ?? DEFAULT_BATCH_INTERVAL_MS;
-    this._evictThresholdPct = opts?.evictThresholdPct ?? 60;
+    this._evictThresholdPct = opts?.evictThresholdPct ?? 70;
     this._storageLogIntervalMs = opts?.storageLogIntervalMs ?? 0;
   }
 
   async open(): Promise<void> {
-    this._db = await this._openIDB();
+    const db = await this._openIDB();
+    // dispose() may have run while _openIDB() was in flight. Close the
+    // just-opened connection (don't leak a zombie) and bail before touching
+    // _db or starting any timers.
+    if (this._disposed) {
+      db.close();
+      return;
+    }
+    this._db = db;
     try {
       this._opfsRoot = await navigator.storage.getDirectory();
     } catch {
       // OPFS not available (e.g. non-secure context) — video recording disabled
       this._opfsRoot = null;
     }
+    // The OPFS await is another suspension point dispose() could have run past.
+    // dispose() already closed _db (it was set above) and stopped everything,
+    // so just bail before starting timers on the dead store.
+    if (this._disposed) return;
     this._startFlushTimer();
     if (this._storageLogIntervalMs > 0) {
       this._startStorageLogTimer();
@@ -353,6 +370,7 @@ export class ReplayStore {
   }
 
   dispose(): void {
+    this._disposed = true;
     this._stopFlushTimer();
     this._stopStorageLogTimer();
     this._db?.close();
@@ -468,6 +486,16 @@ export class ReplayStore {
       };
       req.onsuccess = (e) => resolve((e.target as IDBOpenDBRequest).result);
       req.onerror = () => reject(req.error);
+      // A blocked open fires neither onsuccess nor onerror on its own — without
+      // this handler open() would hang forever (the "Opening IDB…" spinner that
+      // never clears). Reject so the failure surfaces as `error` in
+      // useReplaySession instead of an indefinite hang.
+      req.onblocked = () =>
+        reject(
+          new Error(
+            `ReplayStore("${this._dbName}") open blocked: another connection is holding the database open.`,
+          ),
+        );
     });
   }
 }

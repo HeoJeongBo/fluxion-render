@@ -1,12 +1,17 @@
 /**
- * Pool-aware sensor worker — identical wire format to stream-worker-demo.
+ * Pool-aware sensor worker — BATCHED wire format (500 Hz fan-out).
  *
- * Main thread sends broadcastStream() ONCE with the packet:
- *   buffer = Float32Array[ 1 + activeCount ]
- *     [0]       timestamp_us  — microsecond timestamp (f32)
- *     [1..N]    ch0_raw .. chN_raw  — ADC values in [-32767, 32767] (f32)
+ * Main thread sends broadcastStream() ONCE per tick with a batch packet that
+ * carries K samples per channel (so 500 Hz fits in one postMessage at a 50 Hz
+ * tick rate):
+ *   buffer = Float32Array[ 1 + K + K*activeCount ]
+ *     [0]                 K            — samples per channel this tick (f32)
+ *     [1 .. K]            t0_us..       — K microsecond timestamps (shared grid)
+ *     [1+K ..]            ch0_v0..v(K-1), ch1_v0..v(K-1), ...  — raw ADC values
+ *                                        in [-32767, 32767] (f32), channel-major
  *
- * Worker decodes each channel and pushes to the matching Engine:
+ * Worker rebuilds an interleaved [t_ms, val, ...] batch per channel and pushes
+ * it in one pushRaw → ring.pushMany:
  *   timestamp_ms = timestamp_us / 1000
  *   normalized   = raw_i16 / 32767  → [-1.0, 1.0]
  */
@@ -52,12 +57,18 @@ self.onmessage = (e: MessageEvent) => {
     if ((msg as { mode?: string }).mode === "pool-stream") {
       const s = msg as FluxionPoolStreamMsg;
       const raw = new Float32Array(s.buffer, 0, s.length);
-      const t_ms = raw[0]! / 1000;
+      const k = raw[0]!; // samples per channel this tick
+      const valuesBase = 1 + k; // raw[1..k] = timestamps; values start after
       for (let ci = 0; ci < s.targets.length; ci++) {
         const { hostId, layerId } = s.targets[ci]!;
-        const decoded = new Float32Array(2);
-        decoded[0] = t_ms;
-        decoded[1] = raw[1 + ci]! / RAW_MAX;
+        // Rebuild an interleaved [t_ms, val, ...] batch (k samples) for this
+        // channel — one pushRaw → ring.pushMany, no per-sample postMessage.
+        const decoded = new Float32Array(k * 2);
+        const chBase = valuesBase + ci * k;
+        for (let i = 0; i < k; i++) {
+          decoded[i * 2] = raw[1 + i]! / 1000; // µs → ms
+          decoded[i * 2 + 1] = raw[chBase + i]! / RAW_MAX; // → [-1, 1]
+        }
         engines.get(hostId)?.pushRaw(layerId, decoded);
       }
       return;

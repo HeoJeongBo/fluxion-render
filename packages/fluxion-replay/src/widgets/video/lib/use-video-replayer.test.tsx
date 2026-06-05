@@ -301,6 +301,75 @@ describe("useVideoReplayer", () => {
     store.dispose();
   });
 
+  it("unmount during a seek query cancels before seekTo (cancelled guard)", async () => {
+    vi.useRealTimers();
+    // Gate the store query so we can unmount while runSeek is suspended.
+    let release!: () => void;
+    const gate = new Promise<void>((r) => { release = r; });
+    const store = makeStore();
+    await store.open();
+    recordFrame(store, 1000, true);
+    await store.flush();
+    const realQuery = store.getFramesByChannel.bind(store) as (
+      ...a: unknown[]
+    ) => Promise<unknown>;
+    vi.spyOn(store, "getFramesByChannel").mockImplementation((async (...a: unknown[]) => {
+      await gate;
+      return realQuery(...a);
+    }) as typeof store.getFramesByChannel);
+    const seekSpy = vi
+      .spyOn(VideoReplayer.prototype, "seekTo")
+      .mockResolvedValue(undefined);
+
+    const player = makePlayer(store);
+    const canvasRef = { current: makeCanvas() };
+    const { unmount } = renderHook(() => useVideoReplayer(player, canvasRef, store, CHANNEL));
+    await Promise.resolve();
+    seekSpy.mockClear();
+
+    player.seek(1000); // runSeek suspends on the gated query
+    await Promise.resolve();
+    unmount(); // sets cancelled = true
+    release(); // query resolves → `if (cancelled) return` skips seekTo
+    for (let i = 0; i < 20; i++) await Promise.resolve();
+
+    expect(seekSpy).not.toHaveBeenCalled();
+    player.dispose();
+    store.dispose();
+  });
+
+  it("unmount during seekTo cancels the post-seekTo continuation (cancelled guard)", async () => {
+    vi.useRealTimers();
+    let releaseSeek!: () => void;
+    const seekGate = new Promise<void>((r) => { releaseSeek = r; });
+    const store = makeStore();
+    await store.open();
+    recordFrame(store, 1000, true);
+    await store.flush();
+    const seekSpy = vi
+      .spyOn(VideoReplayer.prototype, "seekTo")
+      .mockImplementation(async () => {
+        await seekGate; // hold seekTo open so unmount lands during it
+      });
+
+    const player = makePlayer(store);
+    const canvasRef = { current: makeCanvas() };
+    const { unmount } = renderHook(() => useVideoReplayer(player, canvasRef, store, CHANNEL));
+    await Promise.resolve();
+    seekSpy.mockClear();
+
+    player.seek(1000);
+    for (let i = 0; i < 5; i++) await Promise.resolve(); // query resolves, seekTo starts
+    expect(seekSpy).toHaveBeenCalledTimes(1);
+    unmount(); // cancelled = true while seekTo is suspended
+    releaseSeek(); // seekTo resolves → post-seekTo `if (cancelled) return`
+    for (let i = 0; i < 10; i++) await Promise.resolve();
+
+    // No throw; the cancelled guard short-circuits the post-seekTo work.
+    player.dispose();
+    store.dispose();
+  });
+
   it("skips seekTo when no keyframe is in the lookback window", async () => {
     vi.useRealTimers();
     const seekSpy = vi

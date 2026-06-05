@@ -13,6 +13,15 @@ export interface LineChartConfig {
   maxHz?: number;
   /** When false, skip draw and scan. Default true. */
   visible?: boolean;
+  /**
+   * When true, the DRAW path is min/max-decimated to ~2 points per x-pixel
+   * column when there are more visible samples than pixels. This keeps the
+   * rendered line visually identical (every peak/trough at display resolution
+   * is preserved) while cutting `lineTo` calls from O(samples) to O(width) —
+   * essential for high-rate (e.g. 500 Hz) streams. The ring still holds EVERY
+   * sample, so hover/scan/export are unaffected. Default false.
+   */
+  decimate?: boolean;
 }
 
 /**
@@ -36,6 +45,7 @@ export class LineChartLayer implements Layer {
   private color = "#4fc3f7";
   private lineWidth = 1;
   private visible = true;
+  private decimate = false;
   private ring: RingBuffer;
 
   constructor(id: string) {
@@ -48,6 +58,7 @@ export class LineChartLayer implements Layer {
     if (c.color !== undefined) this.color = c.color;
     if (c.lineWidth !== undefined) this.lineWidth = c.lineWidth;
     if (c.visible !== undefined) this.visible = c.visible;
+    if (c.decimate !== undefined) this.decimate = c.decimate;
     let newCapacity: number | undefined = c.capacity;
     if (newCapacity === undefined && c.retentionMs !== undefined && c.maxHz !== undefined) {
       newCapacity = Math.ceil((c.retentionMs / 1000) * c.maxHz * 1.1);
@@ -106,6 +117,15 @@ export class LineChartLayer implements Layer {
     // old samples from the drawn path in one go.
     const xMin = viewport.bounds.xMin;
 
+    // Decimate the DRAW (not the data) when there are far more visible samples
+    // than pixels — emit min/max per x-pixel column so the rendered shape is
+    // identical but the path is O(width) instead of O(samples).
+    if (this.decimate && this.ring.length > viewport.widthPx * 2) {
+      this._drawDecimated(ctx, viewport, xMin);
+      ctx.stroke();
+      return;
+    }
+
     let first = true;
     this.ring.forEach((data, off) => {
       const t = data[off];
@@ -120,6 +140,61 @@ export class LineChartLayer implements Layer {
       }
     });
     ctx.stroke();
+  }
+
+  /**
+   * Min/max-per-pixel-column path. For each integer x-pixel that has samples,
+   * draw to the column's first, min-y, max-y and last sample (in time order
+   * within the column) — preserving every visible peak/trough at display
+   * resolution while bounding the path to ~2–4 points per pixel.
+   */
+  private _drawDecimated(
+    ctx: OffscreenCanvasRenderingContext2D,
+    viewport: Viewport,
+    xMin: number,
+  ): void {
+    let first = true;
+    let curCol = Number.NaN;
+    // Per-column accumulators (y in data space; converted to px on flush).
+    let firstY = 0;
+    let lastY = 0;
+    let minY = 0;
+    let maxY = 0;
+
+    const flush = (colPx: number): void => {
+      // Emit first → min → max → last (skipping duplicates) so the column's
+      // vertical extent is drawn without redundant points.
+      const pts = [firstY, minY, maxY, lastY];
+      for (let k = 0; k < pts.length; k++) {
+        if (k > 0 && pts[k] === pts[k - 1]) continue;
+        const py = viewport.yToPx(pts[k]);
+        if (first) {
+          ctx.moveTo(colPx, py);
+          first = false;
+        } else {
+          ctx.lineTo(colPx, py);
+        }
+      }
+    };
+
+    this.ring.forEach((data, off) => {
+      const t = data[off];
+      if (t < xMin) return;
+      const y = data[off + 1];
+      const col = Math.floor(viewport.xToPx(t));
+      if (col !== curCol) {
+        if (!Number.isNaN(curCol)) flush(curCol);
+        curCol = col;
+        firstY = y;
+        minY = y;
+        maxY = y;
+      } else {
+        if (y < minY) minY = y;
+        if (y > maxY) maxY = y;
+      }
+      lastY = y;
+    });
+    if (!Number.isNaN(curCol)) flush(curCol);
   }
 
   clearData(): void {

@@ -1,4 +1,5 @@
 import { act, renderHook } from "@testing-library/react";
+import { StrictMode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ReplaySession } from "../../../features/session/model/replay-session";
 import { useRecordingSession } from "./use-recording-session";
@@ -48,6 +49,25 @@ describe("useRecordingSession", () => {
     expect(stub.clearRecording).toHaveBeenCalledTimes(1);
     expect(stub.startRecording).toHaveBeenCalledTimes(1);
     expect(result.current.isRecording).toBe(true);
+    expect(result.current.error).toBeNull();
+  });
+
+  it("StrictMode double-mount does not double-start (same-session guard)", async () => {
+    const stub = makeSessionStub();
+    const session = stubAsSession(stub);
+    // StrictMode runs effect → cleanup → effect again with the SAME session.
+    // The startedSessionRef guard makes the second mount a no-op (exercises the
+    // `startedSessionRef.current === session` early return). startRecording is
+    // therefore never called more than once.
+    const { result } = renderHook(
+      () => useRecordingSession({ session, enabled: true }),
+      { wrapper: StrictMode },
+    );
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(stub.startRecording.mock.calls.length).toBeLessThanOrEqual(1);
     expect(result.current.error).toBeNull();
   });
 

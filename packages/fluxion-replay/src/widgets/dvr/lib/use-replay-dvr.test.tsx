@@ -47,6 +47,64 @@ describe("useReplayDvr", () => {
     expect(ses.player.play).toHaveBeenCalledWith(1);
   });
 
+  it("enter() RESOLVES with the fresh player on success (Bug 1 contract)", async () => {
+    // useScrubberControls' autoplay-on-commit relies on enter() returning the
+    // player, because reading dvr.player after enter() gives the stale (null)
+    // live-render value.
+    const ses = makeFakeSession({ fresh: true, timeRange: LIVE });
+    const { result } = setup({
+      session: ses.session,
+      enterReplay: ses.enterReplay,
+      exitReplay: ses.exitReplay,
+      liveTimeRange: LIVE,
+      autoPlay: false,
+    });
+    let returned: unknown;
+    await act(async () => {
+      returned = await result.current.enter(1_030_000);
+    });
+    expect(returned).not.toBeNull();
+    // It's the active player the hook now exposes — and the caller can play it.
+    expect(returned).toBe(result.current.player as unknown);
+  });
+
+  it("enter() resolves with null when liveTimeRange is not seeded (no-op)", async () => {
+    const ses = makeFakeSession({ timeRange: LIVE });
+    const { result } = setup({
+      session: ses.session,
+      enterReplay: ses.enterReplay,
+      exitReplay: ses.exitReplay,
+      liveTimeRange: null, // not seeded yet
+    });
+    let returned: unknown = "sentinel";
+    await act(async () => {
+      returned = await result.current.enter(1_030_000);
+    });
+    expect(returned).toBeNull();
+    expect(ses.enterReplay).not.toHaveBeenCalled();
+    expect(result.current.isDvr).toBe(false);
+  });
+
+  it("enter() still engages DVR when liveTimeRange.latest slightly trails seekT (Bug 2 robustness)", async () => {
+    // Under high-rate recording the polled liveTimeRange can lag real time, so a
+    // dragged seekT may sit just past `latest`. enterReplay clamps into the IDB
+    // range; entry must still succeed (not collapse to an instant-end player).
+    const LAGGING = { earliest: 1_000_000, latest: 1_040_000 };
+    const ses = makeFakeSession({ timeRange: LAGGING });
+    const { result } = setup({
+      session: ses.session,
+      enterReplay: ses.enterReplay,
+      exitReplay: ses.exitReplay,
+      liveTimeRange: LAGGING,
+    });
+    await act(async () => {
+      await result.current.enter(1_045_000); // 5s past the lagging latest
+    });
+    expect(ses.enterReplay).toHaveBeenCalled();
+    expect(result.current.isDvr).toBe(true);
+    expect(result.current.player).not.toBeNull();
+  });
+
   it("enter() with no seekT defaults to liveTimeRange.earliest", async () => {
     const ses = makeFakeSession({ timeRange: LIVE });
     const { result } = setup({
@@ -447,7 +505,7 @@ describe("useReplayDvr", () => {
       expect(result.current.isDvr).toBe(true);
 
       ses.holdEnter();
-      let enterPromise: Promise<void>;
+      let enterPromise: ReturnType<typeof result.current.enter>;
       await act(async () => {
         enterPromise = result.current.enter(1_020_000);
       });

@@ -4,10 +4,10 @@
  * Combines the stream-worker-demo pattern (broadcastStream → 1 worker →
  * N chart engines) with the DVR replay system.
  *
- * Data flow (live mode):
- *   JS tick → synth values
- *     ├─ session.record(channelId, {value}, wallT)   — writes to IDB
- *     └─ Float32 encode → pool.broadcastStream()     — live chart push via worker
+ * Data flow (live mode, 500 Hz via 50 Hz batched ticks):
+ *   JS tick → K=10 synth values per channel (2 ms apart)
+ *     ├─ session.record(channelId, {value}, wallT) ×K — writes to IDB
+ *     └─ Float32 batch encode → pool.broadcastStream() — one packet/tick via worker
  *
  * DVR mode: broadcastStream is paused; each SensorChart's useChartReplay
  * hook hydrates from IDB and streams onFrame events instead.
@@ -51,8 +51,13 @@ import { btn, T } from "./shared";
 const CHART_COUNT = 16;
 const COLS = 4;
 const ROWS = Math.ceil(CHART_COUNT / COLS);
-const SAMPLE_HZ = 60;
-const INTERVAL_MS = 1000 / SAMPLE_HZ;
+// 500 Hz per channel, delivered in batches: tick at 50 Hz, pack 10 samples per
+// channel into ONE broadcastStream packet (keeps the "1 postMessage/tick"
+// property). A naive 2 ms interval would jitter under browser timer clamping.
+const BATCH_HZ = 50;
+const SAMPLES_PER_BATCH = 10;
+const SAMPLE_HZ = BATCH_HZ * SAMPLES_PER_BATCH; // 500 (≈ 10 samples per 20 ms tick)
+const INTERVAL_MS = 1000 / BATCH_HZ;
 const TIME_WINDOW_MS = 5_000;
 const MAX_HZ = SAMPLE_HZ;
 
@@ -202,7 +207,11 @@ export function WorkerFanOutApp() {
 
   // Start recording immediately when IDB is ready. Per-chart record() calls
   // happen inside the shared tick loop below (not via useChartReplayBridge).
-  useRecordingSession({ session, enabled: isReady, seedTimeRange });
+  // `startRecording()` runs asynchronously, so gate the loop on `isRecording`
+  // (below) — otherwise early ticks call session.record() while the recorder
+  // is still `_recording === false` and the frames are silently dropped, so
+  // IDB never advances and the scrubber's live-edge time label stays frozen.
+  const { isRecording } = useRecordingSession({ session, enabled: isReady, seedTimeRange });
 
   // One combined controller replaces the session→dvr→rate→player→scrubber chain.
   const ctl = useDvrController({
@@ -227,6 +236,9 @@ export function WorkerFanOutApp() {
   isLiveRef.current = isLive;
   const sessionRef = useRef(session);
   sessionRef.current = session;
+  // Gate the record loop on the recorder actually being started (see above).
+  const isRecordingRef = useRef(isRecording);
+  isRecordingRef.current = isRecording;
 
   // Track chart hosts so broadcastStream can address them by hostId
   const hostsRef = useRef<(FluxionHost | null)[]>(
@@ -247,14 +259,20 @@ export function WorkerFanOutApp() {
       }),
     );
 
+    // Previous tick's end, in relative ms. Starts at 0 so the FIRST recorded
+    // sample is anchored exactly at timeOrigin — never before it. Each tick's
+    // K samples fill (lastT, tEnd], keeping the recorded timeline strictly
+    // increasing and contiguous (the recorder/DVR assume monotonic t; backward
+    // or pre-origin timestamps corrupt getTimeRange and break DVR entry).
     let lastT = 0;
 
     const id = setInterval(() => {
       const tEnd = Date.now() - timeOrigin;
+      // Guard the mount-time degenerate interval where tEnd hasn't advanced past
+      // lastT yet — emitting then would produce a zero-width/backward window.
+      if (tEnd <= lastT) return;
       const tStart = lastT;
       lastT = tEnd;
-      const t = tStart; // relative ms (for synths + chart wire)
-      const wallT = t + timeOrigin; // absolute ms (for session.record)
 
       // Collect only hosts that are registered in the current pool instance.
       // Stale hosts from a previous pool (StrictMode double-invoke) would
@@ -268,30 +286,52 @@ export function WorkerFanOutApp() {
       }
       if (activeTargets.length === 0) return;
 
-      // Compute synth values once — shared by both record() and broadcastStream
-      const values = activeTargets.map(
-        ({ idx }) => synths[idx]!(t) + idx * 0.2 + (noise() - 0.5) * 0.1,
-      );
+      const nCh = activeTargets.length;
+      const K = SAMPLES_PER_BATCH;
+      // Spread K samples evenly across the real elapsed window (tStart, tEnd].
+      const step = (tEnd - tStart) / K;
 
-      // 1. Record to session (always — enables DVR playback of this data)
-      const s = sessionRef.current;
-      if (s) {
-        for (let ci = 0; ci < activeTargets.length; ci++) {
+      // Compute K synth values per channel (once) — shared by record() + broadcast.
+      // values[ci][i] = channel ci, sub-sample i. relTs[i] = relative ms.
+      const relTs = new Array<number>(K);
+      const values: number[][] = activeTargets.map(() => new Array<number>(K));
+      for (let i = 0; i < K; i++) {
+        const tRel = tStart + (i + 1) * step; // (tStart, tEnd], strictly increasing
+        relTs[i] = tRel;
+        for (let ci = 0; ci < nCh; ci++) {
           const { idx } = activeTargets[ci]!;
-          s.record(
-            `sensor-${idx}`,
-            { name: `sensor-${idx}`, value: values[ci]! } satisfies MetricSample,
-            wallT,
-          );
+          values[ci]![i] = synths[idx]!(tRel) + idx * 0.2 + (noise() - 0.5) * 0.1;
         }
       }
 
-      // 2. Broadcast raw packet to worker (live chart push)
+      // 1. Record every sub-sample to session (only once recording has actually
+      // started — else recorder.record() silently drops the frames).
+      const s = sessionRef.current;
+      if (s && isRecordingRef.current) {
+        for (let ci = 0; ci < nCh; ci++) {
+          const { idx } = activeTargets[ci]!;
+          for (let i = 0; i < K; i++) {
+            s.record(
+              `sensor-${idx}`,
+              { name: `sensor-${idx}`, value: values[ci]![i]! } satisfies MetricSample,
+              relTs[i]! + timeOrigin, // absolute wall ms
+            );
+          }
+        }
+      }
+
+      // 2. Broadcast ONE batched packet to the worker (live chart push).
+      // Layout: [K, t0_µs..t(K-1)_µs, ch0_v0..v(K-1), ch1_v0.., ...]
       if (isLiveRef.current) {
-        const buf = new Float32Array(1 + activeTargets.length);
-        buf[0] = t * 1000; // ms → µs
-        for (let ci = 0; ci < activeTargets.length; ci++) {
-          buf[1 + ci] = values[ci]! * 32767; // [-1,1] → raw_i16 range
+        const buf = new Float32Array(1 + K + K * nCh);
+        buf[0] = K;
+        for (let i = 0; i < K; i++) buf[1 + i] = relTs[i]! * 1000; // ms → µs
+        const valuesBase = 1 + K;
+        for (let ci = 0; ci < nCh; ci++) {
+          const base = valuesBase + ci * K;
+          for (let i = 0; i < K; i++) {
+            buf[base + i] = values[ci]![i]! * 32767; // [-1,1] → raw_i16 range
+          }
         }
         pool.broadcastStream(
           activeTargets.map(({ hostId, layerId }) => ({ hostId, layerId })),
@@ -304,6 +344,20 @@ export function WorkerFanOutApp() {
     return () => clearInterval(id);
   }, [pool, timeOrigin]);
 
+  // Force a full IDB flush once per second. At 500 Hz × 16 channels (8000
+  // frames/s) the store's default timer flush (≤200 frames / 500 ms = 400/s)
+  // can't keep up, so the IDB time range — and the scrubber's live-edge label —
+  // fell ever further behind real time and looked frozen. The public flush()
+  // drains the ENTIRE pending queue, so a 1 Hz call persists all recorded
+  // frames and keeps `getTimeRange().latest` (the scrubber max) tracking now.
+  useEffect(() => {
+    if (!session || !isReady) return;
+    const id = setInterval(() => {
+      void session.store.flush();
+    }, 1000);
+    return () => clearInterval(id);
+  }, [session, isReady]);
+
   // ── Render ─────────────────────────────────────────────────────────────
   return (
     <div className="flex flex-col h-full overflow-hidden bg-app-bg text-app-text font-sans text-[13px]">
@@ -313,8 +367,8 @@ export function WorkerFanOutApp() {
           worker fan-out · {CHART_COUNT} charts
         </span>
         <span className="text-app-muted text-[11px]">
-          1 pool · 1 worker · 1 postMessage/tick · {SAMPLE_HZ}Hz · {TIME_WINDOW_MS / 1000}
-          s window
+          1 pool · 1 worker · 1 postMessage/tick · {SAMPLE_HZ}Hz (batch {SAMPLES_PER_BATCH}×
+          {BATCH_HZ}Hz) · {TIME_WINDOW_MS / 1000}s window
         </span>
 
         {!isLive && dvr.player && (

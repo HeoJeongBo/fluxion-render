@@ -11,6 +11,12 @@ export interface DvrScrubberProps {
   /** When true the scrubber is read-only (from `useReplayScrubber`). */
   disabled: boolean;
 
+  /**
+   * Pointer-down handler from `useScrubberControls` (`beginScrub`). Resets the
+   * per-gesture DVR-entry guard at the start of each drag so a lost release
+   * can't permanently block entering time-travel. Optional.
+   */
+  onPointerDown?: () => void;
   /** `onChange` from `useScrubberControls` — fires on every drag event. */
   onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
   /**
@@ -100,6 +106,7 @@ export function DvrScrubber({
   max,
   value,
   disabled,
+  onPointerDown,
   onChange,
   onCommit,
   isLive,
@@ -175,6 +182,7 @@ export function DvrScrubber({
           max={max}
           step={1000}
           value={value}
+          onPointerDown={onPointerDown}
           onChange={onChange}
           onMouseUp={onCommit}
           onTouchEnd={onCommit}

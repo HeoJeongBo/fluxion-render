@@ -38,6 +38,7 @@ export function useReplaySession(opts: UseReplaySessionOptions): UseReplaySessio
   const [timeRange, setTimeRange] = useState<{ earliest: number; latest: number } | null>(null);
 
   useEffect(() => {
+    let cancelled = false;
     const { autoOpen = true, ...sessionOpts } = optsRef.current;
     const s = new ReplaySession(sessionOpts);
     setSession(s);
@@ -45,11 +46,19 @@ export function useReplaySession(opts: UseReplaySessionOptions): UseReplaySessio
 
     if (autoOpen) {
       s.open()
-        .then(() => setIsReady(true))
-        .catch((e) => setError(e instanceof Error ? e : new Error(String(e))));
+        .then(() => {
+          // A StrictMode (or fast unmount) cleanup already disposed this
+          // session; its open() resolves to a no-op — don't flip state on the
+          // torn-down lifecycle.
+          if (!cancelled) setIsReady(true);
+        })
+        .catch((e) => {
+          if (!cancelled) setError(e instanceof Error ? e : new Error(String(e)));
+        });
     }
 
     return () => {
+      cancelled = true;
       s.dispose();
       setSession(null);
       setIsReady(false);

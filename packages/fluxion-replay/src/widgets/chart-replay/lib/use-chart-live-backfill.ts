@@ -92,13 +92,17 @@ export function useChartLiveBackfill<T>(
   useEffect(() => {
     if (!active || !handle || !store) return;
 
-    // SYNC immediate reset (Phase 16). Worker postMessage is FIFO, so this
-    // reset lands AHEAD of any stale write that a just-disposed DVR
-    // hydrate may still be flushing through the queue. Without this, the
-    // exit-race can leave the chart blank: the async backfill chain
-    // sometimes loses to a late-arriving stale `handle.reset(dvrT)` from
-    // useChartReplay.
-    handle.reset(Date.now() - timeOrigin);
+    // Deliberately NO clear here. Clearing the chart before the async backfill
+    // batch is ready opened a visible empty-render window (~tens of ms across
+    // `flush()` + `getFramesByChannel()`) — the worker drew an empty chart, then
+    // the full window popped in: the DVR→Live "flicker". We now keep whatever
+    // live-pushed data is on screen until the post-query reset + pushBatch below
+    // swap it in one FIFO worker turn (no `await` between them → atomic).
+    //
+    // The stale `reset(dvrT)` this sync reset used to race against is now
+    // suppressed at its source: useChartReplay re-checks `cancelled` immediately
+    // before its chart write, so a just-disposed DVR hydrate can no longer emit
+    // it. The backfill's reset+pushBatch are therefore the last writes and win.
     setIsBackfilling(true);
 
     let cancelled = false;
@@ -122,10 +126,17 @@ export function useChartLiveBackfill<T>(
           t: f.t - timeOrigin,
           y: pickRef.current(channel.decode(f.payload) as T),
         }));
-        // Re-reset to "now" — wall clock may have drifted ~10-50 ms during
-        // the awaits. Subsequent pushBatch re-anchors the time axis at
-        // `[now - windowMs, now]`.
-        handle.reset(now - timeOrigin);
+        // Clear the stale DVR-era ring, but DO NOT rewind the axis here.
+        // `viewport.latestT` is GLOBAL to the host — shared by every layer.
+        // Passing `now` would yank ALL layers' time windows forward to
+        // `[now - windowMs, now]` immediately, blanking any sibling layer whose
+        // own backfill hasn't landed yet (its ring still holds old DVR-era
+        // samples that now fall outside the window). So we clear ring-only
+        // (reset() → CLEAR_DATA with latestT undefined → ring cleared, latestT
+        // untouched) and let the pushBatch below advance latestT to ~now via
+        // setData — monotonically, and only once real data backing the new
+        // window is present. The window never jumps into an empty region.
+        handle.reset();
         if (batch.length > 0) handle.pushBatch(batch);
       } catch {
         // Store may have been disposed mid-flight; ignore.

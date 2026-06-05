@@ -71,12 +71,12 @@ describe("useChartLiveBackfill", () => {
     const queryOrder = store.getFramesByChannel.mock.invocationCallOrder[0]!;
     expect(flushOrder).toBeLessThan(queryOrder);
 
-    // Phase 16: the sync immediate reset fires FIRST (race-safety), then
-    // the async chain produces another reset at the same timestamp.
-    expect(host.resets).toEqual([
-      { id: "signal", latestT: fixedNow },
-      { id: "signal", latestT: fixedNow },
-    ]);
+    // Single atomic reset + pushBatch after the query — no premature clear,
+    // so the chart never renders empty before the window lands. The reset
+    // carries NO latestT (ring-only clear): rewinding the shared viewport.latestT
+    // here would blank sibling layers on the same host (see the dvr.tsx CPU+MEM
+    // case). The pushBatch advances latestT to ~now via the data itself.
+    expect(host.resets).toEqual([{ id: "signal", latestT: undefined }]);
     expect(host.batches).toEqual([
       {
         id: "signal",
@@ -106,8 +106,8 @@ describe("useChartLiveBackfill", () => {
     });
 
     expect(store.flush).toHaveBeenCalledTimes(1);
-    // Phase 16: 2 resets — sync immediate + async post-query.
-    expect(host.resets.length).toBe(2);
+    // Single post-query reset (no premature clear).
+    expect(host.resets.length).toBe(1);
     expect(host.batches.length).toBe(1);
 
     vi.restoreAllMocks();
@@ -138,7 +138,7 @@ describe("useChartLiveBackfill", () => {
     vi.restoreAllMocks();
   });
 
-  it("timeOrigin shifts both reset latestT and batch sample timestamps", async () => {
+  it("timeOrigin shifts batch sample timestamps; reset carries no latestT", async () => {
     const timeOrigin = 1_700_000_000_000;
     const fixedNow = timeOrigin + 60_000;
     vi.spyOn(Date, "now").mockReturnValue(fixedNow);
@@ -149,7 +149,9 @@ describe("useChartLiveBackfill", () => {
     const { host } = setup(true, frames, timeOrigin);
     await act(async () => { await Promise.resolve(); await Promise.resolve(); });
 
-    expect(host.resets[0]).toEqual({ id: "signal", latestT: fixedNow - timeOrigin });
+    // Ring-only clear — no latestT rewind. The host-relative shift is applied
+    // to the batch data (below), which advances the axis as it lands.
+    expect(host.resets[0]).toEqual({ id: "signal", latestT: undefined });
     expect(host.batches[0]?.samples).toEqual([
       { t: fixedNow - 2_000 - timeOrigin, y: 1 },
       { t: fixedNow - 500 - timeOrigin, y: 2 },
@@ -165,11 +167,8 @@ describe("useChartLiveBackfill", () => {
     const { host } = setup(true, frames);
     await act(async () => { await Promise.resolve(); await Promise.resolve(); });
 
-    // Phase 16: 2 resets (sync immediate + async re-reset), 0 batches.
-    expect(host.resets).toEqual([
-      { id: "signal", latestT: fixedNow },
-      { id: "signal", latestT: fixedNow },
-    ]);
+    // Single post-query reset (ring-only, no latestT), 0 batches.
+    expect(host.resets).toEqual([{ id: "signal", latestT: undefined }]);
     expect(host.batches).toEqual([]); // nothing to push
 
     vi.restoreAllMocks();
@@ -183,14 +182,14 @@ describe("useChartLiveBackfill", () => {
     // Hold the query so the pending promise can't resolve before unmount.
     store.hold();
     await act(async () => { await Promise.resolve(); });
-    // Phase 16: sync immediate reset already fired on mount. The async
-    // chain is what we want to confirm bails on cancellation.
-    expect(host.resets.length).toBe(1);
+    // No premature reset fires; the async chain is held at the query, and is
+    // what we want to confirm bails on cancellation.
+    expect(host.resets.length).toBe(0);
     // Unmount BEFORE releasing.
     unmount();
     await act(async () => { await store.release(); });
-    // Should NOT have touched the layer beyond that initial sync reset.
-    expect(host.resets.length).toBe(1);
+    // Should NOT have touched the layer at all — the cancelled chain bails.
+    expect(host.resets.length).toBe(0);
     expect(host.batches).toEqual([]);
     vi.restoreAllMocks();
   });
@@ -241,10 +240,11 @@ describe("useChartLiveBackfill", () => {
     expect(store.flush).not.toHaveBeenCalled();
   });
 
-  // Phase 16: the sync immediate reset is the smoking-gun for the
-  // DVR→Live exit-race. It must fire SYNCHRONOUSLY when active flips true,
-  // BEFORE the async query result is processed.
-  it("Phase 16: sync immediate reset fires BEFORE the async chain produces its post-query reset", async () => {
+  // Flicker guard: returning DVR→Live must NOT clear the chart before the
+  // backfill batch is ready. The chart keeps its current data until the query
+  // resolves, then reset + pushBatch land together in one atomic step — so the
+  // user never sees an empty/intermediate frame.
+  it("no chart mutation until the backfill batch is ready (atomic reset+pushBatch)", async () => {
     const fixedNow = 1_700_000_000_000;
     vi.spyOn(Date, "now").mockReturnValue(fixedNow);
     const { host, store } = setup(true, [metricFrame("signal", fixedNow - 100, 1)]);
@@ -252,16 +252,37 @@ describe("useChartLiveBackfill", () => {
     store.hold();
     // Allow microtasks to run (the `await store.flush()` resolves).
     await act(async () => { await Promise.resolve(); });
-    // At this point the query is in flight (held). The sync reset must
-    // already be visible WITHOUT any batches being written yet.
-    expect(host.resets.length).toBe(1);
-    expect(host.resets[0]).toEqual({ id: "signal", latestT: fixedNow });
+    // The query is in flight (held). NOTHING has touched the chart yet — no
+    // premature clear, so the existing (live-pushed) data stays on screen.
+    expect(host.resets.length).toBe(0);
     expect(host.batches.length).toBe(0);
-    // Release the query — the async chain finishes, producing the second
-    // reset + batch.
+    expect(host.order).toEqual([]);
+    // Release the query — reset + pushBatch land together, reset first.
     await act(async () => { await store.release(); await Promise.resolve(); });
-    expect(host.resets.length).toBe(2);
+    expect(host.resets.length).toBe(1);
     expect(host.batches.length).toBe(1);
+    // The very first chart-mutating op the user could see is the reset,
+    // immediately followed by the full-window pushBatch — no gap, no empty frame.
+    // The reset carries no latestT (ring-only clear) → token is `reset:undef`.
+    expect(host.order).toEqual(["reset:undef", "pushBatch:1"]);
+    vi.restoreAllMocks();
+  });
+
+  // Cross-layer safety: the live backfill must clear its layer's ring WITHOUT
+  // rewinding the shared viewport.latestT. On a host with multiple line layers
+  // (e.g. dvr.tsx's CPU + MEM), rewinding latestT to `now` here would yank every
+  // layer's time window forward and blank the siblings whose backfill hasn't
+  // landed yet. Pinning `latestT: undefined` guards against a regression.
+  it("backfill clears the ring without rewinding latestT (reset carries no latestT)", async () => {
+    const fixedNow = 1_700_000_000_000;
+    vi.spyOn(Date, "now").mockReturnValue(fixedNow);
+    const { host } = setup(true, [metricFrame("signal", fixedNow - 1_000, 7)]);
+    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+
+    expect(host.resets).toEqual([{ id: "signal", latestT: undefined }]);
+    expect(host.order[0]).toBe("reset:undef");
+    // The window advances via the pushed data, not the reset.
+    expect(host.order.at(-1)).toBe("pushBatch:1");
     vi.restoreAllMocks();
   });
 });

@@ -223,4 +223,46 @@ describe("useReplaySession", () => {
       globalThis.indexedDB.open = orig;
     });
   });
+
+  // The "Opening IDB…" hang: a blocked open used to never settle (no onblocked
+  // handler), and a StrictMode mount→cleanup→mount left a zombie connection.
+  describe("open hang regression", () => {
+    const idb = (globalThis as unknown as {
+      __fakeIDBControls: {
+        setForceBlocked: (v: boolean) => void;
+        reset: () => void;
+      };
+    }).__fakeIDBControls;
+
+    afterEach(() => idb.reset());
+
+    it("surfaces error and keeps isReady false when the IDB open is blocked", async () => {
+      idb.setForceBlocked(true);
+      const { result } = renderHook(() => useReplaySession({ channels: [] }));
+      await act(async () => {
+        await Promise.resolve();
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+      expect(result.current.error).toBeInstanceOf(Error);
+      expect(result.current.error?.message).toMatch(/blocked/);
+      expect(result.current.isReady).toBe(false);
+    });
+
+    it("mount → unmount → fresh mount ends with isReady true (no zombie hang)", async () => {
+      // First mount, then unmount mid/early-open (StrictMode-style teardown).
+      const first = renderHook(() => useReplaySession({ channels: [] }));
+      first.unmount();
+      // A fresh mount must open cleanly and reach ready — the disposed first
+      // session must not leave a connection blocking this one.
+      const { result } = renderHook(() => useReplaySession({ channels: [] }));
+      await act(async () => {
+        await Promise.resolve();
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+      expect(result.current.isReady).toBe(true);
+      expect(result.current.error).toBeNull();
+    });
+  });
 });

@@ -51,13 +51,12 @@ export function useStorageInfo(
     };
 
     void fetch();
-    timerRef.current = setInterval(fetch, intervalMs);
+    const timer = setInterval(fetch, intervalMs);
+    timerRef.current = timer;
 
     return () => {
-      if (timerRef.current != null) {
-        clearInterval(timerRef.current);
-        timerRef.current = null;
-      }
+      clearInterval(timer);
+      timerRef.current = null;
     };
   }, [session, intervalMs]);
 

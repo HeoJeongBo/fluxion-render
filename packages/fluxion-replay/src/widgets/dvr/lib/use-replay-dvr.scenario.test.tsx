@@ -173,6 +173,68 @@ describe("useReplayDvr — real ReplayPlayer scenario (60s recording, seek to 30
 
     session.dispose();
   });
+
+  it("autoExitToLive fires exactly once at the frozen edge, then re-enter works", async () => {
+    const { session } = await seedSession();
+    const { result } = renderHook(() =>
+      useReplayDvr({
+        session,
+        enterReplay: (t, opts) => session.enterReplay(t, opts),
+        exitReplay: () => session.exitReplay(),
+        liveTimeRange: LIVE_TIME_RANGE,
+        rate: 100_000,
+      }),
+    );
+
+    // Enter near the end so play() reaches the frozen edge almost immediately.
+    await act(async () => { await result.current.enter(LIVE_TIME_RANGE.latest - 50); });
+    expect(result.current.isDvr).toBe(true);
+
+    // Run well past the edge — auto-exit should fire and NOT re-fire on
+    // subsequent ticks (no flapping between live/DVR).
+    await act(async () => { vi.advanceTimersByTime(500); });
+    expect(result.current.isDvr).toBe(false);
+    expect(result.current.player).toBeNull();
+
+    // Extra time must not resurrect DVR or null/dispose anything further.
+    await act(async () => { vi.advanceTimersByTime(1_000); });
+    expect(result.current.isDvr).toBe(false);
+    expect(result.current.player).toBeNull();
+
+    // The controller is reusable after an auto-exit: a fresh enter() works.
+    await act(async () => { await result.current.enter(LIVE_TIME_RANGE.earliest + 10_000); });
+    expect(result.current.isDvr).toBe(true);
+    expect(result.current.player).not.toBeNull();
+    expect(result.current.player!.currentT).toBe(LIVE_TIME_RANGE.earliest + 10_000);
+
+    result.current.exit();
+    session.dispose();
+  });
+
+  it("autoExitToLive: false does NOT auto-return at the frozen edge", async () => {
+    const { session } = await seedSession();
+    const { result } = renderHook(() =>
+      useReplayDvr({
+        session,
+        enterReplay: (t, opts) => session.enterReplay(t, opts),
+        exitReplay: () => session.exitReplay(),
+        liveTimeRange: LIVE_TIME_RANGE,
+        autoExitToLive: false,
+        rate: 100_000,
+      }),
+    );
+
+    await act(async () => { await result.current.enter(LIVE_TIME_RANGE.latest - 50); });
+    expect(result.current.isDvr).toBe(true);
+
+    // Playback reaches the end, but with autoExitToLive off it stays in DVR.
+    await act(async () => { vi.advanceTimersByTime(500); });
+    expect(result.current.isDvr).toBe(true);
+    expect(result.current.player).not.toBeNull();
+
+    result.current.exit();
+    session.dispose();
+  });
 });
 
 // ─── Live-while-DVR: store keeps growing during time travel ──────────────────
