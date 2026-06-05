@@ -1,4 +1,17 @@
-import { vi } from "vitest";
+import { cleanup } from "@testing-library/react";
+import { afterEach, vi } from "vitest";
+
+// ─── Auto-unmount React trees after every test ────────────────────────────────
+// `globals: false` in vitest.config means @testing-library's auto-cleanup is NOT
+// registered, so any test that render()s without an explicit unmount() leaves a
+// live React tree (and its player/store subscriptions) alive. Those can flush a
+// state update during happy-dom teardown — React then commits against a
+// torn-down `window`, surfacing as an "Unhandled Error: window is not defined"
+// that makes vitest exit non-zero even though every test passed. A global
+// afterEach(cleanup) unmounts every rendered tree before teardown.
+afterEach(() => {
+  cleanup();
+});
 
 // ─── IndexedDB in-memory stub ─────────────────────────────────────────────────
 
