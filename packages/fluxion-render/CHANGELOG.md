@@ -1,5 +1,12 @@
 # Changelog
 
+# [0.16.0](https://github-personal/HeoJeongBo/fluxion-render/compare/fluxion-render-v0.15.0...fluxion-render-v0.16.0) (2026-06-05)
+
+
+### Features
+
+* **replay,render,examples:** DVR scrub perf + entry fix, draw decimation, coverage ([b120d61](https://github-personal/HeoJeongBo/fluxion-render/commit/b120d61f678024f7ff685dcf565f4e2ef694ddb4)), closes [hi#rate](https://github-personal/hi/issues/rate)
+
 # [0.15.0](https://github-personal/HeoJeongBo/fluxion-render/compare/fluxion-render-v0.14.0...fluxion-render-v0.15.0) (2026-06-04)
 
 
