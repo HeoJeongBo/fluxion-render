@@ -146,11 +146,18 @@ lineLayer('signal', {
   retentionMs?: number,  // data retention window in ms
   maxHz?: number,        // expected max sample rate — auto-calculates capacity
   visible?: boolean,     // show/hide without reinitialising the layer (default true)
+  decimate?: boolean,    // min/max-decimate the DRAW at high sample density (default false)
 })
 ```
 
 `retentionMs` + `maxHz` auto-calculate `capacity = ceil(retentionMs/1000 * maxHz * 1.1)`.  
 Explicit `capacity` always takes priority when both are set.
+
+**High-rate decimation** — set `decimate: true` to draw a min/max-per-pixel-column
+path when there are far more visible samples than pixels (e.g. 500Hz over a multi-second
+window). The rendered line stays visually identical — every peak/trough is preserved at
+display resolution — while `lineTo` calls drop from O(samples) to O(width). The ring buffer
+still retains **every** sample, so hover, scan (y-auto bounds), and export are unaffected.
 
 **Toggling series visibility** — use `visible` with `useLayerConfig` to show/hide a layer without reinitialising the host or losing buffered data:
 
