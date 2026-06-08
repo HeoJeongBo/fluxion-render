@@ -432,9 +432,19 @@ export class ReplayStore {
       // Delete the oldest 10 % of the recorded time span
       const cutoffMs = timeRange.earliest + Math.floor(spanMs * 0.1);
       await this.deleteFramesBefore(cutoffMs);
+      // Clip in-memory segments to match the new IDB lower bound so that
+      // getSegments() / detectGaps() / snapTimeToSegment() stay consistent
+      // with what actually exists in the database.
+      this._trimSegmentsBefore(cutoffMs);
     } catch {
       // eviction failure must not crash the flush pipeline
     }
+  }
+
+  private _trimSegmentsBefore(cutoffMs: number): void {
+    this._segments = this._segments
+      .map((seg) => ({ start: Math.max(seg.start, cutoffMs), end: seg.end }))
+      .filter((seg) => seg.end === null || seg.end > seg.start);
   }
 
   private _startStorageLogTimer(): void {

@@ -47,15 +47,23 @@ function mergeSorted(target: SerializedFrame[], incoming: SerializedFrame[]): vo
     target.push(...incoming);
     return;
   }
+  // Fast-path: prefetch windows are time-ordered, so incoming almost always
+  // starts at or after the last buffered frame — a simple append suffices.
+  if (incoming[0]!.t >= target[target.length - 1]!.t) {
+    target.push(...incoming);
+    return;
+  }
+  // Slow-path: genuine interleave (e.g. after a seek that partially overlaps
+  // existing buffer). O(n+m) merge into a temporary array then replace in-place.
   const result: SerializedFrame[] = [];
   let i = 0,
     j = 0;
   while (i < target.length && j < incoming.length) {
-    if (target[i].t <= incoming[j].t) result.push(target[i++]);
-    else result.push(incoming[j++]);
+    if (target[i]!.t <= incoming[j]!.t) result.push(target[i++]!);
+    else result.push(incoming[j++]!);
   }
-  while (i < target.length) result.push(target[i++]);
-  while (j < incoming.length) result.push(incoming[j++]);
+  while (i < target.length) result.push(target[i++]!);
+  while (j < incoming.length) result.push(incoming[j++]!);
   target.length = 0;
   for (const f of result) target.push(f);
 }
@@ -74,6 +82,11 @@ export class ReplayPlayer {
   private _seekListeners = new Set<SeekListener>();
   private _prefetchBuffer: SerializedFrame[] = [];
   private _prefetchedUpTo: number;
+  // Tracks the last explicitly set position (via seek() or captured at stop()).
+  // Used by play() so that seek() → stop() → play() resumes at the seek point
+  // rather than timeRange.earliest (which VirtualClock.stop() would imply via
+  // its _startVirtualMs = 0 reset).
+  private _lastKnownT: number;
   private _isPrefetching = false;
   // Bumped whenever the prefetch buffer is reset (seek/play/stop). An in-flight
   // _prefetch captures this at start and discards its result if it changed —
@@ -92,11 +105,19 @@ export class ReplayPlayer {
     // inclusive lower bound (covering earliest exactly) while all subsequent
     // calls use lowerOpen=true to avoid re-fetching the boundary frame.
     this._prefetchedUpTo = opts.timeRange.earliest - 1;
+    this._lastKnownT = opts.timeRange.earliest;
     this._clock = new VirtualClock();
   }
 
   get currentT(): number {
-    return this._clock.currentT;
+    // "stopped" is the only state where _clock.currentT is unreliable:
+    // VirtualClock.stop() resets _startVirtualMs to 0, so the clock returns 0
+    // regardless of where playback ended or where the last seek was.
+    // _lastKnownT is captured by stop() just before the reset, giving the
+    // correct "where am I" answer. All other states (idle, playing, paused)
+    // rely on the clock directly — paused snapshots currentT into
+    // _startVirtualMs so _clock.currentT remains accurate there too.
+    return this._state === "stopped" ? this._lastKnownT : this._clock.currentT;
   }
 
   get state(): ReplayPlayerState {
@@ -120,6 +141,7 @@ export class ReplayPlayer {
       this._timeRange.earliest,
       Math.min(this._timeRange.latest, t),
     );
+    this._lastKnownT = clamped;
     this._clock.seek(clamped);
     // Use at least 3s lookback so a keyframe (default interval = 2s) is always included
     // before the seek point — prevents VP8 decoder corruption from missing keyframes.
@@ -134,14 +156,13 @@ export class ReplayPlayer {
 
   play(rate = 1.0): void {
     if (this._state === "idle" || this._state === "stopped") {
-      // Preserve a prior `seek()` target. Without this, `play()` would
-      // silently rewind back to `timeRange.earliest`, breaking the
-      // "seek then play" pattern every video player follows. Clamp into
-      // range so a stale clock state (e.g. `stop()` zeroes it) still
-      // lands at a sane starting point.
+      // Use _lastKnownT (updated by seek() and stop()) instead of
+      // _clock.currentT so that seek() → stop() → play() resumes at
+      // the seek point. VirtualClock.stop() resets _startVirtualMs to 0,
+      // so _clock.currentT would always return earliest after a stop.
       const startT = Math.max(
         this._timeRange.earliest,
-        Math.min(this._timeRange.latest, this._clock.currentT),
+        Math.min(this._timeRange.latest, this._lastKnownT),
       );
       this._prefetchGeneration++;
       this._prefetchedUpTo = Math.max(startT - 3_000, this._timeRange.earliest) - 1;
@@ -168,6 +189,9 @@ export class ReplayPlayer {
   }
 
   stop(): void {
+    // Snapshot the current position before the clock resets to 0, so a
+    // subsequent play() can resume from here rather than timeRange.earliest.
+    this._lastKnownT = this._clock.currentT;
     this._clock.stop();
     this._offTick?.();
     this._offTick = null;
@@ -264,7 +288,7 @@ export class ReplayPlayer {
     // Check for end of timeline
     if (currentT >= this._timeRange.latest) {
       this._ended = true;
-      this.pause();
+      this.stop();
       for (const listener of this._endListeners) listener();
       return;
     }
@@ -278,7 +302,7 @@ export class ReplayPlayer {
     // Buffer is kept sorted by t, so find the first frame past currentT with
     // binary search and splice in O(k) instead of scanning the whole buffer.
     const cutoff = upperBound(this._prefetchBuffer, currentT);
-    const toEmit = cutoff > 0 ? this._prefetchBuffer.splice(0, cutoff) : [];
+    const toEmit = this._prefetchBuffer.splice(0, cutoff);
 
     for (const f of toEmit) {
       const channel = this._channels.get(f.channelId);

@@ -23,6 +23,11 @@ export class VirtualClock {
   }
 
   start(virtualStartMs: number, rate = 1.0): void {
+    // Stop any existing loop before starting a new one to prevent a duplicate
+    // RAF chain when start() is called while already running.
+    if (this._running) {
+      this._stopLoop();
+    }
     this._startVirtualMs = virtualStartMs;
     this._startWallMs = Date.now();
     this._rate = rate;

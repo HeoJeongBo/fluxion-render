@@ -22,18 +22,22 @@ export function snapTimeToSegment(
 ): number {
   if (segments.length === 0) return t;
 
+  // Sort a defensive copy so the forward-snap and clamp logic below is
+  // guaranteed to operate on start-ascending order regardless of input.
+  const sorted = [...segments].sort((a, b) => a.start - b.start);
+
   // Inside a segment? Return t as-is.
-  for (const seg of segments) {
+  for (const seg of sorted) {
     const end = seg.end ?? latest;
     if (t >= seg.start && t <= end) return t;
   }
 
   // In a gap before some future segment? Forward-snap to its start.
-  for (const seg of segments) {
+  for (const seg of sorted) {
     if (seg.start > t) return seg.start;
   }
 
   // Past the last segment — clamp to its end (or live latest).
-  const last = segments[segments.length - 1]!;
+  const last = sorted[sorted.length - 1]!;
   return last.end ?? latest;
 }

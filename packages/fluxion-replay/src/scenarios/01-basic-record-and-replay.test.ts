@@ -174,4 +174,52 @@ describe("Scenario 01: basic record and replay", () => {
 
     session.exitReplay();
   });
+
+  // B1 fix: seek() → stop() → play() must resume at the seek point, not earliest
+  it("seek → stop → play resumes from the seek position, not timeRange.earliest", async () => {
+    seedMetricFrames(session, "cpu", 10); // t=1000..10000, stepT=1000
+    session.record("cpu", { name: "cpu", value: -1 }, 15_000); // sentinel
+    await session.store.flush();
+
+    const player = await session.enterReplay();
+    player.seek(7_000);
+    await drain();
+    expect(player.currentT).toBe(7_000);
+
+    player.stop();
+    expect(player.state).toBe("stopped");
+
+    // After stop, play() must resume from 7_000 (the seek point), not 1_000 (earliest)
+    const firstFrameTs: number[] = [];
+    player.onFrame(cpuChannel, ({ t }) => firstFrameTs.push(t));
+    player.play();
+    await vi.advanceTimersByTimeAsync(500);
+
+    // First frames must be near 7_000 (3s lookback allowed), not back at 1_000
+    expect(firstFrameTs.length).toBeGreaterThan(0);
+    expect(firstFrameTs[0]).toBeGreaterThanOrEqual(7_000 - 3_000);
+    expect(firstFrameTs[firstFrameTs.length - 1]).toBeGreaterThanOrEqual(7_000);
+
+    session.exitReplay();
+  });
+
+  // B2 fix: onEnd transitions player to "stopped", not "paused"
+  it("onEnd leaves player state as 'stopped', not 'paused'", async () => {
+    seedMetricFrames(session, "cpu", 3); // t=1000..3000
+    await session.store.flush();
+
+    const player = await session.enterReplay();
+    const states: string[] = [];
+    player.onStateChange((s) => states.push(s));
+
+    player.play();
+    await vi.advanceTimersByTimeAsync(10_000); // play to end
+
+    // Player must have stopped (not paused) after onEnd
+    expect(player.state).toBe("stopped");
+    expect(states).toContain("stopped");
+    expect(states[states.length - 1]).toBe("stopped");
+
+    session.exitReplay();
+  });
 });

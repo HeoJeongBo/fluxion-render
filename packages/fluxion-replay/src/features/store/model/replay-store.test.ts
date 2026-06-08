@@ -380,6 +380,73 @@ describe("ReplayStore", () => {
       deleteSpy.mockRestore();
     });
 
+    it("_maybeEvict trims segments whose start is before the cutoff", async () => {
+      const evictStore = new ReplayStore({ batchIntervalMs: 9999, evictThresholdPct: 0 });
+      await evictStore.open();
+      // Segment spans [0, 5000]; frames at t=[1000..5000]
+      evictStore.startSegment(0);
+      vi.spyOn(evictStore, "getStorageInfo").mockResolvedValue({
+        usedBytes: 100, quotaBytes: 100, percentUsed: 50, idbFrameCount: 5,
+      });
+      for (const t of [1000, 2000, 3000, 4000, 5000]) {
+        evictStore.appendFrame({ t, channelId: "ch", payload: new ArrayBuffer(4) });
+      }
+      await evictStore.flush();
+
+      // cutoffMs = 1000 + floor(4000 * 0.1) = 1400
+      const segs = evictStore.getSegments();
+      expect(segs.length).toBe(1);
+      expect(segs[0]!.start).toBeGreaterThanOrEqual(1400);
+      evictStore.dispose();
+    });
+
+    it("_maybeEvict removes segments that end before the cutoff", async () => {
+      const evictStore = new ReplayStore({ batchIntervalMs: 9999, evictThresholdPct: 0 });
+      await evictStore.open();
+      // Two segments: [0, 500] (ends before cutoff) and [2000, 5000] (after cutoff)
+      evictStore.startSegment(0);
+      evictStore.endSegment(500);
+      evictStore.startSegment(2000);
+      evictStore.endSegment(5000);
+      vi.spyOn(evictStore, "getStorageInfo").mockResolvedValue({
+        usedBytes: 100, quotaBytes: 100, percentUsed: 50, idbFrameCount: 5,
+      });
+      // Frames: earliest=1000, latest=5000 → cutoff = 1400
+      for (const t of [1000, 2000, 3000, 4000, 5000]) {
+        evictStore.appendFrame({ t, channelId: "ch", payload: new ArrayBuffer(4) });
+      }
+      await evictStore.flush();
+
+      // Segment [0, 500] is fully before cutoff=1400 → removed
+      // Segment [2000, 5000] is fully after → kept
+      const segs = evictStore.getSegments();
+      expect(segs).toHaveLength(1);
+      expect(segs[0]!.start).toBe(2000);
+      expect(segs[0]!.end).toBe(5000);
+      evictStore.dispose();
+    });
+
+    it("_maybeEvict clips an open segment (end=null) to the cutoff without removing it", async () => {
+      const evictStore = new ReplayStore({ batchIntervalMs: 9999, evictThresholdPct: 0 });
+      await evictStore.open();
+      // Open segment representing an ongoing recording
+      evictStore.startSegment(0);
+      vi.spyOn(evictStore, "getStorageInfo").mockResolvedValue({
+        usedBytes: 100, quotaBytes: 100, percentUsed: 50, idbFrameCount: 5,
+      });
+      for (const t of [1000, 2000, 3000, 4000, 5000]) {
+        evictStore.appendFrame({ t, channelId: "ch", payload: new ArrayBuffer(4) });
+      }
+      await evictStore.flush();
+
+      // cutoffMs = 1400; open segment start moves to 1400, end stays null
+      const segs = evictStore.getSegments();
+      expect(segs).toHaveLength(1);
+      expect(segs[0]!.start).toBeGreaterThanOrEqual(1400);
+      expect(segs[0]!.end).toBeNull();
+      evictStore.dispose();
+    });
+
     it("_maybeEvict over threshold but empty store → no delete (null time range)", async () => {
       const evictStore = new ReplayStore({ batchIntervalMs: 9999, evictThresholdPct: 0 });
       await evictStore.open();

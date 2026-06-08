@@ -467,15 +467,18 @@ describe("ReplayPlayer", () => {
       player.dispose();
     });
 
-    it("stop() then play() restarts from timeRange.earliest", () => {
+    it("stop() then play() resumes from the position where stop() was called", () => {
       const { player } = makePlayer(500, 5_000);
       player.seek(3_000);
       player.play(1);
-      vi.advanceTimersByTime(32);
+      vi.advanceTimersByTime(32); // advance slightly past 3_000
+      const posAtStop = player.currentT;
       player.stop();
-      // After stop(), clock.currentT resets to 0 → clamped up to earliest.
+      // After stop(), currentT returns _lastKnownT (position at stop time),
+      // and play() resumes from that position — not from timeRange.earliest.
+      expect(player.currentT).toBe(posAtStop);
       player.play(1);
-      expect(player.currentT).toBe(500);
+      expect(player.currentT).toBeGreaterThanOrEqual(posAtStop);
       player.stop();
       player.dispose();
     });

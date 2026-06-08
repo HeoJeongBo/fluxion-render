@@ -225,6 +225,10 @@ export function useChartReplay<T>(
           t = queuedT;
           queuedT = null;
         }
+      } catch (err) {
+        // Surface IDB / decode errors — they would otherwise be silently
+        // swallowed because runHydrate is called via `void`.
+        console.error("[useChartReplay] hydrate failed:", err);
       } finally {
         inFlight = false;
         hydratingT = null;

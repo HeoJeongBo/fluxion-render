@@ -116,8 +116,10 @@ export function useChartReplayFanOut<T>(
   const [isHydrating, setIsHydrating] = useState(false);
   const [hydratedCount, setHydratedCount] = useState(0);
 
-  // Refs so inline closures (getSources / isHostLive) don't reset the effect on
-  // every render — only structural deps drive re-subscription.
+  // Mirror latest callbacks into refs so the effect closure doesn't go stale
+  // when the parent re-renders with a new function reference. Only structural
+  // deps (player, store, channel, windowMs, timeOrigin, marginMs) drive
+  // re-subscription — callback identity changes are intentionally excluded.
   const getSourcesRef = useRef(opts.getSources);
   getSourcesRef.current = opts.getSources;
   const isHostLiveRef = useRef(opts.isHostLive);
@@ -244,6 +246,10 @@ export function useChartReplayFanOut<T>(
           t = queuedT;
           queuedT = null;
         }
+      } catch (err) {
+        // Surface IDB / decode errors — they would otherwise be silently
+        // swallowed because runHydrate is called via `void`.
+        console.error("[useChartReplayFanOut] hydrate failed:", err);
       } finally {
         inFlight = false;
         hydratingT = null;
@@ -290,7 +296,10 @@ export function useChartReplayFanOut<T>(
       offFrame();
       offTick();
     };
-  }, [player, store, channel, windowMs, timeOrigin, marginMs, opts.isHostLive]);
+  // opts.isHostLive and opts.getSources are intentionally excluded: they are
+  // mirrored into refs above and the effect reads them via those refs, so
+  // function-reference churn on the parent does not tear down the subscription.
+  }, [player, store, channel, windowMs, timeOrigin, marginMs]);
 
   return { isHydrating, hydratedCount };
 }

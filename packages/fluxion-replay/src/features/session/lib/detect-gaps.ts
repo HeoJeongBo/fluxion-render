@@ -31,10 +31,15 @@ export function detectGaps(
 ): GapInfo[] {
   if (segments.length < 2) return [];
 
+  // Sort a defensive copy — callers (e.g. tests, ad-hoc calls) don't have
+  // to guarantee start-ascending order; startSegment() does, but we can't
+  // rely on that for all call sites.
+  const sorted = [...segments].sort((a, b) => a.start - b.start);
+
   const gaps: GapInfo[] = [];
-  for (let i = 0; i < segments.length - 1; i++) {
-    const current = segments[i]!;
-    const next = segments[i + 1]!;
+  for (let i = 0; i < sorted.length - 1; i++) {
+    const current = sorted[i]!;
+    const next = sorted[i + 1]!;
     const gapStart = current.end ?? (latest ?? current.start);
     const gapEnd = next.start;
     if (gapEnd > gapStart) {
