@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.11.1](https://github-personal/HeoJeongBo/fluxion-render/compare/fluxion-replay-v0.11.0...fluxion-replay-v0.11.1) (2026-06-08)
+
+
+### Bug Fixes
+
+* **replay:** fix bugs, improve perf, and expand test coverage ([844c71a](https://github-personal/HeoJeongBo/fluxion-render/commit/844c71ac933330abbbfd224520efc18d0f8a0f7e))
+
 # [0.11.0](https://github-personal/HeoJeongBo/fluxion-render/compare/fluxion-replay-v0.10.0...fluxion-replay-v0.11.0) (2026-06-05)
 
 
