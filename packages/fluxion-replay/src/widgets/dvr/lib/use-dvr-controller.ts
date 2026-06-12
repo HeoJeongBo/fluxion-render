@@ -32,7 +32,11 @@ export interface UseDvrControllerOptions {
   recordingStartMs?: number;
   /** Forwarded to `useReplayScrubber`. */
   minSpanMs?: number;
-  /** Forwarded to `useReplayScrubber`. */
+  /**
+   * Forwarded to BOTH `useReplayScrubber` and `useScrubberControls` so the
+   * slider's value quantum and the controls' live-edge checks stay in
+   * lock-step (default 1000 in both).
+   */
   snapMs?: number;
 }
 
@@ -124,6 +128,7 @@ export function useDvrController(opts: UseDvrControllerOptions): UseDvrControlle
     dvr,
     rate,
     liveEdgeEpsMs,
+    snapMs,
   });
 
   const scrubber = useReplayScrubber({

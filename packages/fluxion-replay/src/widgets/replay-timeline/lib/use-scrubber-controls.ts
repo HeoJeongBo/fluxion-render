@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import type { ReplayPlayer } from "../../../features/player/model/replay-player";
 import type { UseReplayDvrResult } from "../../dvr/lib/use-replay-dvr";
 
 export interface UseScrubberControlsOptions {
@@ -11,10 +12,25 @@ export interface UseScrubberControlsOptions {
   rate?: number;
   /**
    * Distance from the live edge (in milliseconds) within which a scrub target
-   * is treated as "back to live" rather than a DVR seek. Prevents accidental
-   * DVR entry from micro-drags near the right edge. Default `250`.
+   * is treated as "back to live" rather than a DVR seek. Measured from the
+   * SNAPPED edge (see `snapMs`), since the slider only emits snapped values.
+   * Prevents accidental DVR entry from micro-drags near the right edge.
+   * Default `250`.
    */
   liveEdgeEpsMs?: number;
+  /**
+   * Snap quantum (ms) the paired slider quantizes its emitted values to —
+   * keep equal to `useReplayScrubber`'s `snapMs` (both default `1000`).
+   * Live-edge checks compare the drag value against the SNAPPED edge
+   * (`floor(edge / snapMs) * snapMs`): the slider's max is the snapped
+   * (floored) latest, so a thumb released at the far right reads up to
+   * `snapMs - 1` ms below the raw edge — an unsnapped comparison would miss
+   * the `liveEdgeEpsMs` window ~`(snapMs - eps) / snapMs` of the time and
+   * turn a "return to live" release into a near-edge DVR seek. Set `<= 0`
+   * to disable snapping (raw-edge comparison) when the slider input is not
+   * quantized.
+   */
+  snapMs?: number;
 }
 
 export interface UseScrubberControlsResult {
@@ -44,10 +60,18 @@ export interface UseScrubberControlsResult {
    * Commit handler for `<input type="range">`. Call on `onMouseUp`,
    * `onTouchEnd`, and `onKeyUp` to finalise the scrub target:
    *
-   * - Live → near live edge: no-op (micro-drag tolerance).
+   * - Live → near live edge (no drag-enter started): no-op (micro-drag
+   *   tolerance).
    * - Live → past live edge: enter DVR at `scrubT` then start playing.
+   * - Live with this gesture's drag-enter still in flight → near live edge:
+   *   CANCEL it via `dvr.exit()` (generation bump) so the late-resolving
+   *   enter can't flip the UI back into DVR at a stale drag position.
+   * - Live with the drag-enter still in flight → mid-timeline: chain onto
+   *   the pending enter so playback starts at the RELEASE point.
    * - DVR → near frozen edge: exit DVR, return to live.
    * - DVR → mid-timeline: seek to `scrubT` and resume playing.
+   *
+   * All edge comparisons use the snapped edge (see `snapMs`).
    */
   commitScrub: () => void;
 }
@@ -73,9 +97,17 @@ export interface UseScrubberControlsResult {
 export function useScrubberControls(
   opts: UseScrubberControlsOptions,
 ): UseScrubberControlsResult {
-  const { dvr, rate = 1, liveEdgeEpsMs = 250 } = opts;
+  const { dvr, rate = 1, liveEdgeEpsMs = 250, snapMs = 1000 } = opts;
 
   const [scrubT, setScrubT] = useState<number | null>(null);
+
+  // Floor an edge timestamp to the slider's snap quantum so edge checks
+  // compare like-with-like: the slider only emits snapped values, so the
+  // raw edge is unreachable whenever it falls mid-quantum.
+  const snapEdge = useCallback(
+    (edge: number) => (snapMs > 0 ? Math.floor(edge / snapMs) * snapMs : edge),
+    [snapMs],
+  );
 
   // Keep rate in a ref so commitScrub's useCallback doesn't need to list it
   // as a dep — prevents a new commitScrub identity on every rate change, which
@@ -90,6 +122,17 @@ export function useScrubberControls(
   // enter (the flaky-entry bug). Reset at commit (gesture end).
   const enteredDuringDragRef = useRef(false);
 
+  // The live→DVR enter started by THIS drag gesture, while still relevant.
+  // commitScrub consumes it to either CANCEL it (released back at the live
+  // edge) or chain seek+play onto it (released mid-past) — previously an
+  // uncancelled in-flight enter resolved AFTER the release and flipped the
+  // UI into DVR paused at the stale drag position (the intermittent
+  // "dot jumps left after returning to live" bug).
+  const pendingEnterRef = useRef<{
+    promise: Promise<ReplayPlayer | null>;
+    resolved: boolean;
+  } | null>(null);
+
   // Reset the per-gesture entry flag at the START of every drag. The flag is
   // otherwise only cleared in commitScrub, so a gesture whose release was lost
   // (pointer-up off the input/window, or the handler swapped out mid-gesture)
@@ -99,6 +142,9 @@ export function useScrubberControls(
   // drag, so it un-wedges the flag. Wire to the scrubber input's onPointerDown.
   const beginScrub = useCallback(() => {
     enteredDuringDragRef.current = false;
+    // Drop a stale pending enter from a gesture whose release was lost, for
+    // the same reason — it must not be cancelled/chained by THIS gesture.
+    pendingEnterRef.current = null;
   }, []);
 
   // Coalesce drag-time seeks to ONE per animation frame. A mousemove fires
@@ -157,9 +203,16 @@ export function useScrubberControls(
       // drags meaningfully past the live edge — so the UI switches to DVR and
       // the chart previews mid-drag. The flag (not dvr.isDvr, which flips only
       // after the async setPlayer) gates the synchronous burst to one enter.
-      if (!enteredDuringDragRef.current && t < range.latest - liveEdgeEpsMs) {
+      if (!enteredDuringDragRef.current && t < snapEdge(range.latest) - liveEdgeEpsMs) {
         enteredDuringDragRef.current = true;
-        void dvr.enter(t).then((p) => {
+        // Keep the raw promise so commitScrub can cancel or chain onto it.
+        // This pause/re-arm handler is attached FIRST — .then callbacks on
+        // the same promise run FIFO, so a commit-chained seek+play always
+        // runs after the pause and wins.
+        const entry = { promise: dvr.enter(t), resolved: false };
+        pendingEnterRef.current = entry;
+        void entry.promise.then((p) => {
+          entry.resolved = true;
           if (p) {
             // Preview is driven by seek→onSeek→hydrate; we do NOT want playback
             // while the user is still dragging. Force paused regardless of the
@@ -175,7 +228,7 @@ export function useScrubberControls(
       // After isDvr flips, subsequent ticks hit the seek branch above — preview
       // continues with no further enter.
     },
-    [dvr, liveEdgeEpsMs, scheduleSeek],
+    [dvr, liveEdgeEpsMs, snapEdge, scheduleSeek],
   );
 
   const commitScrub = useCallback(() => {
@@ -187,19 +240,48 @@ export function useScrubberControls(
     // End of gesture → re-arm for the next drag.
     const enteredThisDrag = enteredDuringDragRef.current;
     enteredDuringDragRef.current = false;
+    const pendingEnter = pendingEnterRef.current;
+    pendingEnterRef.current = null;
     if (t == null || !range) return;
 
     if (!dvr.isDvr) {
-      // Live mode AND this drag never entered DVR (e.g. a quick click without a
-      // past-edge drag, or the single drag-enter hasn't resolved yet). Only
-      // commit-enter when we didn't already start one during the drag — firing
-      // a second enter here would race the in-flight one (re-introducing the
-      // flaky-entry bug). Play the RETURNED player, not `dvr.player` (still null
-      // in this closure until the async setPlayer lands).
-      if (!enteredThisDrag && t < range.latest - liveEdgeEpsMs) {
+      const liveEdge = snapEdge(range.latest) - liveEdgeEpsMs;
+      if (!enteredThisDrag) {
+        // Live mode AND this drag never entered DVR (e.g. a quick click without
+        // a past-edge drag). Play the RETURNED player, not `dvr.player` (still
+        // null in this closure until the async setPlayer lands).
+        if (t < liveEdge) {
+          void dvr.enter(t).then((p) => p?.play(rateRef.current));
+        }
+        return;
+      }
+      // This gesture DID start a drag-enter, yet we're still (or again) live.
+      if (t >= liveEdge) {
+        // Released back at the live edge → CANCEL the in-flight enter. exit()
+        // bumps the DVR generation, so when the enter resolves it disposes its
+        // player and never touches state — without this the late enter lands
+        // and yanks the UI back into DVR at the stale drag position (the
+        // intermittent "dot jumps left after returning to live"). Safe while
+        // not yet in DVR: setPlayer(null) bails and exitReplay is idempotent.
+        dvr.exit();
+      } else if (pendingEnter && !pendingEnter.resolved) {
+        // Released mid-past with the enter still in flight → start playback at
+        // the RELEASE point once it lands (the drag's pause handler was
+        // attached first and runs first). A null player means the enter lost a
+        // race to a newer enter()/exit() — yield to that newer action rather
+        // than re-entering, which could kill a gesture already in progress.
+        void pendingEnter.promise.then((p) => {
+          if (!p) return;
+          p.seek(t);
+          p.play(rateRef.current);
+        });
+      } else {
+        // The drag-enter already resolved yet we're live again — a mid-drag
+        // autoExitToLive (player hit the frozen edge) tore it down. Re-enter
+        // at the release point; its generation bump supersedes anything stale.
         void dvr.enter(t).then((p) => p?.play(rateRef.current));
       }
-    } else if (t >= (dvr.frozenLatest ?? range.latest) - liveEdgeEpsMs) {
+    } else if (t >= snapEdge(dvr.frozenLatest ?? range.latest) - liveEdgeEpsMs) {
       // Pulled back to the live edge → exit DVR.
       dvr.exit();
     } else {
@@ -207,7 +289,7 @@ export function useScrubberControls(
       dvr.player?.seek(t);
       dvr.player?.play(rateRef.current);
     }
-  }, [dvr, scrubT, liveEdgeEpsMs, flushPendingSeek]);
+  }, [dvr, scrubT, liveEdgeEpsMs, snapEdge, flushPendingSeek]);
 
   // Cancel any in-flight coalesced seek on unmount.
   useEffect(() => () => flushPendingSeek(), [flushPendingSeek]);

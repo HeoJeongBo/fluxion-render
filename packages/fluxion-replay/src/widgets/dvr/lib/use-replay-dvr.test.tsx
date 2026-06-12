@@ -529,6 +529,87 @@ describe("useReplayDvr", () => {
       const stalePlayer = await allPlayers[allPlayers.length - 1]!.value;
       expect(stalePlayer.dispose).toHaveBeenCalledTimes(1);
     });
+
+    it("exit() during an in-flight enter re-syncs the session when the stale enter resolves", async () => {
+      // The session-level enterReplay completes AFTER exitReplay() already ran,
+      // leaving session._mode = "replay" (and useReplaySession.mode = "replay")
+      // while the UI is live. The gen-mismatch path must call exitReplay()
+      // again to re-sync — otherwise apps rendering off the session mode show
+      // replay UI intermittently after a cancelled scrub (same bug class as
+      // the "dot jumps left after returning to live" race).
+      const ses = makeFakeSession({ fresh: true, timeRange: LIVE });
+      const { result } = setup({
+        session: ses.session,
+        enterReplay: ses.enterReplay,
+        exitReplay: ses.exitReplay,
+        liveTimeRange: LIVE,
+      });
+
+      ses.holdEnter();
+      let enterPromise: ReturnType<typeof result.current.enter>;
+      await act(async () => {
+        enterPromise = result.current.enter(1_020_000);
+      });
+
+      await act(async () => {
+        result.current.exit();
+      });
+      expect(ses.exitReplay).toHaveBeenCalledTimes(1);
+
+      await act(async () => {
+        await ses.releaseEnter();
+        await enterPromise;
+        await Promise.resolve();
+      });
+
+      // Re-synced: a second exitReplay after the cancelled enter resolved.
+      expect(ses.exitReplay).toHaveBeenCalledTimes(2);
+      expect(result.current.isDvr).toBe(false);
+      expect(result.current.player).toBeNull();
+      expect(ses.player.dispose).toHaveBeenCalledTimes(1);
+    });
+
+    it("a stale enter superseded by a NEWER enter does not call exitReplay", async () => {
+      // The re-sync must only fire when the gen bump RETURNED TO LIVE. When a
+      // newer enter() superseded the stale one, calling exitReplay() would
+      // tear down the newer call's session player mid-flight.
+      const ses = makeFakeSession({ fresh: true, timeRange: LIVE });
+      const { result } = setup({
+        session: ses.session,
+        enterReplay: ses.enterReplay,
+        exitReplay: ses.exitReplay,
+        liveTimeRange: LIVE,
+      });
+
+      ses.holdEnter();
+      await act(async () => {
+        void result.current.enter(1_010_000); // stale
+      });
+      await act(async () => {
+        result.current.exit(); // bump #1: to live
+      });
+      await act(async () => {
+        void result.current.enter(1_020_000); // newer enter resets the flag
+      });
+
+      await act(async () => {
+        await ses.releaseEnter(); // resolve both in arrival order
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+
+      // Only the explicit exit() called exitReplay — the stale enter's
+      // resolution yielded to the newer enter instead of re-syncing.
+      expect(ses.exitReplay).toHaveBeenCalledTimes(1);
+      expect(result.current.isDvr).toBe(true);
+      const allPlayers = (ses.enterReplay as unknown as { mock: { results: { value: Promise<FakePlayer> }[] } }).mock.results;
+      const [stalePlayer, freshPlayer] = await Promise.all(allPlayers.map((r) => r.value));
+      expect(result.current.player).toBe(freshPlayer);
+      expect(stalePlayer!.dispose).toHaveBeenCalledTimes(1);
+      expect(freshPlayer!.dispose).not.toHaveBeenCalled();
+
+      result.current.exit();
+    });
   });
 
   // Callback identity guard — see Phase 10 bug class.

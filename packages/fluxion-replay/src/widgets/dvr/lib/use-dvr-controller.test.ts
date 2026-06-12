@@ -89,4 +89,48 @@ describe("useDvrController", () => {
     expect(result.current.isLive).toBe(false);
     expect(result.current.scrubber.isLive).toBe(false);
   });
+
+  // Regression: time-travel to the past then return to the live edge BEFORE
+  // the async enterReplay resolves. The late-resolving enter used to land
+  // anyway and yank the UI into DVR at the stale drag position — the user saw
+  // the dot intermittently jump LEFT right after returning to live.
+  it("scrubber value stays pinned at max after returning to live before the drag-enter resolves", async () => {
+    const ses = makeFakeSession({ fresh: true, timeRange: LIVE });
+    ses.holdEnter();
+    const { result } = renderHook(() =>
+      useDvrController({
+        session: ses.session,
+        enterReplay: ses.enterReplay,
+        exitReplay: ses.exitReplay,
+        liveTimeRange: LIVE,
+        autoPlay: false,
+        recordingStartMs: LIVE.earliest,
+      }),
+    );
+
+    // Drag into the past (enter fired but parked), then back to the live edge.
+    await act(async () => {
+      result.current.scrubber.onPointerDown();
+      result.current.scrubber.onChange(fakeChange(1_030_000));
+      for (let i = 0; i < 5; i++) await Promise.resolve();
+    });
+    expect(ses.enterReplay).toHaveBeenCalledTimes(1);
+    await act(async () => {
+      result.current.scrubber.onChange(fakeChange(LIVE.latest));
+    });
+    await act(async () => {
+      result.current.scrubber.onCommit();
+    });
+
+    // The parked enter resolves AFTER the release — it must not take effect.
+    await act(async () => {
+      await ses.releaseEnter();
+      for (let i = 0; i < 10; i++) await Promise.resolve();
+    });
+
+    expect(result.current.isLive).toBe(true);
+    expect(result.current.isDvr).toBe(false);
+    // The dot stays at the live edge — no left-jump to the stale 1_030_000.
+    expect(result.current.scrubber.value).toBe(result.current.scrubber.max);
+  });
 });

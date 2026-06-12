@@ -128,9 +128,19 @@ export function useReplayDvr(opts: UseReplayDvrOptions): UseReplayDvrResult {
   // arbitrary resolution order and leak (N - 1) parallel rAF loops.
   const enterGenRef = useRef(0);
 
+  // True when the most recent gen bump RETURNED THE APP TO LIVE (exit / onEnd)
+  // rather than superseding with a newer enter(). A cancelled enter() resolves
+  // AFTER exitReplay() already ran, and the session-level enterReplay sets
+  // session mode back to "replay" as it completes — so the gen-mismatch path
+  // must call exitReplay() again to re-sync the session to live. It must NOT
+  // do that when the bump came from a newer enter(), or it would tear down
+  // that newer call's session player.
+  const genBumpReturnedToLiveRef = useRef(false);
+
   const exit = useCallback(() => {
     // Invalidate every in-flight enter() so its post-await body bails.
     enterGenRef.current++;
+    genBumpReturnedToLiveRef.current = true;
     offEndRef.current?.();
     offEndRef.current = null;
     setPlayer((current) => {
@@ -147,6 +157,7 @@ export function useReplayDvr(opts: UseReplayDvrOptions): UseReplayDvrResult {
       if (!session) return null;
 
       const myGen = ++enterGenRef.current;
+      genBumpReturnedToLiveRef.current = false;
 
       // Clean up a previous DVR cycle's onEnd before installing a new one.
       offEndRef.current?.();
@@ -175,6 +186,12 @@ export function useReplayDvr(opts: UseReplayDvrOptions): UseReplayDvrResult {
       // though we never expose it via React state.
       if (myGen !== enterGenRef.current) {
         p.dispose();
+        // If the bump was an exit (return to live), the session-level
+        // enterReplay we just awaited has re-set the session mode to
+        // "replay" AFTER exitReplay() already ran — re-sync it to live.
+        // A newer enter() resets the flag synchronously before its await,
+        // so this never tears down that call's session player.
+        if (genBumpReturnedToLiveRef.current) exitReplay();
         return null;
       }
 
@@ -189,6 +206,7 @@ export function useReplayDvr(opts: UseReplayDvrOptions): UseReplayDvrResult {
           // any concurrent enter() that resolved between play() and onEnd
           // doesn't re-enter DVR.
           enterGenRef.current++;
+          genBumpReturnedToLiveRef.current = true;
           offEndRef.current = null;
           p.dispose();
           setPlayer(null);

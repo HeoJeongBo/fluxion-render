@@ -8,6 +8,7 @@
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  type FakePlayer,
   makeFakePlayer,
   makeFakeSession,
 } from "../../chart-replay/lib/chart-replay-fixtures";
@@ -497,12 +498,19 @@ describe("useScrubberControls", () => {
     });
 
     it("drag-entry fires enter once on change + pauses; commit does NOT double-enter (isolated fake dvr)", async () => {
-      // Hand-built dvr whose isDvr stays false (never re-renders to true), so we
-      // can pin the anti-double-enter guarantee deterministically: the drag
-      // enters once on change and the commit's `!enteredThisDrag` guard
-      // suppresses a second enter that would race the first.
+      // Hand-built dvr whose isDvr stays false (never re-renders to true), with
+      // a manually-deferred enter, so we can pin the anti-double-enter guarantee
+      // deterministically: the drag enters once on change, and a commit while
+      // that enter is STILL IN FLIGHT chains seek+play onto it instead of firing
+      // a second enter that would race the first.
       const player = makeFakePlayer(0);
-      const enter = vi.fn(async () => player);
+      let resolveEnter!: (p: FakePlayer) => void;
+      const enter = vi.fn(
+        () =>
+          new Promise<FakePlayer>((resolve) => {
+            resolveEnter = resolve;
+          }),
+      );
       const fakeDvr = {
         isDvr: false,
         player: null,
@@ -521,18 +529,26 @@ describe("useScrubberControls", () => {
         result.current.onScrubChange(fakeChange(LIVE.earliest + 5_000)); // far from edge
         for (let i = 0; i < 10; i++) await Promise.resolve();
       });
-      // Entered once on the drag, paused (preview is seek-driven, not playback).
+      // Entered once on the drag; still in flight, so nothing played yet.
       expect(enter).toHaveBeenCalledTimes(1);
       expect(enter).toHaveBeenCalledWith(LIVE.earliest + 5_000);
-      expect(player.pause).toHaveBeenCalled();
-      expect(player.play).not.toHaveBeenCalled();
 
       await act(async () => {
         result.current.commitScrub();
         for (let i = 0; i < 10; i++) await Promise.resolve();
       });
-      // No second enter on commit — the drag already entered.
+      // No second enter on commit — the in-flight drag-enter is chained instead.
       expect(enter).toHaveBeenCalledTimes(1);
+
+      await act(async () => {
+        resolveEnter(player);
+        for (let i = 0; i < 10; i++) await Promise.resolve();
+      });
+      // Drag's pause handler ran first, then the commit chain seeks the release
+      // point and resumes playback at the given rate.
+      expect(player.pause).toHaveBeenCalled();
+      expect(player.seek).toHaveBeenCalledWith(LIVE.earliest + 5_000);
+      expect(player.play).toHaveBeenCalledWith(3);
     });
 
     // Regression (Bug 1): with the REAL useReplayDvr + a fresh-player-per-enter
@@ -627,6 +643,194 @@ describe("useScrubberControls", () => {
       await act(async () => {
         result.current.controls.commitScrub();
       });
+      expect(ses.player.play).toHaveBeenCalledWith(1);
+    });
+  });
+
+  // ── in-flight drag-enter (commit races enterReplay) ───────────────────────
+  //
+  // Regression for the intermittent "dot jumps left after returning to live"
+  // bug: a live→past drag fires an ASYNC dvr.enter() (real enterReplay does an
+  // IDB flush + getTimeRange, tens-to-hundreds of ms). If the user dragged
+  // back to the live edge and released BEFORE it resolved, commitScrub used to
+  // do nothing — the uncancelled enter then landed late and flipped the UI
+  // into DVR paused at the stale drag position.
+
+  describe("in-flight drag-enter (commit races enterReplay)", () => {
+    function setupHeld(rate = 1, timeRange = LIVE) {
+      const ses = makeFakeSession({ fresh: true, timeRange });
+      ses.holdEnter();
+      const { result } = renderHook(() => {
+        const dvr = useReplayDvr({
+          session: ses.session,
+          enterReplay: ses.enterReplay,
+          exitReplay: ses.exitReplay,
+          liveTimeRange: timeRange,
+          rate,
+          autoPlay: false,
+        });
+        const controls = useScrubberControls({ dvr, rate });
+        return { dvr, controls };
+      });
+      return { ses, result };
+    }
+
+    it("release at the live edge before the drag-enter resolves cancels it — never enters DVR", async () => {
+      const { ses, result } = setupHeld();
+
+      // Drag past the edge → enter fired but parked (unresolved).
+      await act(async () => {
+        result.current.controls.beginScrub();
+        result.current.controls.onScrubChange(fakeChange(1_030_000));
+        for (let i = 0; i < 5; i++) await Promise.resolve();
+      });
+      expect(ses.enterReplay).toHaveBeenCalledTimes(1);
+      expect(result.current.dvr.isDvr).toBe(false);
+
+      // Drag back to the live edge and release while the enter is in flight.
+      await act(async () => {
+        result.current.controls.onScrubChange(fakeChange(LIVE.latest));
+      });
+      await act(async () => {
+        result.current.controls.commitScrub();
+      });
+      // The commit cancelled the pending enter (generation bump via exit()).
+      expect(ses.exitReplay).toHaveBeenCalled();
+
+      // The stale enter resolving later must NOT re-enter DVR.
+      await act(async () => {
+        await ses.releaseEnter();
+        for (let i = 0; i < 10; i++) await Promise.resolve();
+      });
+      expect(result.current.dvr.isDvr).toBe(false);
+      expect(result.current.dvr.player).toBeNull();
+      expect(result.current.dvr.frozenLatest).toBeNull();
+      // The orphaned player was disposed, not leaked.
+      expect(ses.player.dispose).toHaveBeenCalled();
+    });
+
+    it("release mid-past while the drag-enter is in flight seeks+plays at the release point", async () => {
+      const { ses, result } = setupHeld(2);
+
+      await act(async () => {
+        result.current.controls.beginScrub();
+        result.current.controls.onScrubChange(fakeChange(1_040_000));
+        result.current.controls.onScrubChange(fakeChange(1_030_000));
+        for (let i = 0; i < 5; i++) await Promise.resolve();
+      });
+      // Exactly one enter (at the first past-edge tick), still in flight.
+      expect(ses.enterReplay).toHaveBeenCalledTimes(1);
+      expect(ses.enterReplay).toHaveBeenCalledWith(1_040_000, expect.any(Object));
+
+      await act(async () => {
+        result.current.controls.commitScrub();
+        for (let i = 0; i < 5; i++) await Promise.resolve();
+      });
+      // No second enter racing the first.
+      expect(ses.enterReplay).toHaveBeenCalledTimes(1);
+
+      await act(async () => {
+        await ses.releaseEnter();
+        for (let i = 0; i < 10; i++) await Promise.resolve();
+      });
+      expect(result.current.dvr.isDvr).toBe(true);
+      const player = result.current.dvr.player!;
+      // Drag handler paused first; commit chain then seeks the RELEASE point
+      // (not the 1_040_000 entry point) and resumes at the commit rate.
+      expect(player.pause).toHaveBeenCalled();
+      expect(player.seek).toHaveBeenCalledWith(1_030_000);
+      expect(player.play).toHaveBeenCalledWith(2);
+    });
+
+    it("unaligned frozenLatest: releasing at the slider max exits DVR", async () => {
+      // frozenLatest % 1000 = 700 > eps 250: the slider max (snap floor) is the
+      // closest reachable value, and releasing there must count as "at the
+      // live edge" — the unsnapped comparison used to miss it ~75% of the time.
+      const UNALIGNED = { earliest: 1_000_000, latest: 1_060_700 };
+      const { ses, result } = setupHeld(1, UNALIGNED);
+      await ses.releaseEnter(); // don't hold for this one
+      await act(async () => {
+        await result.current.dvr.enter(1_030_000);
+      });
+      expect(result.current.dvr.frozenLatest).toBe(1_060_700);
+
+      await act(async () => {
+        result.current.controls.beginScrub();
+        result.current.controls.onScrubChange(fakeChange(1_060_000)); // slider max
+        vi.advanceTimersByTime(20); // flush the coalesced preview seek
+      });
+      await act(async () => {
+        result.current.controls.commitScrub();
+      });
+      expect(ses.exitReplay).toHaveBeenCalled();
+      expect(result.current.dvr.isDvr).toBe(false);
+    });
+
+    it("unaligned live latest: a drag tick at the slider max does not enter DVR", async () => {
+      const UNALIGNED = { earliest: 1_000_000, latest: 1_060_700 };
+      const { ses, result } = setupHeld(1, UNALIGNED);
+
+      // At the slider max (snap floor of 1_060_700) → within the snapped-edge
+      // eps window → no spurious enter.
+      await act(async () => {
+        result.current.controls.beginScrub();
+        result.current.controls.onScrubChange(fakeChange(1_060_000));
+      });
+      expect(ses.enterReplay).not.toHaveBeenCalled();
+
+      // One slider step left of max → genuinely past → enters once.
+      await act(async () => {
+        result.current.controls.onScrubChange(fakeChange(1_059_000));
+        for (let i = 0; i < 5; i++) await Promise.resolve();
+      });
+      expect(ses.enterReplay).toHaveBeenCalledTimes(1);
+      expect(ses.enterReplay).toHaveBeenCalledWith(1_059_000, expect.any(Object));
+    });
+
+    it("mid-drag auto-exit: releasing mid-past after the entered player ended re-enters at the release point", async () => {
+      const ses = makeFakeSession({ fresh: true, timeRange: LIVE });
+      const { result } = renderHook(() => {
+        const dvr = useReplayDvr({
+          session: ses.session,
+          enterReplay: ses.enterReplay,
+          exitReplay: ses.exitReplay,
+          liveTimeRange: LIVE,
+          rate: 1,
+          autoPlay: false, // autoExitToLive stays default true
+        });
+        const controls = useScrubberControls({ dvr, rate: 1 });
+        return { dvr, controls };
+      });
+
+      // Drag-enter resolves normally → DVR active.
+      await act(async () => {
+        result.current.controls.beginScrub();
+        result.current.controls.onScrubChange(fakeChange(1_030_000));
+        for (let i = 0; i < 10; i++) await Promise.resolve();
+      });
+      expect(result.current.dvr.isDvr).toBe(true);
+
+      // The player hits the frozen edge mid-drag → autoExitToLive tears it down.
+      await act(async () => {
+        ses.player.emitEnd();
+      });
+      expect(result.current.dvr.isDvr).toBe(false);
+
+      // Still dragging (flag gates a re-enter on change), then release mid-past.
+      await act(async () => {
+        result.current.controls.onScrubChange(fakeChange(1_020_000));
+        for (let i = 0; i < 5; i++) await Promise.resolve();
+      });
+      expect(ses.enterReplay).toHaveBeenCalledTimes(1); // gated — no re-enter yet
+
+      await act(async () => {
+        result.current.controls.commitScrub();
+        for (let i = 0; i < 10; i++) await Promise.resolve();
+      });
+      // Commit recovers with a fresh enter at the release point and plays.
+      expect(ses.enterReplay).toHaveBeenCalledTimes(2);
+      expect(ses.enterReplay).toHaveBeenLastCalledWith(1_020_000, expect.any(Object));
+      expect(result.current.dvr.isDvr).toBe(true);
       expect(ses.player.play).toHaveBeenCalledWith(1);
     });
   });
