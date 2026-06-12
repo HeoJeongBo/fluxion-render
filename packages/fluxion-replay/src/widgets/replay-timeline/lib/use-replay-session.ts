@@ -70,16 +70,27 @@ export function useReplaySession(opts: UseReplaySessionOptions): UseReplaySessio
     session?.record(channelId, data, t);
   }, [session]);
 
+  // Bumped by every enterReplay() and exitReplay(). An enterReplay whose
+  // captured gen no longer matches after its awaits was superseded — it must
+  // not flip `mode` back to "replay" after a newer exit already set "live"
+  // (the intermittent "mode says replay while the UI is live" residue).
+  const opGenRef = useRef(0);
+
   const enterReplay = useCallback(
     async (
       t?: number,
       opts?: { timeRange?: { earliest: number; latest: number } },
     ): Promise<ReplayPlayer | null> => {
       if (!session) return null;
+      const gen = ++opGenRef.current;
       const player = await session.enterReplay(t, opts);
+      // Superseded by a newer enter/exit — yield to it (the session-level
+      // gen guard already kept the stale player uninstalled and disposed).
+      if (gen !== opGenRef.current) return null;
       setMode("replay");
 
       const range = await session.getTimeRange();
+      if (gen !== opGenRef.current) return player;
       setTimeRange(range);
 
       return player;
@@ -88,6 +99,7 @@ export function useReplaySession(opts: UseReplaySessionOptions): UseReplaySessio
   );
 
   const exitReplay = useCallback(() => {
+    opGenRef.current++; // invalidate in-flight enterReplay calls
     session?.exitReplay();
     setMode("live");
   }, [session]);

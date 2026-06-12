@@ -29,6 +29,12 @@ describe("DvrScrubber", () => {
     expect(input.getAttribute("value")).toBe(String(VALUE));
   });
 
+  it("renders a custom step on the input (wired from the controller's snapMs)", () => {
+    const { container } = render(<DvrScrubber {...baseProps()} step={250} />);
+    const input = container.querySelector("input")!;
+    expect(input.getAttribute("step")).toBe("250");
+  });
+
   it("shows the live badge and HH:MM:SS labels in live mode", () => {
     const { container } = render(<DvrScrubber {...baseProps()} isLive />);
     const text = container.textContent ?? "";

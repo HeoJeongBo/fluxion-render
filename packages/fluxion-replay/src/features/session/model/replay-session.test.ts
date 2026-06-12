@@ -279,4 +279,86 @@ describe("ReplaySession", () => {
       session.dispose();
     });
   });
+
+  describe("concurrent enterReplay generation guard", () => {
+    it("a stale enter resolving AFTER a newer enter does not overwrite the newer player", async () => {
+      const session = new ReplaySession({ channels: [new MetricChannel("cpu")] });
+      await session.open();
+
+      // Park enter A inside its store.flush() await; enter B flushes normally.
+      let releaseA!: () => void;
+      const flushSpy = vi
+        .spyOn(session.store, "flush")
+        .mockImplementationOnce(
+          () =>
+            new Promise<void>((resolve) => {
+              releaseA = resolve;
+            }),
+        )
+        .mockImplementation(async () => {});
+
+      const pA = session.enterReplay(1000); // parked
+      const playerB = await session.enterReplay(2000); // resolves first
+      expect(session.player).toBe(playerB);
+      expect(session.mode).toBe("replay");
+
+      releaseA();
+      const playerA = await pA; // stale — resolves last
+      expect(playerA).not.toBe(playerB);
+      // B stays installed; A's player came back already disposed.
+      expect(session.player).toBe(playerB);
+      expect(session.mode).toBe("replay");
+      expect(() => playerA.dispose()).not.toThrow(); // double dispose is safe
+
+      flushSpy.mockRestore();
+      session.dispose();
+    });
+
+    it("exitReplay during an in-flight enterReplay keeps the session live", async () => {
+      const session = new ReplaySession({ channels: [new MetricChannel("cpu")] });
+      await session.open();
+
+      let release!: () => void;
+      const flushSpy = vi.spyOn(session.store, "flush").mockImplementationOnce(
+        () =>
+          new Promise<void>((resolve) => {
+            release = resolve;
+          }),
+      );
+
+      const pending = session.enterReplay(1000); // parked
+      session.exitReplay(); // user bails before the enter resolves
+      expect(session.mode).toBe("live");
+
+      release();
+      await pending; // stale enter must not resurrect a player
+      expect(session.mode).toBe("live");
+      expect(session.player).toBeNull();
+
+      flushSpy.mockRestore();
+      session.dispose();
+    });
+
+    it("dispose during an in-flight enterReplay does not resurrect a player", async () => {
+      const session = new ReplaySession({ channels: [new MetricChannel("cpu")] });
+      await session.open();
+
+      let release!: () => void;
+      const flushSpy = vi.spyOn(session.store, "flush").mockImplementationOnce(
+        () =>
+          new Promise<void>((resolve) => {
+            release = resolve;
+          }),
+      );
+
+      const pending = session.enterReplay(1000);
+      session.dispose();
+
+      release();
+      await pending;
+      expect(session.player).toBeNull();
+
+      flushSpy.mockRestore();
+    });
+  });
 });

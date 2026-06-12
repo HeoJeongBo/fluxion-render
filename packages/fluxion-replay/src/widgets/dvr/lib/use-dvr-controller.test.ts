@@ -133,4 +133,22 @@ describe("useDvrController", () => {
     // The dot stays at the live edge — no left-jump to the stale 1_030_000.
     expect(result.current.scrubber.value).toBe(result.current.scrubber.max);
   });
+
+  it("scrubber bundle carries step = snapMs (default 1000)", () => {
+    const { result } = setup();
+    expect(result.current.scrubber.step).toBe(1000);
+
+    const ses = makeFakeSession({ timeRange: LIVE });
+    const { result: custom } = renderHook(() =>
+      useDvrController({
+        session: ses.session,
+        enterReplay: ses.enterReplay,
+        exitReplay: ses.exitReplay,
+        liveTimeRange: LIVE,
+        autoPlay: false,
+        snapMs: 500,
+      }),
+    );
+    expect(custom.current.scrubber.step).toBe(500);
+  });
 });

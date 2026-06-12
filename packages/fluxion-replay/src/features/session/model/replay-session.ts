@@ -30,6 +30,11 @@ export class ReplaySession {
   private readonly _channelMap: Map<string, BaseChannel<unknown>>;
   private _player: ReplayPlayer | null = null;
   private _mode: ReplaySessionMode = "live";
+  // Bumped at the start of every enterReplay() and by exitReplay()/dispose().
+  // An enterReplay whose captured gen no longer matches after its awaits lost
+  // a race to a newer call — it must not install its player or flip the mode
+  // (last-to-CALL wins, not last-to-RESOLVE).
+  private _opGen = 0;
 
   constructor(opts: ReplaySessionOptions) {
     this._store = new ReplayStore({
@@ -72,6 +77,7 @@ export class ReplaySession {
     timestamp?: number,
     opts?: { timeRange?: { earliest: number; latest: number } },
   ): Promise<ReplayPlayer> {
+    const gen = ++this._opGen;
     this._player?.dispose();
 
     // Commit the recorder's pending batch before anyone reads the IDB time
@@ -106,21 +112,32 @@ export class ReplaySession {
       range = fallback;
     }
 
-    this._player = new ReplayPlayer({
+    const player = new ReplayPlayer({
       store: this._store,
       channels: this._channelMap,
       timeRange: range,
     });
 
     if (timestamp !== undefined) {
-      this._player.seek(timestamp);
+      player.seek(timestamp);
     }
 
+    // A newer enterReplay()/exitReplay()/dispose() landed while we awaited.
+    // Don't install this player or flip the mode — return it disposed so the
+    // caller's own gen guard (e.g. useReplayDvr) can treat it uniformly
+    // (its dispose() call on the returned player is idempotent).
+    if (gen !== this._opGen) {
+      player.dispose();
+      return player;
+    }
+
+    this._player = player;
     this._mode = "replay";
-    return this._player;
+    return player;
   }
 
   exitReplay(): void {
+    this._opGen++; // invalidate in-flight enterReplay calls
     this._player?.dispose();
     this._player = null;
     this._mode = "live";
@@ -161,6 +178,7 @@ export class ReplaySession {
   }
 
   dispose(): void {
+    this._opGen++; // an in-flight enterReplay must not resurrect a player
     this._player?.dispose();
     this._player = null;
     this._recorder.stop();

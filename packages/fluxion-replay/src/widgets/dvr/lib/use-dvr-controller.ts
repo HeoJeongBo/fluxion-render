@@ -46,6 +46,8 @@ export interface DvrScrubberBundle {
   max: number;
   value: number;
   disabled: boolean;
+  /** `snapMs ?? 1000` — drives the `<input step>` so increments match snapping. */
+  step: number;
   onPointerDown: () => void;
   onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
   onCommit: () => void;
@@ -157,6 +159,8 @@ export function useDvrController(opts: UseDvrControllerOptions): UseDvrControlle
       max: scrubber.max,
       value: scrubber.value,
       disabled: scrubber.disabled,
+      // 1000 mirrors DEFAULT_SNAP_MS in useReplayScrubber/useScrubberControls.
+      step: snapMs ?? 1000,
       onPointerDown: beginScrub,
       onChange: onScrubChange,
       onCommit: commitScrub,

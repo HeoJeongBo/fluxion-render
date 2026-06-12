@@ -265,4 +265,82 @@ describe("useReplaySession", () => {
       expect(result.current.error).toBeNull();
     });
   });
+
+  describe("concurrent enter/exit generation guard", () => {
+    it("exitReplay during an in-flight enterReplay leaves mode 'live' once it resolves", async () => {
+      const { result } = renderHook(() => useReplaySession({ channels: [] }));
+      await act(async () => {
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+
+      // Park the session-level enterReplay so the hook's await stays pending.
+      let release!: () => void;
+      const session = result.current.session!;
+      const enterSpy = vi.spyOn(session, "enterReplay").mockImplementation(
+        () =>
+          new Promise((resolve) => {
+            release = () =>
+              resolve({ dispose: vi.fn() } as unknown as Awaited<
+                ReturnType<typeof session.enterReplay>
+              >);
+          }),
+      );
+
+      let pending!: Promise<unknown>;
+      await act(async () => {
+        pending = result.current.enterReplay(1000);
+      });
+      // User exits before the enter resolves.
+      await act(async () => {
+        result.current.exitReplay();
+      });
+      expect(result.current.mode).toBe("live");
+
+      await act(async () => {
+        release();
+        await pending;
+      });
+      // The stale enter must NOT flip the hook's mode back to "replay".
+      expect(result.current.mode).toBe("live");
+      enterSpy.mockRestore();
+    });
+
+    it("a stale enterReplay superseded by a newer one resolves to null", async () => {
+      const { result } = renderHook(() => useReplaySession({ channels: [] }));
+      await act(async () => {
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+
+      const session = result.current.session!;
+      const resolvers: Array<() => void> = [];
+      const enterSpy = vi.spyOn(session, "enterReplay").mockImplementation(
+        () =>
+          new Promise((resolve) => {
+            resolvers.push(() =>
+              resolve({ dispose: vi.fn() } as unknown as Awaited<
+                ReturnType<typeof session.enterReplay>
+              >),
+            );
+          }),
+      );
+
+      let pA!: Promise<unknown>;
+      let pB!: Promise<unknown>;
+      await act(async () => {
+        pA = result.current.enterReplay(1000);
+        pB = result.current.enterReplay(2000);
+      });
+      await act(async () => {
+        // Resolve in arrival order: A (stale) first, then B (current).
+        for (const r of resolvers) r();
+        const [a, b] = await Promise.all([pA, pB]);
+        expect(a).toBeNull(); // superseded
+        expect(b).not.toBeNull();
+      });
+      expect(result.current.mode).toBe("replay");
+      enterSpy.mockRestore();
+    });
+  });
 });

@@ -10,6 +10,13 @@ export interface DvrScrubberProps {
   value: number;
   /** When true the scrubber is read-only (from `useReplayScrubber`). */
   disabled: boolean;
+  /**
+   * Step quantum (ms) for the range input. Keep equal to the controller's
+   * `snapMs` so drag/keyboard increments match the scrubber's snapping —
+   * `useDvrController`'s scrubber bundle fills this automatically.
+   * Default 1000.
+   */
+  step?: number;
 
   /**
    * Pointer-down handler from `useScrubberControls` (`beginScrub`). Resets the
@@ -106,6 +113,7 @@ export function DvrScrubber({
   max,
   value,
   disabled,
+  step = 1000,
   onPointerDown,
   onChange,
   onCommit,
@@ -180,7 +188,7 @@ export function DvrScrubber({
           type="range"
           min={min}
           max={max}
-          step={1000}
+          step={step}
           value={value}
           onPointerDown={onPointerDown}
           onChange={onChange}
