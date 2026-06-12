@@ -251,6 +251,8 @@ axisGridLayer('axis', {
   xRange?: [min, max],        // xMode: 'fixed' only
   timeWindowMs?: number,      // xMode: 'time' only
   timeOrigin?: number,        // Date.now() at stream start (for clock labels)
+  followClock?: boolean,      // xMode: 'time' — right edge tracks Date.now()-timeOrigin every
+                              // frame (scrolls continuously with no data); requires timeOrigin
   xTickFormat?: string | ((v: number) => string), // format string or custom formatter
 
   // Y axis
