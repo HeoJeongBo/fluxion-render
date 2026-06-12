@@ -191,4 +191,32 @@ describe("StepChartLayer", () => {
     expect(ctx.calls.filter((c) => c.name === "moveTo").length).toBe(1);
     expect(ctx.calls.filter((c) => c.name === "lineTo").length).toBe(6);
   });
+  describe("maxGapMs gap-breaking", () => {
+    // Two bursts (2 samples each) separated by an 800 ms silence.
+    const GAPPY = new Float32Array([0, 1, 100, 2, 1000, 3, 1100, 4]);
+
+    it("gap breaks the staircase (second moveTo, no bridging segments)", () => {
+      const layer = new StepChartLayer("step1");
+      layer.setConfig({ capacity: 8, maxGapMs: 150 });
+      const vp = makeViewport();
+      layer.setData(GAPPY.buffer, 8, vp);
+      const ctx = createFakeCtx();
+      layer.draw(ctx as unknown as OffscreenCanvasRenderingContext2D, vp);
+      // One subpath per burst; each burst has 1 step transition = 2 lineTo.
+      expect(ctx.calls.filter((c) => c.name === "moveTo").length).toBe(2);
+      expect(ctx.calls.filter((c) => c.name === "lineTo").length).toBe(4);
+    });
+
+    it("no maxGapMs draws bridging H+V segments (unchanged behavior)", () => {
+      const layer = new StepChartLayer("step1");
+      layer.setConfig({ capacity: 8 });
+      const vp = makeViewport();
+      layer.setData(GAPPY.buffer, 8, vp);
+      const ctx = createFakeCtx();
+      layer.draw(ctx as unknown as OffscreenCanvasRenderingContext2D, vp);
+      // 4 samples fully connected: 1 moveTo + 2*(4-1) lineTo.
+      expect(ctx.calls.filter((c) => c.name === "moveTo").length).toBe(1);
+      expect(ctx.calls.filter((c) => c.name === "lineTo").length).toBe(6);
+    });
+  });
 });

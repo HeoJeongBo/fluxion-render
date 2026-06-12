@@ -2,7 +2,7 @@ import type { FluxionHost } from "@heojeongbo/fluxion-render";
 import {
   axisGridLayer,
   FluxionCanvas,
-  scatterLayer,
+  lineLayer,
   useFluxionStream,
   useTimeOrigin,
 } from "@heojeongbo/fluxion-render/react";
@@ -13,8 +13,8 @@ import { THEME } from "../../../shared/ui/theme";
 // Bursty stream: 5s of data, then 1s of silence, repeating. The x-axis uses
 // `followClock`, so it keeps scrolling at 1-second ticks through the silent
 // gap — the chart never freezes, it just shows an empty band drifting in from
-// the right until data resumes. A scatter layer makes the discontinuity read
-// cleanly: no connecting line bridges the gap, so the "끊김" is obvious.
+// the right until data resumes. The line layers use `maxGapMs`, so the stroke
+// breaks across the silence — a real hole instead of a bridging diagonal.
 const BATCH_HZ = 60;
 const SAMPLES_PER_BATCH = 12;
 const SAMPLE_HZ = BATCH_HZ * SAMPLES_PER_BATCH;
@@ -44,7 +44,7 @@ const synths = SERIES.map((s) =>
 );
 
 type SeriesHandle = {
-  handle: ReturnType<FluxionHost["scatter"]>;
+  handle: ReturnType<FluxionHost["line"]>;
   synth: (tMs: number) => number;
 };
 
@@ -77,12 +77,14 @@ export function FollowClockDemoPage() {
         yPadPx: Y_PAD_PX,
       }),
       ...SERIES.map((s) =>
-        scatterLayer(s.id, {
+        lineLayer(s.id, {
           color: s.color,
-          pointSize: 3,
-          shape: "circle",
+          lineWidth: 1.5,
           retentionMs: TIME_WINDOW_MS,
           maxHz: SAMPLE_HZ,
+          // Break the stroke across the 1s silence (any gap beyond half the
+          // pause is clearly "no data", not jitter).
+          maxGapMs: PAUSE_MS / 2,
         }),
       ),
     ],
@@ -93,7 +95,7 @@ export function FollowClockDemoPage() {
     host,
     intervalMs: 1000 / BATCH_HZ,
     setup: (h): StreamState => ({
-      series: SERIES.map((s, i) => ({ handle: h.scatter(s.id), synth: synths[i]! })),
+      series: SERIES.map((s, i) => ({ handle: h.line(s.id), synth: synths[i]! })),
       // Anchor the first sample at "now" so nothing lands before the window.
       lastEnd: Date.now() - timeOrigin,
     }),

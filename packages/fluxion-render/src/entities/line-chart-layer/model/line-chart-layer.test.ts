@@ -575,4 +575,76 @@ describe("LineChartLayer (streaming)", () => {
       expect(lineTos).toBe(2999); // 1 moveTo + 2999 lineTo = every sample
     });
   });
+
+  describe("maxGapMs gap-breaking", () => {
+    it("breaks the stroke at gaps larger than maxGapMs (extra moveTo, fewer lineTo)", () => {
+      const layer = new LineChartLayer("l");
+      layer.setConfig({ capacity: 8, maxGapMs: 150 });
+      const vp = makeViewport();
+      // Two bursts separated by an 800 ms silence.
+      layer.setData(
+        new Float32Array([0, 0, 100, 0.5, 200, 0.2, 1000, -0.3, 1100, 0.1]).buffer,
+        10,
+        vp,
+      );
+      const ctx = createFakeCtx();
+      layer.draw(ctx as unknown as OffscreenCanvasRenderingContext2D, vp);
+      // One subpath per burst: 2 moveTo; the gap edge is NOT bridged.
+      expect(ctx.calls.filter((c) => c.name === "moveTo").length).toBe(2);
+      expect(ctx.calls.filter((c) => c.name === "lineTo").length).toBe(3);
+    });
+
+    it("no maxGapMs leaves the path fully connected (unchanged behavior)", () => {
+      const layer = new LineChartLayer("l");
+      layer.setConfig({ capacity: 8 });
+      const vp = makeViewport();
+      layer.setData(
+        new Float32Array([0, 0, 100, 0.5, 200, 0.2, 1000, -0.3, 1100, 0.1]).buffer,
+        10,
+        vp,
+      );
+      const ctx = createFakeCtx();
+      layer.draw(ctx as unknown as OffscreenCanvasRenderingContext2D, vp);
+      expect(ctx.calls.filter((c) => c.name === "moveTo").length).toBe(1);
+      expect(ctx.calls.filter((c) => c.name === "lineTo").length).toBe(4);
+    });
+
+    it("a gap exactly equal to maxGapMs does NOT break (strict >)", () => {
+      const layer = new LineChartLayer("l");
+      layer.setConfig({ capacity: 8, maxGapMs: 100 });
+      const vp = makeViewport();
+      layer.setData(new Float32Array([0, 0, 100, 0.5, 200, 0.2]).buffer, 6, vp);
+      const ctx = createFakeCtx();
+      layer.draw(ctx as unknown as OffscreenCanvasRenderingContext2D, vp);
+      expect(ctx.calls.filter((c) => c.name === "moveTo").length).toBe(1);
+      expect(ctx.calls.filter((c) => c.name === "lineTo").length).toBe(2);
+    });
+
+    it("decimated path breaks at gaps (one moveTo per segment)", () => {
+      const layer = new LineChartLayer("l");
+      layer.setConfig({ capacity: 8192, decimate: true, maxGapMs: 50 });
+      const vp = new Viewport();
+      vp.setSize(1000, 100, 1);
+      vp.setBounds({ xMin: 0, xMax: 7000, yMin: -1, yMax: 1 });
+      // Two dense bursts (1 ms apart, no internal gaps) separated by 1001 ms.
+      const samples = new Float32Array(6000 * 2);
+      for (let i = 0; i < 3000; i++) {
+        samples[i * 2] = i;
+        samples[i * 2 + 1] = Math.sin(i / 50);
+      }
+      for (let i = 0; i < 3000; i++) {
+        samples[(3000 + i) * 2] = 4000 + i;
+        samples[(3000 + i) * 2 + 1] = Math.sin(i / 50);
+      }
+      layer.setData(samples.buffer, samples.length, vp);
+      const ctx = createFakeCtx();
+      layer.draw(ctx as unknown as OffscreenCanvasRenderingContext2D, vp);
+      // Decimation active (6000 samples > 1000 px * 2) with exactly one
+      // subpath per burst.
+      expect(ctx.calls.filter((c) => c.name === "moveTo").length).toBe(2);
+      const lineTos = ctx.calls.filter((c) => c.name === "lineTo").length;
+      expect(lineTos).toBeGreaterThan(0);
+      expect(lineTos).toBeLessThan(6000); // decimated, not per-sample
+    });
+  });
 });

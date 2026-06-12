@@ -9,6 +9,13 @@ export interface StepChartConfig {
   retentionMs?: number;
   maxHz?: number;
   visible?: boolean;
+  /**
+   * Maximum allowed time gap (ms) between consecutive samples before the
+   * staircase is broken: the bridging horizontal+vertical segments are
+   * skipped and a new subpath starts after the gap. Undefined (default)
+   * keeps the current behavior: each value holds until the next sample.
+   */
+  maxGapMs?: number;
 }
 
 /**
@@ -22,6 +29,7 @@ export class StepChartLayer implements Layer {
   private color = "#4fc3f7";
   private lineWidth = 1;
   private visible = true;
+  private maxGapMs: number | undefined;
   private ring: RingBuffer;
 
   constructor(id: string) {
@@ -34,6 +42,7 @@ export class StepChartLayer implements Layer {
     if (c.color !== undefined) this.color = c.color;
     if (c.lineWidth !== undefined) this.lineWidth = c.lineWidth;
     if (c.visible !== undefined) this.visible = c.visible;
+    if (c.maxGapMs !== undefined) this.maxGapMs = c.maxGapMs;
     let cap = c.capacity;
     if (cap === undefined && c.retentionMs !== undefined && c.maxHz !== undefined) {
       cap = Math.ceil((c.retentionMs / 1000) * c.maxHz * 1.1);
@@ -76,8 +85,9 @@ export class StepChartLayer implements Layer {
     ctx.beginPath();
 
     const xMin = viewport.bounds.xMin;
-    let prevPx = 0;
+    const gap = this.maxGapMs;
     let prevPy = 0;
+    let prevT = 0;
     let first = true;
 
     this.ring.forEach((data, off) => {
@@ -85,7 +95,9 @@ export class StepChartLayer implements Layer {
       if (t < xMin) return;
       const px = viewport.xToPx(t);
       const py = viewport.yToPx(data[off + 1]);
-      if (first) {
+      // Break the staircase across a time gap: skip the bridging H+V
+      // segments and start a new subpath at the post-gap sample.
+      if (first || (gap !== undefined && t - prevT > gap)) {
         ctx.moveTo(px, py);
         first = false;
       } else {
@@ -93,12 +105,9 @@ export class StepChartLayer implements Layer {
         ctx.lineTo(px, prevPy);
         ctx.lineTo(px, py);
       }
-      prevPx = px;
       prevPy = py;
+      prevT = t;
     });
-
-    // Suppress unused warning.
-    void prevPx;
 
     ctx.stroke();
   }

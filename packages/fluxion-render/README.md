@@ -147,6 +147,9 @@ lineLayer('signal', {
   maxHz?: number,        // expected max sample rate — auto-calculates capacity
   visible?: boolean,     // show/hide without reinitialising the layer (default true)
   decimate?: boolean,    // min/max-decimate the DRAW at high sample density (default false)
+  maxGapMs?: number,     // break the stroke when consecutive samples are farther apart
+                         // than this (bursty/intermittent streams show real holes
+                         // instead of a bridging diagonal); also on area/step layers
 })
 ```
 

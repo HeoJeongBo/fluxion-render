@@ -192,4 +192,35 @@ describe("AreaChartLayer", () => {
     layer.draw(ctx as unknown as OffscreenCanvasRenderingContext2D, vp);
     expect(ctx.calls.some((c) => c.name === "stroke")).toBe(false);
   });
+
+  describe("maxGapMs gap-breaking", () => {
+    // Two bursts (2 samples each) separated by an 800 ms silence.
+    const GAPPY = new Float32Array([0, 1, 100, 3, 1000, 2, 1100, 4]);
+
+    it("gap splits the fill into two closed-to-baseline polygons", () => {
+      const layer = new AreaChartLayer("area1");
+      layer.setConfig({ capacity: 8, maxGapMs: 150 });
+      const vp = makeViewport();
+      layer.setData(GAPPY.buffer, 8, vp);
+      const ctx = createFakeCtx();
+      layer.draw(ctx as unknown as OffscreenCanvasRenderingContext2D, vp);
+      // One closePath per segment, single fill call for both polygons.
+      expect(ctx.calls.filter((c) => c.name === "closePath").length).toBe(2);
+      expect(ctx.calls.filter((c) => c.name === "fill").length).toBe(1);
+      // Fill pass: 2 moveTo; stroke pass: 2 moveTo → 4 total.
+      expect(ctx.calls.filter((c) => c.name === "moveTo").length).toBe(4);
+    });
+
+    it("no maxGapMs keeps a single closed polygon (unchanged behavior)", () => {
+      const layer = new AreaChartLayer("area1");
+      layer.setConfig({ capacity: 8 });
+      const vp = makeViewport();
+      layer.setData(GAPPY.buffer, 8, vp);
+      const ctx = createFakeCtx();
+      layer.draw(ctx as unknown as OffscreenCanvasRenderingContext2D, vp);
+      expect(ctx.calls.filter((c) => c.name === "closePath").length).toBe(1);
+      // Fill pass: 1 moveTo; stroke pass: 1 moveTo.
+      expect(ctx.calls.filter((c) => c.name === "moveTo").length).toBe(2);
+    });
+  });
 });

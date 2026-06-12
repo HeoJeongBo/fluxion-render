@@ -22,6 +22,14 @@ export interface LineChartConfig {
    * sample, so hover/scan/export are unaffected. Default false.
    */
   decimate?: boolean;
+  /**
+   * Maximum allowed time gap (ms) between consecutive samples before the
+   * stroke is broken (a new subpath starts instead of a bridging line).
+   * Lets bursty / intermittent streams show genuine discontinuities rather
+   * than a diagonal connecting across the silence. Undefined (default)
+   * keeps the current behavior: every visible sample is connected.
+   */
+  maxGapMs?: number;
 }
 
 /**
@@ -46,6 +54,7 @@ export class LineChartLayer implements Layer {
   private lineWidth = 1;
   private visible = true;
   private decimate = false;
+  private maxGapMs: number | undefined;
   private ring: RingBuffer;
 
   constructor(id: string) {
@@ -59,6 +68,7 @@ export class LineChartLayer implements Layer {
     if (c.lineWidth !== undefined) this.lineWidth = c.lineWidth;
     if (c.visible !== undefined) this.visible = c.visible;
     if (c.decimate !== undefined) this.decimate = c.decimate;
+    if (c.maxGapMs !== undefined) this.maxGapMs = c.maxGapMs;
     let newCapacity: number | undefined = c.capacity;
     if (newCapacity === undefined && c.retentionMs !== undefined && c.maxHz !== undefined) {
       newCapacity = Math.ceil((c.retentionMs / 1000) * c.maxHz * 1.1);
@@ -126,18 +136,23 @@ export class LineChartLayer implements Layer {
       return;
     }
 
+    const gap = this.maxGapMs;
     let first = true;
+    let prevT = 0;
     this.ring.forEach((data, off) => {
       const t = data[off];
       if (t < xMin) return;
       const px = viewport.xToPx(t);
       const py = viewport.yToPx(data[off + 1]);
-      if (first) {
+      // Break the stroke across a time gap larger than maxGapMs — the
+      // silence shows as a real hole instead of a bridging diagonal.
+      if (first || (gap !== undefined && t - prevT > gap)) {
         ctx.moveTo(px, py);
         first = false;
       } else {
         ctx.lineTo(px, py);
       }
+      prevT = t;
     });
     ctx.stroke();
   }
@@ -177,10 +192,22 @@ export class LineChartLayer implements Layer {
       }
     };
 
+    const gap = this.maxGapMs;
+    let prevT = Number.NaN;
+
     this.ring.forEach((data, off) => {
       const t = data[off];
       if (t < xMin) return;
       const y = data[off + 1];
+      // Gap: close the pre-gap segment at its column, then force the next
+      // emitted point to start a new subpath (moveTo via `first`). Resetting
+      // curCol makes the column-change branch below start fresh without a
+      // duplicate flush.
+      if (gap !== undefined && !Number.isNaN(prevT) && t - prevT > gap) {
+        if (!Number.isNaN(curCol)) flush(curCol);
+        curCol = Number.NaN;
+        first = true;
+      }
       const col = Math.floor(viewport.xToPx(t));
       if (col !== curCol) {
         if (!Number.isNaN(curCol)) flush(curCol);
@@ -193,6 +220,7 @@ export class LineChartLayer implements Layer {
         if (y > maxY) maxY = y;
       }
       lastY = y;
+      prevT = t;
     });
     if (!Number.isNaN(curCol)) flush(curCol);
   }

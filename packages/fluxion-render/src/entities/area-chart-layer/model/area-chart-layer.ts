@@ -11,6 +11,13 @@ export interface AreaChartConfig {
   retentionMs?: number;
   maxHz?: number;
   visible?: boolean;
+  /**
+   * Maximum allowed time gap (ms) between consecutive samples before the
+   * area is broken: the current fill polygon closes to the baseline and a
+   * new one starts after the gap (the stroke breaks too). Undefined
+   * (default) keeps the current behavior: one continuous area.
+   */
+  maxGapMs?: number;
 }
 
 export class AreaChartLayer implements Layer {
@@ -19,6 +26,7 @@ export class AreaChartLayer implements Layer {
   private fillOpacity = 0.2;
   private lineWidth = 1;
   private visible = true;
+  private maxGapMs: number | undefined;
   private ring: RingBuffer;
 
   constructor(id: string) {
@@ -32,6 +40,7 @@ export class AreaChartLayer implements Layer {
     if (c.fillOpacity !== undefined) this.fillOpacity = Math.max(0, Math.min(1, c.fillOpacity));
     if (c.lineWidth !== undefined) this.lineWidth = c.lineWidth;
     if (c.visible !== undefined) this.visible = c.visible;
+    if (c.maxGapMs !== undefined) this.maxGapMs = c.maxGapMs;
     let cap = c.capacity;
     if (cap === undefined && c.retentionMs !== undefined && c.maxHz !== undefined) {
       cap = Math.ceil((c.retentionMs / 1000) * c.maxHz * 1.1);
@@ -72,49 +81,65 @@ export class AreaChartLayer implements Layer {
 
     const xMin = viewport.bounds.xMin;
     const baselinePy = viewport.yToPx(0);
+    const gap = this.maxGapMs;
 
-    // Build the line path, collecting first/last visible px for the fill close.
+    // Pass 1 — fill: one closed-to-baseline polygon per gap-separated
+    // segment. With maxGapMs unset there is exactly one segment, producing
+    // the same call sequence as before.
     ctx.beginPath();
-    let firstPx = 0;
-    let lastPx = 0;
-    let first = true;
-
+    let segFirstPx = 0;
+    let prevPx = 0;
+    let prevT = 0;
+    let inSeg = false;
+    let any = false;
+    const closeSeg = (): void => {
+      ctx.lineTo(prevPx, baselinePy);
+      ctx.lineTo(segFirstPx, baselinePy);
+      ctx.closePath();
+    };
     this.ring.forEach((data, off) => {
       const t = data[off];
       if (t < xMin) return;
       const px = viewport.xToPx(t);
       const py = viewport.yToPx(data[off + 1]);
-      if (first) {
+      if (inSeg && gap !== undefined && t - prevT > gap) {
+        closeSeg();
+        inSeg = false;
+      }
+      if (!inSeg) {
         ctx.moveTo(px, py);
-        firstPx = px;
+        segFirstPx = px;
+        inSeg = true;
+        any = true;
+      } else {
+        ctx.lineTo(px, py);
+      }
+      prevPx = px;
+      prevT = t;
+    });
+
+    if (!any) return; // no visible points
+
+    closeSeg();
+    ctx.fillStyle = hexToRgba(this.color, this.fillOpacity);
+    ctx.fill();
+
+    // Pass 2 — stroke on top, breaking at gaps (no baseline segments).
+    ctx.beginPath();
+    let first = true;
+    prevT = 0;
+    this.ring.forEach((data, off) => {
+      const t = data[off];
+      if (t < xMin) return;
+      const px = viewport.xToPx(t);
+      const py = viewport.yToPx(data[off + 1]);
+      if (first || (gap !== undefined && t - prevT > gap)) {
+        ctx.moveTo(px, py);
         first = false;
       } else {
         ctx.lineTo(px, py);
       }
-      lastPx = px;
-    });
-
-    if (first) return; // no visible points
-
-    // Close path along baseline for fill.
-    ctx.lineTo(lastPx, baselinePy);
-    ctx.lineTo(firstPx, baselinePy);
-    ctx.closePath();
-
-    // Fill (semi-transparent).
-    ctx.fillStyle = hexToRgba(this.color, this.fillOpacity);
-    ctx.fill();
-
-    // Re-draw the line on top (without the baseline segments).
-    ctx.beginPath();
-    first = true;
-    this.ring.forEach((data, off) => {
-      const t = data[off];
-      if (t < xMin) return;
-      const px = viewport.xToPx(t);
-      const py = viewport.yToPx(data[off + 1]);
-      if (first) { ctx.moveTo(px, py); first = false; }
-      else ctx.lineTo(px, py);
+      prevT = t;
     });
     ctx.strokeStyle = this.color;
     ctx.lineWidth = this.lineWidth;
