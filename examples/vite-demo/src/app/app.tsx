@@ -7,6 +7,7 @@ import { BarDemoPage } from "../pages/bar-demo";
 import { CandlestickDemoPage } from "../pages/candlestick-demo";
 import { EventMarkerDemoPage } from "../pages/event-marker-demo";
 import { ExternalAxesDemoPage } from "../pages/external-axes-demo";
+import { FollowClockDemoPage } from "../pages/follow-clock-demo";
 import { FluxionWorkerDemoPage } from "../pages/fluxion-worker-demo";
 import { GaugeDemoPage } from "../pages/gauge-demo";
 import { HeatmapDemoPage } from "../pages/heatmap-demo";
@@ -55,6 +56,7 @@ type Tab =
   | "reference-line"
   | "pose-arrow"
   | "pie"
+  | "follow-clock"
   | "stream-worker";
 
 const groups: readonly SideBarGroup<Tab>[] = [
@@ -69,6 +71,7 @@ const groups: readonly SideBarGroup<Tab>[] = [
       { id: "line", label: "Stream" },
       { id: "high-rate", label: "500 Hz Stream" },
       { id: "stream", label: "Multi-stream" },
+      { id: "follow-clock", label: "Follow Clock (bursty)" },
       { id: "crosshair", label: "Crosshair" },
       { id: "static", label: "Static XY" },
       { id: "scatter", label: "Scatter" },
@@ -115,6 +118,7 @@ export function App() {
         {tab === "all" && <AllDemoPage />}
         {tab === "line" && <LineDemoPage />}
         {tab === "stream" && <StreamDemoPage />}
+        {tab === "follow-clock" && <FollowClockDemoPage />}
         {tab === "crosshair" && <CrosshairDemoPage />}
         {tab === "static" && <StaticXyDemoPage />}
         {tab === "scatter" && <ScatterDemoPage />}

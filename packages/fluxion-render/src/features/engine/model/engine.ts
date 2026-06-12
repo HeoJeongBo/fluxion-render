@@ -17,7 +17,13 @@ import { StepChartLayer } from "../../../entities/step-chart-layer";
 import type { Layer } from "../../../shared/model/layer";
 import { Scheduler } from "../../../shared/model/scheduler";
 import { Viewport } from "../../../shared/model/viewport";
-import type { AxisStyle, HostMsg, LayerKind, SetAxisCanvasMsg, TickUpdateMsg } from "../../../shared/protocol";
+import type {
+  AxisStyle,
+  HostMsg,
+  LayerKind,
+  SetAxisCanvasMsg,
+  TickUpdateMsg,
+} from "../../../shared/protocol";
 import { Op, WorkerOp } from "../../../shared/protocol";
 
 function createLayer(id: string, kind: LayerKind): Layer {
@@ -103,17 +109,20 @@ export class Engine {
         if (msg.config !== undefined) layer.setConfig(msg.config);
         layer.resize(this.viewport);
         this.stack.add(layer);
+        this.syncContinuousMode();
         this.scheduler.markDirty();
         break;
       }
       case Op.REMOVE_LAYER:
         this.stack.remove(msg.id);
+        this.syncContinuousMode();
         this.scheduler.markDirty();
         break;
       case Op.CONFIG: {
         const layer = this.stack.get(msg.id);
         if (layer) {
           layer.setConfig(msg.config);
+          this.syncContinuousMode();
           this.scheduler.markDirty();
         }
         break;
@@ -145,7 +154,13 @@ export class Engine {
         this.setAxisCanvas(msg as SetAxisCanvasMsg);
         break;
       case Op.SET_AXIS_STYLE: {
-        const { color, font, tickSize, tickMargin, bgColor } = msg as { color?: string; font?: string; tickSize?: number; tickMargin?: number; bgColor?: string };
+        const { color, font, tickSize, tickMargin, bgColor } = msg as {
+          color?: string;
+          font?: string;
+          tickSize?: number;
+          tickMargin?: number;
+          bgColor?: string;
+        };
         if (color !== undefined) this.axisStyle.color = color;
         if (font !== undefined) this.axisStyle.font = font;
         if (tickSize !== undefined) this.axisStyle.tickSize = tickSize;
@@ -169,7 +184,11 @@ export class Engine {
       this.yAxisCtx = msg.yAxisCanvas.getContext("2d");
     }
     // Size the axis canvases to match the current viewport.
-    this.resizeAxisCanvases(this.viewport.widthPx, this.viewport.heightPx, this.viewport.dpr);
+    this.resizeAxisCanvases(
+      this.viewport.widthPx,
+      this.viewport.heightPx,
+      this.viewport.dpr,
+    );
     this.scheduler.markDirty();
   }
 
@@ -313,6 +332,20 @@ export class Engine {
    * Called from a custom worker streamHandler — bypasses HostMsg serialization.
    * Data layout must match what the layer expects (e.g. [t, y, t, y, …] for line).
    */
+  /**
+   * Enable continuous rendering when the stack's axis layer is following the
+   * wall clock (time-mode + followClock + timeOrigin); disable it otherwise so
+   * static/data-driven charts keep their zero-idle-cost dirty-gated loop.
+   * Called after any op that can change layer presence or config.
+   */
+  private syncContinuousMode(): void {
+    const follow =
+      this.stack
+        .findFirst((l): l is AxisGridLayer => l instanceof AxisGridLayer)
+        ?.isFollowingClock() ?? false;
+    this.scheduler.setContinuous(follow);
+  }
+
   pushRaw(layerId: string, data: Float32Array): void {
     const layer = this.stack.get(layerId);
     if (!layer) return;

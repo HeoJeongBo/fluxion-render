@@ -250,13 +250,25 @@ describe("Engine", () => {
 
       // Frame 1: establish bounds with data in range [-1, 1]
       const buf1 = new Float32Array([0, -1, 100, 1]);
-      engine.dispatch({ op: Op.DATA, id: "line", buffer: buf1.buffer, dtype: "f32", length: buf1.length });
+      engine.dispatch({
+        op: Op.DATA,
+        id: "line",
+        buffer: buf1.buffer,
+        dtype: "f32",
+        length: buf1.length,
+      });
       flushFrame();
 
       // Frame 2: same data — bounds identical, epsilon gate must hold
       // Verify by checking the engine renders without throwing.
       const buf2 = new Float32Array([0, -1, 100, 1]);
-      engine.dispatch({ op: Op.DATA, id: "line", buffer: buf2.buffer, dtype: "f32", length: buf2.length });
+      engine.dispatch({
+        op: Op.DATA,
+        id: "line",
+        buffer: buf2.buffer,
+        dtype: "f32",
+        length: buf2.length,
+      });
       expect(() => flushFrame()).not.toThrow();
 
       engine.dispatch({ op: Op.DISPOSE });
@@ -281,12 +293,24 @@ describe("Engine", () => {
 
       // Frame 1
       const buf1 = new Float32Array([0, 0, 100, 1]);
-      engine.dispatch({ op: Op.DATA, id: "line", buffer: buf1.buffer, dtype: "f32", length: buf1.length });
+      engine.dispatch({
+        op: Op.DATA,
+        id: "line",
+        buffer: buf1.buffer,
+        dtype: "f32",
+        length: buf1.length,
+      });
       flushFrame();
 
       // Frame 2: drift well below 1e-4 of range=1 → epsilon gate blocks update
       const buf2 = new Float32Array([0, 0.000001, 100, 1.000001]);
-      engine.dispatch({ op: Op.DATA, id: "line", buffer: buf2.buffer, dtype: "f32", length: buf2.length });
+      engine.dispatch({
+        op: Op.DATA,
+        id: "line",
+        buffer: buf2.buffer,
+        dtype: "f32",
+        length: buf2.length,
+      });
       expect(() => flushFrame()).not.toThrow();
 
       engine.dispatch({ op: Op.DISPOSE });
@@ -441,9 +465,7 @@ describe("Engine", () => {
       const engine = new Engine();
       const canvas = newCanvas(100, 100);
       engine.dispatch({ op: Op.INIT, canvas, width: 100, height: 100, dpr: 1 });
-      expect(() =>
-        engine.dispatch({ op: Op.CLEAR_DATA, id: "missing" }),
-      ).not.toThrow();
+      expect(() => engine.dispatch({ op: Op.CLEAR_DATA, id: "missing" })).not.toThrow();
       expect(() =>
         engine.dispatch({ op: Op.CLEAR_DATA, id: "missing", latestT: 100 }),
       ).not.toThrow();
@@ -590,14 +612,21 @@ describe("Engine", () => {
       config: { xRange: [0, 10], yRange: [0, 10] },
     });
     const kinds = [
-      "lidar", "scatter", "area", "step", "bar", "candlestick",
-      "heatmap", "event-marker", "scatter-colored", "heatmap-stream",
-      "reference-line", "pose-arrow",
+      "lidar",
+      "scatter",
+      "area",
+      "step",
+      "bar",
+      "candlestick",
+      "heatmap",
+      "event-marker",
+      "scatter-colored",
+      "heatmap-stream",
+      "reference-line",
+      "pose-arrow",
     ] as const;
     for (const kind of kinds) {
-      expect(() =>
-        engine.dispatch({ op: Op.ADD_LAYER, id: kind, kind }),
-      ).not.toThrow();
+      expect(() => engine.dispatch({ op: Op.ADD_LAYER, id: kind, kind })).not.toThrow();
     }
     flushFrame();
     engine.dispatch({ op: Op.DISPOSE });
@@ -635,5 +664,105 @@ describe("Engine", () => {
       engine.pushRaw("nonexistent", new Float32Array([1, 2]));
     }).not.toThrow();
     engine.dispatch({ op: Op.DISPOSE });
+  });
+
+  describe("followClock continuous render", () => {
+    /** Count of background fillRect calls — one per rendered frame. */
+    function frameCount(ctx: FakeCtx): number {
+      return ctx.calls.filter((c) => c.name === "fillRect").length;
+    }
+
+    it("keeps rendering with no data when a followClock time axis is present", () => {
+      const engine = new Engine();
+      const canvas = newCanvas(100, 100);
+      engine.dispatch({ op: Op.INIT, canvas, width: 100, height: 100, dpr: 1 });
+      engine.dispatch({
+        op: Op.ADD_LAYER,
+        id: "axis",
+        kind: "axis-grid",
+        config: {
+          xMode: "time",
+          timeWindowMs: 1000,
+          timeOrigin: 1_000_000,
+          followClock: true,
+          yRange: [-1, 1],
+        },
+      });
+      flushFrame(); // consume the initial dirty frame
+      const ctx = (canvas as unknown as { getContext: () => FakeCtx }).getContext();
+      ctx.calls.length = 0;
+      // No DATA, no markDirty — continuous mode must still render new frames.
+      flushFrame();
+      expect(frameCount(ctx)).toBeGreaterThanOrEqual(1);
+      engine.dispatch({ op: Op.DISPOSE });
+    });
+
+    it("stops continuous rendering when the followClock axis is removed", () => {
+      const engine = new Engine();
+      const canvas = newCanvas(100, 100);
+      engine.dispatch({ op: Op.INIT, canvas, width: 100, height: 100, dpr: 1 });
+      engine.dispatch({
+        op: Op.ADD_LAYER,
+        id: "axis",
+        kind: "axis-grid",
+        config: {
+          xMode: "time",
+          timeWindowMs: 1000,
+          timeOrigin: 1_000_000,
+          followClock: true,
+          yRange: [-1, 1],
+        },
+      });
+      flushFrame();
+      engine.dispatch({ op: Op.REMOVE_LAYER, id: "axis" });
+      flushFrame(); // drain the dirty frame from REMOVE_LAYER
+      const ctx = (canvas as unknown as { getContext: () => FakeCtx }).getContext();
+      ctx.calls.length = 0;
+      // Back to dirty-gated: no new frames without data/config.
+      flushFrame();
+      expect(frameCount(ctx)).toBe(0);
+      engine.dispatch({ op: Op.DISPOSE });
+    });
+
+    it("CONFIG toggling followClock flips continuous render on and off", () => {
+      const engine = new Engine();
+      const canvas = newCanvas(100, 100);
+      engine.dispatch({ op: Op.INIT, canvas, width: 100, height: 100, dpr: 1 });
+      engine.dispatch({
+        op: Op.ADD_LAYER,
+        id: "axis",
+        kind: "axis-grid",
+        config: {
+          xMode: "time",
+          timeWindowMs: 1000,
+          timeOrigin: 1_000_000,
+          followClock: false, // starts data-driven (idle when no data)
+          yRange: [-1, 1],
+        },
+      });
+      flushFrame();
+      const ctx = (canvas as unknown as { getContext: () => FakeCtx }).getContext();
+
+      // Idle: dirty-gated, no continuous frames.
+      ctx.calls.length = 0;
+      flushFrame();
+      expect(frameCount(ctx)).toBe(0);
+
+      // Enable follow → continuous.
+      engine.dispatch({ op: Op.CONFIG, id: "axis", config: { followClock: true } });
+      flushFrame();
+      ctx.calls.length = 0;
+      flushFrame();
+      expect(frameCount(ctx)).toBeGreaterThanOrEqual(1);
+
+      // Disable follow → back to idle.
+      engine.dispatch({ op: Op.CONFIG, id: "axis", config: { followClock: false } });
+      flushFrame();
+      ctx.calls.length = 0;
+      flushFrame();
+      expect(frameCount(ctx)).toBe(0);
+
+      engine.dispatch({ op: Op.DISPOSE });
+    });
   });
 });

@@ -31,6 +31,17 @@ export interface AxisGridConfig {
    */
   timeOrigin?: number;
   /**
+   * When true AND `xMode: "time"`, the trailing window's right edge tracks
+   * wall-clock time (`Date.now() - timeOrigin`) every frame instead of the
+   * data-driven `viewport.latestT`. The axis scrolls continuously even when no
+   * stream data arrives; incoming samples (host-relative ms = `Date.now() -
+   * timeOrigin` on the producer) land at the correct x. Requires `timeOrigin`
+   * to be set — without it the window falls back to `latestT` (no follow).
+   * Default false (data-driven, unchanged behavior). The engine starts a
+   * continuous render loop while any axis layer has this enabled.
+   */
+  followClock?: boolean;
+  /**
    * Formatter for x tick labels.
    *
    * - **Function** `(value: number) => string`: called directly for every
@@ -124,6 +135,7 @@ export class AxisGridLayer implements Layer {
   private xMode: "fixed" | "time" = "fixed";
   private timeWindowMs = 5000;
   private timeOrigin: number | null = null;
+  private followClock = false;
   private xTickFormat: string | ((v: number) => string) = "HH:mm:ss";
   private yMode: "fixed" | "auto" = "fixed";
   private yAutoPadding = 0.1;
@@ -162,6 +174,7 @@ export class AxisGridLayer implements Layer {
     if (c.xMode !== undefined) this.xMode = c.xMode;
     if (c.timeWindowMs !== undefined) this.timeWindowMs = c.timeWindowMs;
     if (c.timeOrigin !== undefined) this.timeOrigin = c.timeOrigin;
+    if (c.followClock !== undefined) this.followClock = c.followClock;
     if (c.xTickFormat !== undefined) this.xTickFormat = c.xTickFormat;
     if (c.yMode !== undefined) this.yMode = c.yMode;
     if (c.yAutoPadding !== undefined) this.yAutoPadding = c.yAutoPadding;
@@ -190,13 +203,34 @@ export class AxisGridLayer implements Layer {
   scan(viewport: Viewport): void {
     viewport.yPadPx = this.yPadPx;
     if (this.xMode === "time") {
-      const latestT = viewport.latestT;
-      this.bounds.xMin = latestT - this.timeWindowMs;
-      this.bounds.xMax = latestT;
+      // follow-clock wins when enabled and timeOrigin is known: the right edge
+      // tracks wall-clock now so the window scrolls even with no new data.
+      // Otherwise the existing data-driven latestT path is preserved unchanged.
+      const rightEdge =
+        this.followClock && this.timeOrigin != null
+          ? this.now() - this.timeOrigin
+          : viewport.latestT;
+      this.bounds.xMin = rightEdge - this.timeWindowMs;
+      this.bounds.xMax = rightEdge;
     }
     if (this.applyToViewport) {
       viewport.setBounds(this.bounds);
     }
+  }
+
+  /** Indirection seam so tests can inject a deterministic wall clock. */
+  private now(): number {
+    return Date.now();
+  }
+
+  /**
+   * True when this layer drives a wall-clock-following time window — i.e.
+   * `followClock` is set, `xMode` is "time", and `timeOrigin` is known. The
+   * engine uses this to enable continuous rendering. Requiring `timeOrigin`
+   * keeps a misconfigured chart (followClock without origin) at zero idle cost.
+   */
+  isFollowingClock(): boolean {
+    return this.followClock && this.xMode === "time" && this.timeOrigin != null;
   }
 
   draw(ctx: OffscreenCanvasRenderingContext2D, viewport: Viewport): void {
@@ -236,9 +270,10 @@ export class AxisGridLayer implements Layer {
     }
 
     const { widthPx: w, heightPx: h } = viewport;
-    const xTicks = this.xTickIntervalMs != null
-      ? intervalTicks(this.bounds.xMin, this.bounds.xMax, this.xTickIntervalMs)
-      : niceTicks(this.bounds.xMin, this.bounds.xMax, this.targetTicks);
+    const xTicks =
+      this.xTickIntervalMs != null
+        ? intervalTicks(this.bounds.xMin, this.bounds.xMax, this.xTickIntervalMs)
+        : niceTicks(this.bounds.xMin, this.bounds.xMax, this.targetTicks);
     const yTicks = niceTicks(this.bounds.yMin, this.bounds.yMax, this.targetTicks);
 
     // ── Grid lines ──

@@ -62,6 +62,48 @@ describe("Scheduler", () => {
     s.stop();
   });
 
+  it("continuous mode ticks every frame without markDirty", () => {
+    const tick = vi.fn();
+    const s = new Scheduler(tick);
+    s.start();
+    s.setContinuous(true);
+    vi.advanceTimersByTime(20);
+    expect(tick).toHaveBeenCalledTimes(1);
+    // Keeps firing on subsequent frames with no markDirty.
+    vi.advanceTimersByTime(40);
+    expect(tick.mock.calls.length).toBeGreaterThanOrEqual(2);
+    s.stop();
+  });
+
+  it("setContinuous(false) returns to dirty-gated behavior", () => {
+    const tick = vi.fn();
+    const s = new Scheduler(tick);
+    s.start();
+    s.setContinuous(true);
+    vi.advanceTimersByTime(40);
+    const afterContinuous = tick.mock.calls.length;
+    expect(afterContinuous).toBeGreaterThanOrEqual(1);
+
+    s.setContinuous(false);
+    // Drain the pending dirty frame, if any.
+    vi.advanceTimersByTime(20);
+    const baseline = tick.mock.calls.length;
+    // No further ticks without markDirty.
+    vi.advanceTimersByTime(100);
+    expect(tick.mock.calls.length).toBe(baseline);
+    s.stop();
+  });
+
+  it("continuous mode respects stop()", () => {
+    const tick = vi.fn();
+    const s = new Scheduler(tick);
+    s.start();
+    s.setContinuous(true);
+    s.stop();
+    vi.advanceTimersByTime(100);
+    expect(tick).not.toHaveBeenCalled();
+  });
+
   it("uses setTimeout fallback when requestAnimationFrame is undefined", () => {
     const raf = (globalThis as any).requestAnimationFrame;
     const caf = (globalThis as any).cancelAnimationFrame;

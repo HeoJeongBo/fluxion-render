@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { Viewport } from "../../../shared/model/viewport";
 import { createFakeCtx, type FakeCtx } from "../../../test/setup";
 import { AxisGridLayer } from "./axis-grid-layer";
@@ -79,6 +79,82 @@ describe("AxisGridLayer", () => {
       frame(layer, v);
       expect(v.bounds.xMin).toBe(1500);
       expect(v.bounds.xMax).toBe(2500);
+    });
+  });
+
+  describe("followClock", () => {
+    it("right edge = now - timeOrigin, ignoring stale latestT", () => {
+      const layer = new AxisGridLayer("axis");
+      layer.setConfig({
+        xMode: "time",
+        timeWindowMs: 2000,
+        timeOrigin: 1_000_000,
+        followClock: true,
+        yRange: [-1, 1],
+      });
+      // wall-clock now = 1_005_000 → host-relative right edge = 5000.
+      vi.spyOn(layer as unknown as { now(): number }, "now").mockReturnValue(1_005_000);
+      const v = makeViewport();
+      v.latestT = 50; // deliberately stale — must be ignored.
+      frame(layer, v);
+      expect(v.bounds.xMax).toBe(5000);
+      expect(v.bounds.xMin).toBe(3000);
+    });
+
+    it("advances with the wall clock across frames even with no new data", () => {
+      const layer = new AxisGridLayer("axis");
+      layer.setConfig({
+        xMode: "time",
+        timeWindowMs: 1000,
+        timeOrigin: 1_000_000,
+        followClock: true,
+        yRange: [-1, 1],
+      });
+      const nowSpy = vi.spyOn(layer as unknown as { now(): number }, "now");
+      const v = makeViewport();
+      v.latestT = 0; // never changes — no data arrives.
+
+      nowSpy.mockReturnValue(1_003_000);
+      frame(layer, v);
+      expect(v.bounds.xMax).toBe(3000);
+
+      nowSpy.mockReturnValue(1_004_500);
+      frame(layer, v);
+      expect(v.bounds.xMax).toBe(4500); // advanced despite latestT staying 0.
+      expect(v.bounds.xMin).toBe(3500);
+    });
+
+    it("falls back to latestT when followClock is set but timeOrigin is missing", () => {
+      const layer = new AxisGridLayer("axis");
+      layer.setConfig({
+        xMode: "time",
+        timeWindowMs: 2000,
+        followClock: true, // no timeOrigin → no follow.
+        yRange: [-1, 1],
+      });
+      const nowSpy = vi.spyOn(layer as unknown as { now(): number }, "now");
+      const v = makeViewport();
+      v.latestT = 5000;
+      frame(layer, v);
+      expect(v.bounds.xMax).toBe(5000); // latestT path.
+      expect(v.bounds.xMin).toBe(3000);
+      expect(nowSpy).not.toHaveBeenCalled();
+      expect(layer.isFollowingClock()).toBe(false);
+    });
+
+    it("is ignored when xMode is not 'time'", () => {
+      const layer = new AxisGridLayer("axis");
+      layer.setConfig({
+        xRange: [-5, 5],
+        yRange: [0, 10],
+        followClock: true,
+        timeOrigin: 1_000_000,
+      });
+      const v = makeViewport();
+      frame(layer, v);
+      expect(v.bounds.xMin).toBe(-5);
+      expect(v.bounds.xMax).toBe(5);
+      expect(layer.isFollowingClock()).toBe(false);
     });
   });
 
@@ -200,7 +276,12 @@ describe("AxisGridLayer", () => {
 
     it("yAutoMinSpan expands narrow range symmetrically around midpoint", () => {
       const layer = new AxisGridLayer("axis");
-      layer.setConfig({ xRange: [0, 10], yMode: "auto", yAutoPadding: 0, yAutoMinSpan: 0.1 });
+      layer.setConfig({
+        xRange: [0, 10],
+        yMode: "auto",
+        yAutoPadding: 0,
+        yAutoMinSpan: 0.1,
+      });
       const v = makeViewport();
       v.beginScan();
       v.observedYMin = 0;
@@ -214,7 +295,12 @@ describe("AxisGridLayer", () => {
 
     it("yAutoMinSpan does not shrink range wider than minSpan", () => {
       const layer = new AxisGridLayer("axis");
-      layer.setConfig({ xRange: [0, 10], yMode: "auto", yAutoPadding: 0, yAutoMinSpan: 0.1 });
+      layer.setConfig({
+        xRange: [0, 10],
+        yMode: "auto",
+        yAutoPadding: 0,
+        yAutoMinSpan: 0.1,
+      });
       const v = makeViewport();
       v.beginScan();
       v.observedYMin = 0;
@@ -387,7 +473,9 @@ describe("AxisGridLayer", () => {
       const v = makeViewport();
       frame(layer, v);
       const ctx = createFakeCtx();
-      layer.drawXAxis(ctx as unknown as OffscreenCanvasRenderingContext2D, 200, 30, { tickSize: 0 });
+      layer.drawXAxis(ctx as unknown as OffscreenCanvasRenderingContext2D, 200, 30, {
+        tickSize: 0,
+      });
       expect(ctx.calls.some((c) => c.name === "stroke")).toBe(false);
       expect(ctx.calls.some((c) => c.name === "fillText")).toBe(true);
     });
@@ -437,7 +525,9 @@ describe("AxisGridLayer", () => {
       const v = makeViewport();
       frame(layer, v);
       const ctx = createFakeCtx();
-      layer.drawYAxis(ctx as unknown as OffscreenCanvasRenderingContext2D, 60, 200, { tickSize: 0 });
+      layer.drawYAxis(ctx as unknown as OffscreenCanvasRenderingContext2D, 60, 200, {
+        tickSize: 0,
+      });
       expect(ctx.calls.some((c) => c.name === "stroke")).toBe(false);
       expect(ctx.calls.some((c) => c.name === "fillText")).toBe(true);
     });
@@ -449,10 +539,26 @@ describe("AxisGridLayer", () => {
       frame(layer, v);
       const ctxNoPad = createFakeCtx();
       const ctxPad = createFakeCtx();
-      layer.drawYAxis(ctxNoPad as unknown as OffscreenCanvasRenderingContext2D, 60, 200, {}, 0);
-      layer.drawYAxis(ctxPad as unknown as OffscreenCanvasRenderingContext2D, 60, 200, {}, 20);
-      const yNoPad = ctxNoPad.calls.filter((c) => c.name === "fillText").map((c) => c.args[2] as number);
-      const yPad = ctxPad.calls.filter((c) => c.name === "fillText").map((c) => c.args[2] as number);
+      layer.drawYAxis(
+        ctxNoPad as unknown as OffscreenCanvasRenderingContext2D,
+        60,
+        200,
+        {},
+        0,
+      );
+      layer.drawYAxis(
+        ctxPad as unknown as OffscreenCanvasRenderingContext2D,
+        60,
+        200,
+        {},
+        20,
+      );
+      const yNoPad = ctxNoPad.calls
+        .filter((c) => c.name === "fillText")
+        .map((c) => c.args[2] as number);
+      const yPad = ctxPad.calls
+        .filter((c) => c.name === "fillText")
+        .map((c) => c.args[2] as number);
       expect(yNoPad.length).toBe(yPad.length);
       expect(yNoPad[0]).not.toBe(yPad[0]);
     });

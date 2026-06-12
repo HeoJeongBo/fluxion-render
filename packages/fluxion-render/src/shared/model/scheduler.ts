@@ -5,12 +5,25 @@
  */
 export class Scheduler {
   private dirty = false;
+  private continuous = false;
   private running = false;
   private raf: number | null = null;
   private readonly tick: () => void;
 
   constructor(tick: () => void) {
     this.tick = tick;
+  }
+
+  /**
+   * When true, `tick` fires on every frame regardless of the dirty flag. Used
+   * for wall-clock-following time axes that must redraw to scroll even when no
+   * data arrives. When false, returns to the default dirty-gated behavior.
+   */
+  setContinuous(on: boolean) {
+    this.continuous = on;
+    // Wake the loop immediately so the first continuous frame doesn't wait for
+    // an external markDirty.
+    if (on) this.dirty = true;
   }
 
   start() {
@@ -37,7 +50,7 @@ export class Scheduler {
 
   private loop = () => {
     if (!this.running) return;
-    if (this.dirty) {
+    if (this.continuous || this.dirty) {
       this.dirty = false;
       this.tick();
     }

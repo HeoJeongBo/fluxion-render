@@ -122,6 +122,10 @@ function SensorChart({
         xMode: "time",
         timeWindowMs: TIME_WINDOW_MS,
         timeOrigin,
+        // Live: the x-axis scrolls with wall-clock time so the chart keeps
+        // moving even when stream data pauses. Toggled with isLive via the
+        // effect below (DVR follows the player's seek position instead).
+        followClock: true,
         yMode: "auto",
         showXGrid: true,
         showYGrid: true,
@@ -141,6 +145,13 @@ function SensorChart({
     ],
     [timeOrigin, color],
   );
+
+  // Toggle wall-clock following with live/DVR. useFluxionCanvas only applies
+  // layer config at mount, so flip it explicitly here: live → axis scrolls
+  // with the clock; DVR → axis follows the player's seek position (latestT).
+  useEffect(() => {
+    host?.configLayer("axis", { followClock: isLive });
+  }, [host, isLive]);
 
   // DVR path: hydrate trailing window from IDB + stream onFrame events
   useChartReplay<MetricSample>({
@@ -211,7 +222,11 @@ export function WorkerFanOutApp() {
   // (below) — otherwise early ticks call session.record() while the recorder
   // is still `_recording === false` and the frames are silently dropped, so
   // IDB never advances and the scrubber's live-edge time label stays frozen.
-  const { isRecording } = useRecordingSession({ session, enabled: isReady, seedTimeRange });
+  const { isRecording } = useRecordingSession({
+    session,
+    enabled: isReady,
+    seedTimeRange,
+  });
 
   // One combined controller replaces the session→dvr→rate→player→scrubber chain.
   const ctl = useDvrController({
@@ -367,8 +382,8 @@ export function WorkerFanOutApp() {
           worker fan-out · {CHART_COUNT} charts
         </span>
         <span className="text-app-muted text-[11px]">
-          1 pool · 1 worker · 1 postMessage/tick · {SAMPLE_HZ}Hz (batch {SAMPLES_PER_BATCH}×
-          {BATCH_HZ}Hz) · {TIME_WINDOW_MS / 1000}s window
+          1 pool · 1 worker · 1 postMessage/tick · {SAMPLE_HZ}Hz (batch{" "}
+          {SAMPLES_PER_BATCH}×{BATCH_HZ}Hz) · {TIME_WINDOW_MS / 1000}s window
         </span>
 
         {!isLive && dvr.player && (
