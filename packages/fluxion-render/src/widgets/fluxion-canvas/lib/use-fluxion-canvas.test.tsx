@@ -2,7 +2,7 @@ import { render } from "@testing-library/react";
 import { StrictMode, useEffect } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { Op } from "../../../shared/protocol";
-import { useFluxionCanvas } from "./use-fluxion-canvas";
+import { type FluxionLayerSpec, useFluxionCanvas } from "./use-fluxion-canvas";
 
 interface RecordedPost {
   msg: unknown;
@@ -80,5 +80,85 @@ describe("useFluxionCanvas", () => {
     ).not.toThrow();
     // StrictMode disposes the first host; the second (live) host is still mounted.
     expect(terminate).toHaveBeenCalledTimes(1);
+  });
+
+  describe("layer-config reconciliation", () => {
+    function ConfigHarness({
+      workerFactory,
+      layers,
+    }: {
+      workerFactory: () => Worker;
+      layers: FluxionLayerSpec[];
+    }) {
+      const { containerRef } = useFluxionCanvas({
+        layers,
+        hostOptions: { workerFactory },
+      });
+      return <div ref={containerRef} style={{ width: 200, height: 100 }} />;
+    }
+
+    const configPosts = (posts: RecordedPost[]) =>
+      posts.filter((p) => (p.msg as { op: number }).op === Op.CONFIG);
+
+    it("mount does not re-send configs already applied via addLayer", () => {
+      const { factory, posts } = makeFakeWorkerFactory();
+      render(
+        <ConfigHarness
+          workerFactory={factory}
+          layers={[
+            { id: "axis", kind: "axis-grid" },
+            { id: "line", kind: "line", config: { color: "#fff" } },
+          ]}
+        />,
+      );
+      expect(configPosts(posts)).toHaveLength(0);
+    });
+
+    it("changing a layer's config in a new layers array posts CONFIG for only that layer", () => {
+      const { factory, posts } = makeFakeWorkerFactory();
+      const { rerender } = render(
+        <ConfigHarness
+          workerFactory={factory}
+          layers={[
+            { id: "axis", kind: "axis-grid", config: { xMode: "fixed" } },
+            { id: "line", kind: "line", config: { color: "#fff" } },
+          ]}
+        />,
+      );
+      rerender(
+        <ConfigHarness
+          workerFactory={factory}
+          layers={[
+            { id: "axis", kind: "axis-grid", config: { xMode: "fixed" } },
+            { id: "line", kind: "line", config: { color: "#f00" } },
+          ]}
+        />,
+      );
+      const configs = configPosts(posts);
+      expect(configs).toHaveLength(1);
+      expect(configs[0]!.msg).toMatchObject({
+        op: Op.CONFIG,
+        id: "line",
+        config: { color: "#f00" },
+      });
+    });
+
+    it("identical config content in a new array reference is not re-sent", () => {
+      const { factory, posts } = makeFakeWorkerFactory();
+      const { rerender } = render(
+        <ConfigHarness
+          workerFactory={factory}
+          layers={[{ id: "line", kind: "line", config: { color: "#fff" } }]}
+        />,
+      );
+      // Fresh array + fresh config objects, structurally identical.
+      rerender(
+        <ConfigHarness
+          workerFactory={factory}
+          layers={[{ id: "line", kind: "line", config: { color: "#fff" } }]}
+        />,
+      );
+      expect(configPosts(posts)).toHaveLength(0);
+    });
   });
 });

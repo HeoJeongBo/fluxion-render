@@ -92,10 +92,13 @@ function makeAxisCanvas(container: HTMLDivElement): HTMLCanvasElement {
  *  3. Observes container size / DPR and forwards resize messages
  *  4. Terminates the worker + removes the canvas on unmount
  *
- * `layers`, `hostOptions`, and `onReady` are captured on mount only — future
- * prop changes are intentionally ignored (this matches the v0.1 widget and
- * keeps the hook predictable). Swap the `key` on the host element if you
- * need a full re-initialization.
+ * Layer CONFIGS inside `layers` are live: when the `layers` array reference
+ * changes (memoize it and list your config inputs as deps), each layer's
+ * config is diffed by content and only changed ones are re-sent via
+ * `configLayer`. Structural changes — adding/removing layers or changing a
+ * layer's `kind` — are NOT reconciled; `hostOptions` and `onReady` are also
+ * mount-only. Swap the `key` on the host element if you need a full
+ * re-initialization.
  */
 export function useFluxionCanvas(
   options: UseFluxionCanvasOptions,
@@ -111,6 +114,11 @@ export function useFluxionCanvas(
   // an empty dep array without going stale between StrictMode invocations.
   const optionsRef = useRef(options);
   optionsRef.current = options;
+
+  // Serialized configs already applied to the worker, keyed by layer id.
+  // Seeded at mount (addLayer carries the initial config) so the reconcile
+  // effect below doesn't re-send what the worker already has.
+  const lastAppliedRef = useRef<Map<string, string>>(new Map());
 
   useEffect(() => {
     const container = containerRef.current;
@@ -148,6 +156,11 @@ export function useFluxionCanvas(
     });
     hostRef.current = instance;
     for (const l of current.layers) instance.addLayer(l.id, l.kind, l.config);
+    // Baseline the reconcile map to what addLayer just applied (re-seeded on
+    // every remount so a fresh host never inherits a stale baseline).
+    lastAppliedRef.current = new Map(
+      current.layers.map((l) => [l.id, JSON.stringify(l.config)]),
+    );
     setHost(instance);
     current.onReady?.(instance);
 
@@ -164,6 +177,24 @@ export function useFluxionCanvas(
       }
     };
   }, [mountKey]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Reconcile layer configs when the `layers` array reference changes.
+  // Memoize `layers` in the consumer so this only fires on intentional
+  // changes; the serialization guard additionally prevents config spam when
+  // it isn't memoized. Structural changes (adding/removing layers, changing
+  // `kind`) are NOT handled — remount via `key` instead.
+  const layers = options.layers;
+  useEffect(() => {
+    if (!host) return;
+    const applied = lastAppliedRef.current;
+    for (const spec of layers) {
+      if (spec.config === undefined) continue;
+      const serialized = JSON.stringify(spec.config);
+      if (applied.get(spec.id) === serialized) continue;
+      applied.set(spec.id, serialized);
+      host.configLayer(spec.id, spec.config);
+    }
+  }, [host, layers]);
 
   const handleResize = useCallback((info: ResizeInfo) => {
     const instance = hostRef.current;

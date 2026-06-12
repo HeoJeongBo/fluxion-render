@@ -286,11 +286,25 @@ Creates the canvas, worker, and all layers. Returns a ref to attach to a contain
 
 ```ts
 const { containerRef, host } = useFluxionCanvas({
-  layers: FluxionLayerSpec[],       // layer declarations
+  layers: FluxionLayerSpec[],       // layer declarations (configs are live — see below)
   hostOptions?: FluxionHostOptions, // bgColor, pool, workerFactory
   onReady?: (host) => void,         // called once after initialization
 });
 ```
+
+Layer **configs** inside `layers` are reconciled: when the array reference
+changes, each layer's config is diffed by content and only changed ones are
+re-sent to the worker. Memoize the array and list your config inputs as deps:
+
+```tsx
+const layers = useMemo(() => [
+  axisGridLayer('axis', { xMode: 'time', followClock: isLive }),
+  lineLayer('s1', { color, visible }),
+], [isLive, color, visible]); // config changes auto-apply — no manual configLayer
+```
+
+Structural changes (adding/removing layers, changing a layer's `kind`) are
+not reconciled — remount with a different `key` for those.
 
 ### `useFluxionStream(options)`
 
@@ -497,7 +511,10 @@ No default styles are applied — layout and appearance are fully controlled via
 
 ### `useLayerConfig(host, layerSpec)`
 
-Reactively updates a layer's config when the spec changes.
+Reactively updates a layer's config when the spec changes. Since configs
+declared in the `layers` array now auto-apply (see `useFluxionCanvas`), this
+hook is mainly for configs managed outside that array — it remains fully
+supported either way.
 
 ```ts
 const [windowMs, setWindowMs] = useState(5000);
