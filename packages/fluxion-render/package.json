@@ -69,7 +69,7 @@
     "access": "public"
   },
   "peerDependencies": {
-    "@heojeongbo/fluxion-worker": "^0.5.0",
+    "@heojeongbo/fluxion-worker": ">=0.5.0 <1",
     "react": ">=18"
   },
   "peerDependenciesMeta": {

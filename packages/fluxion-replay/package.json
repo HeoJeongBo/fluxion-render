@@ -57,7 +57,7 @@
     "access": "public"
   },
   "peerDependencies": {
-    "@heojeongbo/fluxion-render": "^0.14.0",
+    "@heojeongbo/fluxion-render": ">=0.14.0 <1",
     "react": ">=18"
   },
   "peerDependenciesMeta": {
