@@ -13,23 +13,34 @@
     "format:check": "biome format .",
     "release": "pnpm --filter @heojeongbo/fluxion-render release",
     "release:dry": "pnpm --filter @heojeongbo/fluxion-render release:dry",
+    "release:patch:dry": "pnpm --filter @heojeongbo/fluxion-render release:patch:dry",
+    "release:minor:dry": "pnpm --filter @heojeongbo/fluxion-render release:minor:dry",
+    "release:major:dry": "pnpm --filter @heojeongbo/fluxion-render release:major:dry",
     "release:patch": "pnpm --filter @heojeongbo/fluxion-render release:patch",
     "release:minor": "pnpm --filter @heojeongbo/fluxion-render release:minor",
     "release:major": "pnpm --filter @heojeongbo/fluxion-render release:major",
     "release:worker": "pnpm --filter @heojeongbo/fluxion-worker release",
     "release:worker:dry": "pnpm --filter @heojeongbo/fluxion-worker release:dry",
+    "release:worker:patch:dry": "pnpm --filter @heojeongbo/fluxion-worker release:patch:dry",
+    "release:worker:minor:dry": "pnpm --filter @heojeongbo/fluxion-worker release:minor:dry",
+    "release:worker:major:dry": "pnpm --filter @heojeongbo/fluxion-worker release:major:dry",
     "release:worker:patch": "pnpm --filter @heojeongbo/fluxion-worker release:patch",
     "release:worker:minor": "pnpm --filter @heojeongbo/fluxion-worker release:minor",
     "release:worker:major": "pnpm --filter @heojeongbo/fluxion-worker release:major",
     "release:replay": "pnpm --filter @heojeongbo/fluxion-replay release",
     "release:replay:dry": "pnpm --filter @heojeongbo/fluxion-replay release:dry",
+    "release:replay:patch:dry": "pnpm --filter @heojeongbo/fluxion-replay release:patch:dry",
+    "release:replay:minor:dry": "pnpm --filter @heojeongbo/fluxion-replay release:minor:dry",
+    "release:replay:major:dry": "pnpm --filter @heojeongbo/fluxion-replay release:major:dry",
     "release:replay:patch": "pnpm --filter @heojeongbo/fluxion-replay release:patch",
     "release:replay:minor": "pnpm --filter @heojeongbo/fluxion-replay release:minor",
-    "release:replay:major": "pnpm --filter @heojeongbo/fluxion-replay release:major"
+    "release:replay:major": "pnpm --filter @heojeongbo/fluxion-replay release:major",
+    "lint": "biome check .",
+    "lint:fix": "biome check --write ."
   },
   "packageManager": "pnpm@9.0.0",
   "devDependencies": {
-    "@biomejs/biome": "^2.4.11",
+    "@biomejs/biome": "^2.4.15",
     "typescript": "^5.5.4"
   }
 }
