@@ -8,15 +8,13 @@ describe("useReplaySession", () => {
 
   it("starts with isReady false", () => {
     const { result } = renderHook(() =>
-      useReplaySession({ channels: [], autoOpen: false })
+      useReplaySession({ channels: [], autoOpen: false }),
     );
     expect(result.current.isReady).toBe(false);
   });
 
   it("sets isReady after auto-open", async () => {
-    const { result } = renderHook(() =>
-      useReplaySession({ channels: [] })
-    );
+    const { result } = renderHook(() => useReplaySession({ channels: [] }));
 
     await act(async () => {
       await Promise.resolve();
@@ -28,15 +26,13 @@ describe("useReplaySession", () => {
 
   it("starts in live mode", () => {
     const { result } = renderHook(() =>
-      useReplaySession({ channels: [], autoOpen: false })
+      useReplaySession({ channels: [], autoOpen: false }),
     );
     expect(result.current.mode).toBe("live");
   });
 
   it("enterReplay switches mode to replay", async () => {
-    const { result } = renderHook(() =>
-      useReplaySession({ channels: [] })
-    );
+    const { result } = renderHook(() => useReplaySession({ channels: [] }));
 
     await act(async () => {
       await Promise.resolve();
@@ -51,27 +47,31 @@ describe("useReplaySession", () => {
   });
 
   it("exitReplay returns to live mode", async () => {
-    const { result } = renderHook(() =>
-      useReplaySession({ channels: [] })
-    );
+    const { result } = renderHook(() => useReplaySession({ channels: [] }));
 
     await act(async () => {
       await Promise.resolve();
       await Promise.resolve();
     });
 
-    await act(async () => { await result.current.enterReplay(); });
-    act(() => { result.current.exitReplay(); });
+    await act(async () => {
+      await result.current.enterReplay();
+    });
+    act(() => {
+      result.current.exitReplay();
+    });
 
     expect(result.current.mode).toBe("live");
   });
 
   it("disposes session on unmount", async () => {
     const { result, unmount } = renderHook(() =>
-      useReplaySession({ channels: [], autoOpen: false })
+      useReplaySession({ channels: [], autoOpen: false }),
     );
 
-    await act(async () => { await Promise.resolve(); });
+    await act(async () => {
+      await Promise.resolve();
+    });
 
     const session = result.current.session;
     const disposeSpy = session ? vi.spyOn(session, "dispose") : null;
@@ -85,22 +85,20 @@ describe("useReplaySession", () => {
 
   it("record() is a no-op when session is null", () => {
     const { result } = renderHook(() =>
-      useReplaySession({ channels: [], autoOpen: false })
+      useReplaySession({ channels: [], autoOpen: false }),
     );
     expect(() => result.current.record("test", {})).not.toThrow();
   });
 
   it("exitReplay() is a no-op when session is null", () => {
     const { result } = renderHook(() =>
-      useReplaySession({ channels: [], autoOpen: false })
+      useReplaySession({ channels: [], autoOpen: false }),
     );
     expect(() => result.current.exitReplay()).not.toThrow();
   });
 
   it("enterReplay with timestamp passes it to session", async () => {
-    const { result } = renderHook(() =>
-      useReplaySession({ channels: [] })
-    );
+    const { result } = renderHook(() => useReplaySession({ channels: [] }));
     await act(async () => {
       await Promise.resolve();
       await Promise.resolve();
@@ -117,30 +115,34 @@ describe("useReplaySession", () => {
   });
 
   it("multiple enterReplay calls do not throw", async () => {
-    const { result } = renderHook(() =>
-      useReplaySession({ channels: [] })
-    );
+    const { result } = renderHook(() => useReplaySession({ channels: [] }));
     await act(async () => {
       await Promise.resolve();
       await Promise.resolve();
     });
 
-    await expect(act(async () => {
-      await result.current.enterReplay();
-      await result.current.enterReplay();
-    })).resolves.not.toThrow();
+    await expect(
+      act(async () => {
+        await result.current.enterReplay();
+        await result.current.enterReplay();
+      }),
+    ).resolves.not.toThrow();
   });
 
   it("record() passes channelId and data to session", async () => {
     const { result } = renderHook(() =>
-      useReplaySession({ channels: [], autoOpen: false })
+      useReplaySession({ channels: [], autoOpen: false }),
     );
-    await act(async () => { await Promise.resolve(); });
+    await act(async () => {
+      await Promise.resolve();
+    });
 
     const session = result.current.session;
     if (session) {
       const recordSpy = vi.spyOn(session, "record");
-      act(() => { result.current.record("test-channel", { value: 42 }); });
+      act(() => {
+        result.current.record("test-channel", { value: 42 });
+      });
       expect(recordSpy).toHaveBeenCalledWith("test-channel", { value: 42 }, undefined);
     }
   });
@@ -150,10 +152,16 @@ describe("useReplaySession", () => {
   // puts these in deps (see auto-record-pattern.test.tsx).
   it("returned callbacks (record, enterReplay, exitReplay) have stable identity across re-renders", async () => {
     const { result, rerender } = renderHook(() =>
-      useReplaySession({ channels: [], autoOpen: false })
+      useReplaySession({ channels: [], autoOpen: false }),
     );
-    await act(async () => { await Promise.resolve(); });
-    const r0 = { record: result.current.record, enterReplay: result.current.enterReplay, exitReplay: result.current.exitReplay };
+    await act(async () => {
+      await Promise.resolve();
+    });
+    const r0 = {
+      record: result.current.record,
+      enterReplay: result.current.enterReplay,
+      exitReplay: result.current.exitReplay,
+    };
     rerender();
     rerender();
     expect(result.current.record).toBe(r0.record);
@@ -173,7 +181,10 @@ describe("useReplaySession", () => {
 
     it("isReady becomes true and error stays null on successful open", async () => {
       const { result } = renderHook(() => useReplaySession({ channels: [] }));
-      await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+      await act(async () => {
+        await Promise.resolve();
+        await Promise.resolve();
+      });
       expect(result.current.isReady).toBe(true);
       expect(result.current.error).toBeNull();
     });
@@ -183,9 +194,10 @@ describe("useReplaySession", () => {
       // Mock indexedDB.open to fire its onerror handler.
       const orig = globalThis.indexedDB.open;
       globalThis.indexedDB.open = (() => {
-        const req: { onerror?: (e: unknown) => void; onsuccess?: unknown; error: Error } = {
-          error: failure,
-        };
+        const req: { onerror?: (e: unknown) => void; onsuccess?: unknown; error: Error } =
+          {
+            error: failure,
+          };
         Promise.resolve().then(() => req.onerror?.({ target: req }));
         return req as unknown as IDBOpenDBRequest;
       }) as unknown as typeof globalThis.indexedDB.open;
@@ -206,7 +218,11 @@ describe("useReplaySession", () => {
     it("wraps a non-Error thrown value in Error", async () => {
       const orig = globalThis.indexedDB.open;
       globalThis.indexedDB.open = (() => {
-        const req: { onerror?: (e: unknown) => void; onsuccess?: unknown; error: unknown } = {
+        const req: {
+          onerror?: (e: unknown) => void;
+          onsuccess?: unknown;
+          error: unknown;
+        } = {
           error: "string failure",
         };
         Promise.resolve().then(() => req.onerror?.({ target: req }));
@@ -227,12 +243,14 @@ describe("useReplaySession", () => {
   // The "Opening IDB…" hang: a blocked open used to never settle (no onblocked
   // handler), and a StrictMode mount→cleanup→mount left a zombie connection.
   describe("open hang regression", () => {
-    const idb = (globalThis as unknown as {
-      __fakeIDBControls: {
-        setForceBlocked: (v: boolean) => void;
-        reset: () => void;
-      };
-    }).__fakeIDBControls;
+    const idb = (
+      globalThis as unknown as {
+        __fakeIDBControls: {
+          setForceBlocked: (v: boolean) => void;
+          reset: () => void;
+        };
+      }
+    ).__fakeIDBControls;
 
     afterEach(() => idb.reset());
 

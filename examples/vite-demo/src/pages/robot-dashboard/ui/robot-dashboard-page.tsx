@@ -1,4 +1,9 @@
-import type { FluxionHost, LineSample, MarkerEvent, ScatterColoredSample } from "@heojeongbo/fluxion-render";
+import type {
+  FluxionHost,
+  LineSample,
+  MarkerEvent,
+  ScatterColoredSample,
+} from "@heojeongbo/fluxion-render";
 import {
   axisGridLayer,
   eventMarkerLayer,
@@ -52,9 +57,7 @@ function Panel({ title, children }: { title: string; children: React.ReactNode }
       >
         {title}
       </div>
-      <div style={{ flex: 1, minHeight: 0, position: "relative" }}>
-        {children}
-      </div>
+      <div style={{ flex: 1, minHeight: 0, position: "relative" }}>{children}</div>
     </div>
   );
 }
@@ -143,7 +146,15 @@ function MotorCard({
         />
       </div>
       {/* Gauge */}
-      <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: "6px 0" }}>
+      <div
+        style={{
+          flex: 1,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          padding: "6px 0",
+        }}
+      >
         <FluxionGauge
           value={value * 100}
           min={0}
@@ -203,7 +214,12 @@ function VelocityPanel({
         showYLabels: false,
         yPadPx: 6,
       }),
-      lineLayer("vel", { color: "#80ffa0", lineWidth: 2, retentionMs: 12_000, maxHz: TARGET_HZ }),
+      lineLayer("vel", {
+        color: "#80ffa0",
+        lineWidth: 2,
+        retentionMs: 12_000,
+        maxHz: TARGET_HZ,
+      }),
       eventMarkerLayer("markers"),
     ],
     [timeOrigin],
@@ -352,7 +368,10 @@ function LinePanel({
     setup: (h) => h.line(layerId),
     tick: (t, line) => {
       const msg = generateFloat32StampedMessage(t);
-      const sample: LineSample = { t: stampToMs(msg.header), y: genFn(t) + (msg.data - 0.5) * 0.1 };
+      const sample: LineSample = {
+        t: stampToMs(msg.header),
+        y: genFn(t) + (msg.data - 0.5) * 0.1,
+      };
       line.push(sample);
       return 1;
     },
@@ -378,11 +397,19 @@ const WINDOW_OPTIONS = [
 ] as const;
 
 export function RobotDashboardPage() {
-  const { windowMs, setWindowMs, timeOrigin, syncConfig } = useSyncedTimeWindow(DEFAULT_WINDOW_MS);
+  const { windowMs, setWindowMs, timeOrigin, syncConfig } =
+    useSyncedTimeWindow(DEFAULT_WINDOW_MS);
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", width: "100%", height: "100%", background: THEME.page.background }}>
-
+    <div
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        width: "100%",
+        height: "100%",
+        background: THEME.page.background,
+      }}
+    >
       {/* Header */}
       <div
         style={{
@@ -394,8 +421,12 @@ export function RobotDashboardPage() {
           flexShrink: 0,
         }}
       >
-        <span style={{ fontSize: 13, fontWeight: 700, color: THEME.page.textPrimary }}>Robot Dashboard</span>
-        <div style={{ marginLeft: "auto", display: "flex", gap: 6, alignItems: "center" }}>
+        <span style={{ fontSize: 13, fontWeight: 700, color: THEME.page.textPrimary }}>
+          Robot Dashboard
+        </span>
+        <div
+          style={{ marginLeft: "auto", display: "flex", gap: 6, alignItems: "center" }}
+        >
           <span style={{ fontSize: 11, color: THEME.page.textSecondary }}>Window:</span>
           {WINDOW_OPTIONS.map((o) => (
             <button
@@ -404,7 +435,10 @@ export function RobotDashboardPage() {
               style={{
                 padding: "3px 10px",
                 fontSize: 11,
-                background: windowMs === o.ms ? THEME.button.background : THEME.button.inactiveBackground,
+                background:
+                  windowMs === o.ms
+                    ? THEME.button.background
+                    : THEME.button.inactiveBackground,
                 color: windowMs === o.ms ? THEME.button.text : THEME.button.inactiveText,
                 border: `1px solid ${windowMs === o.ms ? THEME.button.border : THEME.button.inactiveBorder}`,
                 borderRadius: 4,
@@ -434,9 +468,25 @@ export function RobotDashboardPage() {
         </div>
 
         {/* Row 2 + 3 share remaining space equally */}
-        <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", gap: 8 }}>
+        <div
+          style={{
+            flex: 1,
+            minHeight: 0,
+            display: "flex",
+            flexDirection: "column",
+            gap: 8,
+          }}
+        >
           {/* Row 2: Velocity + Position */}
-          <div style={{ flex: 1, minHeight: 0, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+          <div
+            style={{
+              flex: 1,
+              minHeight: 0,
+              display: "grid",
+              gridTemplateColumns: "1fr 1fr",
+              gap: 8,
+            }}
+          >
             <VelocityPanel syncConfig={syncConfig} timeOrigin={timeOrigin} />
             <UncertaintyPanel syncConfig={syncConfig} timeOrigin={timeOrigin} />
           </div>
@@ -454,7 +504,6 @@ export function RobotDashboardPage() {
           </div>
         </div>
       </div>
-
     </div>
   );
 }

@@ -48,7 +48,11 @@ export class ScatterChartLayer implements Layer {
     if (c.shape !== undefined) this.shape = c.shape;
     if (c.visible !== undefined) this.visible = c.visible;
     let newCapacity: number | undefined = c.capacity;
-    if (newCapacity === undefined && c.retentionMs !== undefined && c.maxHz !== undefined) {
+    if (
+      newCapacity === undefined &&
+      c.retentionMs !== undefined &&
+      c.maxHz !== undefined
+    ) {
       newCapacity = Math.ceil((c.retentionMs / 1000) * c.maxHz * 1.1);
     }
     if (newCapacity !== undefined && newCapacity !== this.ring.capacity) {

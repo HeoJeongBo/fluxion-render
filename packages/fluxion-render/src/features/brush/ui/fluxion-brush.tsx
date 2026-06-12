@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { type CSSProperties, useEffect, useRef, useState } from "react";
 import type { BrushSelection, UseFluxionBrushResult } from "../model/use-fluxion-brush";
 
 export interface FluxionBrushProps {

@@ -122,7 +122,9 @@ describe("FluxionCrosshair — className and style passthrough", () => {
     const { container } = render(
       <FluxionCrosshair state={HIDDEN_STATE} className="my-crosshair" />,
     );
-    expect((container.firstChild as HTMLElement).classList.contains("my-crosshair")).toBe(true);
+    expect((container.firstChild as HTMLElement).classList.contains("my-crosshair")).toBe(
+      true,
+    );
   });
 
   it("merges custom style into the outer container", () => {

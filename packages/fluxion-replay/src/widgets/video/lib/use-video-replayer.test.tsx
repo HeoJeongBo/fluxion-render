@@ -305,7 +305,9 @@ describe("useVideoReplayer", () => {
     vi.useRealTimers();
     // Gate the store query so we can unmount while runSeek is suspended.
     let release!: () => void;
-    const gate = new Promise<void>((r) => { release = r; });
+    const gate = new Promise<void>((r) => {
+      release = r;
+    });
     const store = makeStore();
     await store.open();
     recordFrame(store, 1000, true);
@@ -323,7 +325,9 @@ describe("useVideoReplayer", () => {
 
     const player = makePlayer(store);
     const canvasRef = { current: makeCanvas() };
-    const { unmount } = renderHook(() => useVideoReplayer(player, canvasRef, store, CHANNEL));
+    const { unmount } = renderHook(() =>
+      useVideoReplayer(player, canvasRef, store, CHANNEL),
+    );
     await Promise.resolve();
     seekSpy.mockClear();
 
@@ -341,7 +345,9 @@ describe("useVideoReplayer", () => {
   it("unmount during seekTo cancels the post-seekTo continuation (cancelled guard)", async () => {
     vi.useRealTimers();
     let releaseSeek!: () => void;
-    const seekGate = new Promise<void>((r) => { releaseSeek = r; });
+    const seekGate = new Promise<void>((r) => {
+      releaseSeek = r;
+    });
     const store = makeStore();
     await store.open();
     recordFrame(store, 1000, true);
@@ -354,7 +360,9 @@ describe("useVideoReplayer", () => {
 
     const player = makePlayer(store);
     const canvasRef = { current: makeCanvas() };
-    const { unmount } = renderHook(() => useVideoReplayer(player, canvasRef, store, CHANNEL));
+    const { unmount } = renderHook(() =>
+      useVideoReplayer(player, canvasRef, store, CHANNEL),
+    );
     await Promise.resolve();
     seekSpy.mockClear();
 

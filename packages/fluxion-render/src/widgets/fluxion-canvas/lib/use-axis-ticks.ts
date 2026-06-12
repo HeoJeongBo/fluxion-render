@@ -1,7 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { AxisGridConfig } from "../../../entities/axis-grid-layer";
 import type { FluxionHost } from "../../../features/host";
-import { type AxisTick, type AxisTickSet, computeAxisTicks } from "../../../shared/lib/axis-ticks";
+import {
+  type AxisTick,
+  type AxisTickSet,
+  computeAxisTicks,
+} from "../../../shared/lib/axis-ticks";
 import type { SerializedTick } from "../../../shared/protocol";
 import type { FluxionLayerSpec } from "./use-fluxion-canvas";
 

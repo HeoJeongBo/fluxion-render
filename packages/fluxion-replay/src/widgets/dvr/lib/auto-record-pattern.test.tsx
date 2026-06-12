@@ -3,8 +3,8 @@ import { useEffect, useState } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { MetricChannel } from "../../../entities/metric-channel/metric-channel";
 import { ReplaySession } from "../../../features/session/model/replay-session";
-import { useReplaySession } from "../../replay-timeline/lib/use-replay-session";
 import { useLiveTimeRange } from "../../live/lib/use-live-time-range";
+import { useReplaySession } from "../../replay-timeline/lib/use-replay-session";
 
 /**
  * Regression tests for the "every re-render wipes the store" bug.
@@ -33,7 +33,9 @@ import { useLiveTimeRange } from "../../live/lib/use-live-time-range";
  * effect and assert it fires exactly once even when the page re-renders.
  */
 
-function makeChannel() { return new MetricChannel("signal"); }
+function makeChannel() {
+  return new MetricChannel("signal");
+}
 
 /**
  * Minimal harness that reproduces chart-replay.tsx's auto-record pattern.
@@ -59,7 +61,9 @@ function AutoRecordHarness({ tick }: { tick: number }) {
         seedTimeRange({ earliest: Date.now(), latest: Date.now() });
       } catch {}
     })();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [session, isReady, seedTimeRange]);
 
   // The `tick` prop is just there to force re-renders without changing
@@ -127,7 +131,9 @@ describe("chart-replay auto-record pattern (regression for clearRecording-per-re
           if (cancelled) return;
           seed({ earliest: Date.now(), latest: Date.now() });
         })();
-        return () => { cancelled = true; };
+        return () => {
+          cancelled = true;
+        };
       }, [session, isReady, seed]);
 
       // Push a fake "live frame" each render so we have something to keep.

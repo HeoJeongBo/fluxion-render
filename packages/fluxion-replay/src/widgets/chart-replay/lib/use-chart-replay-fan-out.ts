@@ -296,9 +296,9 @@ export function useChartReplayFanOut<T>(
       offFrame();
       offTick();
     };
-  // opts.isHostLive and opts.getSources are intentionally excluded: they are
-  // mirrored into refs above and the effect reads them via those refs, so
-  // function-reference churn on the parent does not tear down the subscription.
+    // opts.isHostLive and opts.getSources are intentionally excluded: they are
+    // mirrored into refs above and the effect reads them via those refs, so
+    // function-reference churn on the parent does not tear down the subscription.
   }, [player, store, channel, windowMs, timeOrigin, marginMs]);
 
   return { isHydrating, hydratedCount };

@@ -87,7 +87,9 @@ describe("Scenario 03: DVR mode", () => {
 
     const player = await session.enterReplay();
     let ended = false;
-    player.onEnd(() => { ended = true; });
+    player.onEnd(() => {
+      ended = true;
+    });
     player.play();
 
     await vi.advanceTimersByTimeAsync(10_000);

@@ -5,7 +5,7 @@ import {
   makeFakePlayer,
   makeFakeSession,
 } from "../../chart-replay/lib/chart-replay-fixtures";
-import { useReplayDvr, type UseReplayDvrOptions } from "./use-replay-dvr";
+import { type UseReplayDvrOptions, useReplayDvr } from "./use-replay-dvr";
 
 // Tight wrapper to drive useReplayDvr through renderHook. Lets us swap props
 // (liveTimeRange, autoPlay, etc.) and re-render without rebuilding the harness.
@@ -160,7 +160,9 @@ describe("useReplayDvr", () => {
       exitReplay: ses.exitReplay,
       liveTimeRange: LIVE,
     });
-    await act(async () => { await result.current.enter(); });
+    await act(async () => {
+      await result.current.enter();
+    });
     expect(ses.player.onEnd).toHaveBeenCalledTimes(1);
     expect(ses.player.endListenerCount()).toBe(1);
   });
@@ -174,11 +176,15 @@ describe("useReplayDvr", () => {
       liveTimeRange: LIVE,
       autoExitToLive: false,
     });
-    await act(async () => { await result.current.enter(); });
+    await act(async () => {
+      await result.current.enter();
+    });
     expect(ses.player.onEnd).not.toHaveBeenCalled();
 
     // Even if the player fires onEnd somehow, no listener is registered → no exit.
-    await act(async () => { ses.player.emitEnd(); });
+    await act(async () => {
+      ses.player.emitEnd();
+    });
     expect(ses.exitReplay).not.toHaveBeenCalled();
     expect(result.current.isDvr).toBe(true);
   });
@@ -191,9 +197,13 @@ describe("useReplayDvr", () => {
       exitReplay: ses.exitReplay,
       liveTimeRange: LIVE,
     });
-    await act(async () => { await result.current.enter(); });
+    await act(async () => {
+      await result.current.enter();
+    });
 
-    await act(async () => { result.current.exit(); });
+    await act(async () => {
+      result.current.exit();
+    });
 
     expect(ses.player.dispose).toHaveBeenCalledTimes(1);
     expect(ses.exitReplay).toHaveBeenCalledTimes(1);
@@ -215,11 +225,15 @@ describe("useReplayDvr", () => {
     });
 
     let firstPlayer: FakePlayer | null = null;
-    await act(async () => { await result.current.enter(1_010_000); });
+    await act(async () => {
+      await result.current.enter(1_010_000);
+    });
     firstPlayer = ses.player;
     expect(firstPlayer.endListenerCount()).toBe(1);
 
-    await act(async () => { await result.current.enter(1_020_000); });
+    await act(async () => {
+      await result.current.enter(1_020_000);
+    });
     // The first player's listener was unsubscribed before the second enter
     // installed its own.
     expect(firstPlayer.endListenerCount()).toBe(0);
@@ -245,7 +259,9 @@ describe("useReplayDvr", () => {
       exitReplay: ses.exitReplay,
       liveTimeRange: LIVE,
     });
-    await act(async () => { await result.current.enter(); });
+    await act(async () => {
+      await result.current.enter();
+    });
     expect(result.current.effectiveTimeRange).toEqual({
       earliest: LIVE.earliest,
       latest: LIVE.latest,
@@ -278,7 +294,9 @@ describe("useReplayDvr", () => {
       exitReplay: ses.exitReplay,
       liveTimeRange: null,
     });
-    await act(async () => { await result.current.enter(); });
+    await act(async () => {
+      await result.current.enter();
+    });
     expect(ses.enterReplay).not.toHaveBeenCalled();
     expect(result.current.isDvr).toBe(false);
   });
@@ -291,7 +309,9 @@ describe("useReplayDvr", () => {
       exitReplay: ses.exitReplay,
       liveTimeRange: LIVE,
     });
-    await act(async () => { await result.current.enter(); });
+    await act(async () => {
+      await result.current.enter();
+    });
     expect(ses.enterReplay).not.toHaveBeenCalled();
   });
 
@@ -366,7 +386,9 @@ describe("useReplayDvr", () => {
       const playersSeen: FakePlayer[] = [];
       // Five rapid drags across [25s, 5s].
       for (const seekT of [1_025_000, 1_020_000, 1_015_000, 1_010_000, 1_005_000]) {
-        await act(async () => { await result.current.enter(seekT); });
+        await act(async () => {
+          await result.current.enter(seekT);
+        });
         playersSeen.push(ses.player);
       }
 
@@ -383,12 +405,16 @@ describe("useReplayDvr", () => {
       expect(result.current.isDvr).toBe(true);
 
       // Firing onEnd on a stale player must NOT exit DVR — its listener is gone.
-      await act(async () => { playersSeen[0]!.emitEnd(); });
+      await act(async () => {
+        playersSeen[0]!.emitEnd();
+      });
       expect(ses.exitReplay).not.toHaveBeenCalled();
       expect(result.current.isDvr).toBe(true);
 
       // Firing onEnd on the live player still drops back to live.
-      await act(async () => { final.emitEnd(); });
+      await act(async () => {
+        final.emitEnd();
+      });
       expect(ses.exitReplay).toHaveBeenCalledTimes(1);
       expect(result.current.isDvr).toBe(false);
     });
@@ -402,9 +428,13 @@ describe("useReplayDvr", () => {
         exitReplay: ses.exitReplay,
         liveTimeRange: LIVE_60S,
       });
-      await act(async () => { await result.current.enter(1_030_000); });
+      await act(async () => {
+        await result.current.enter(1_030_000);
+      });
 
-      await act(async () => { result.current.exit(); });
+      await act(async () => {
+        result.current.exit();
+      });
 
       expect(ses.exitReplay).toHaveBeenCalledTimes(1);
       expect(player.dispose).toHaveBeenCalledTimes(1);
@@ -445,7 +475,11 @@ describe("useReplayDvr", () => {
 
       // Only the last seekT's player should be live — the rest must be
       // disposed so they don't leak rAF loops / listeners.
-      const allPlayers = (ses.enterReplay as unknown as { mock: { results: { value: Promise<FakePlayer> }[] } }).mock.results;
+      const allPlayers = (
+        ses.enterReplay as unknown as {
+          mock: { results: { value: Promise<FakePlayer> }[] };
+        }
+      ).mock.results;
       const players = await Promise.all(allPlayers.map((r) => r.value));
       expect(result.current.player).toBe(players[players.length - 1]);
       // The 3 stale players should be disposed.
@@ -481,8 +515,14 @@ describe("useReplayDvr", () => {
         await Promise.resolve();
       });
 
-      const allPlayers = (ses.enterReplay as unknown as { mock: { results: { value: Promise<FakePlayer> }[] } }).mock.results;
-      const [stalePlayer, freshPlayer] = await Promise.all(allPlayers.map((r) => r.value));
+      const allPlayers = (
+        ses.enterReplay as unknown as {
+          mock: { results: { value: Promise<FakePlayer> }[] };
+        }
+      ).mock.results;
+      const [stalePlayer, freshPlayer] = await Promise.all(
+        allPlayers.map((r) => r.value),
+      );
       // Fresh wins regardless of resolution order.
       expect(result.current.player).toBe(freshPlayer);
       // Stale is disposed, not silently kept alive.
@@ -501,7 +541,9 @@ describe("useReplayDvr", () => {
       });
 
       // Establish DVR with a quick enter so exit() has something to clean up.
-      await act(async () => { await result.current.enter(1_005_000); });
+      await act(async () => {
+        await result.current.enter(1_005_000);
+      });
       expect(result.current.isDvr).toBe(true);
 
       ses.holdEnter();
@@ -512,7 +554,9 @@ describe("useReplayDvr", () => {
       expect(ses.pendingEnterCount()).toBe(1);
 
       // User decides to bail before the in-flight enter resolves.
-      await act(async () => { result.current.exit(); });
+      await act(async () => {
+        result.current.exit();
+      });
       expect(result.current.isDvr).toBe(false);
 
       // Now the stale enter resolves.
@@ -525,7 +569,11 @@ describe("useReplayDvr", () => {
       // The hook must remain in live mode — stale enter's player is disposed.
       expect(result.current.isDvr).toBe(false);
       expect(result.current.player).toBeNull();
-      const allPlayers = (ses.enterReplay as unknown as { mock: { results: { value: Promise<FakePlayer> }[] } }).mock.results;
+      const allPlayers = (
+        ses.enterReplay as unknown as {
+          mock: { results: { value: Promise<FakePlayer> }[] };
+        }
+      ).mock.results;
       const stalePlayer = await allPlayers[allPlayers.length - 1]!.value;
       expect(stalePlayer.dispose).toHaveBeenCalledTimes(1);
     });
@@ -602,8 +650,14 @@ describe("useReplayDvr", () => {
       // resolution yielded to the newer enter instead of re-syncing.
       expect(ses.exitReplay).toHaveBeenCalledTimes(1);
       expect(result.current.isDvr).toBe(true);
-      const allPlayers = (ses.enterReplay as unknown as { mock: { results: { value: Promise<FakePlayer> }[] } }).mock.results;
-      const [stalePlayer, freshPlayer] = await Promise.all(allPlayers.map((r) => r.value));
+      const allPlayers = (
+        ses.enterReplay as unknown as {
+          mock: { results: { value: Promise<FakePlayer> }[] };
+        }
+      ).mock.results;
+      const [stalePlayer, freshPlayer] = await Promise.all(
+        allPlayers.map((r) => r.value),
+      );
       expect(result.current.player).toBe(freshPlayer);
       expect(stalePlayer!.dispose).toHaveBeenCalledTimes(1);
       expect(freshPlayer!.dispose).not.toHaveBeenCalled();
@@ -647,7 +701,9 @@ describe("useReplayDvr", () => {
         exitReplay: ses.exitReplay,
         liveTimeRange: live,
       });
-      await act(async () => { await result.current.enter(1_020_000); });
+      await act(async () => {
+        await result.current.enter(1_020_000);
+      });
       expect(ses.enterReplay).toHaveBeenCalledWith(1_020_000, {
         timeRange: { earliest: live.earliest, latest: live.latest },
       });
@@ -662,7 +718,9 @@ describe("useReplayDvr", () => {
         exitReplay: ses.exitReplay,
         liveTimeRange: liveAtClick,
       });
-      await act(async () => { await result.current.enter(1_020_000); });
+      await act(async () => {
+        await result.current.enter(1_020_000);
+      });
       expect(result.current.frozenLatest).toBe(liveAtClick.latest);
 
       // liveTimeRange keeps growing in the background — must NOT shift frozen.
@@ -685,7 +743,9 @@ describe("useReplayDvr", () => {
         exitReplay: ses.exitReplay,
         liveTimeRange: live,
       });
-      await act(async () => { await result.current.enter(); });
+      await act(async () => {
+        await result.current.enter();
+      });
       expect(ses.enterReplay).toHaveBeenCalledWith(live.earliest, {
         timeRange: { earliest: live.earliest, latest: live.latest },
       });
@@ -704,7 +764,9 @@ describe("useReplayDvr", () => {
     });
 
     // Enter DVR — this registers an onEnd listener (sets offEndRef.current)
-    await act(async () => { await result.current.enter(1_030_000); });
+    await act(async () => {
+      await result.current.enter(1_030_000);
+    });
     expect(ses.player.endListenerCount()).toBe(1);
 
     // Unmount without calling exit() — the useEffect cleanup should call
@@ -716,7 +778,12 @@ describe("useReplayDvr", () => {
   it("enter() is a no-op when enterReplay returns null", async () => {
     const ses = makeFakeSession({ timeRange: LIVE });
     // Override enterReplay to return null (simulates session not ready)
-    const enterReplayNull = vi.fn(async () => null as unknown as ReturnType<typeof ses.enterReplay> extends Promise<infer T> ? T : never);
+    const enterReplayNull = vi.fn(
+      async () =>
+        null as unknown as ReturnType<typeof ses.enterReplay> extends Promise<infer T>
+          ? T
+          : never,
+    );
     const { result } = setup({
       session: ses.session,
       enterReplay: enterReplayNull as typeof ses.enterReplay,

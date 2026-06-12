@@ -128,7 +128,11 @@ export class ReplayStore {
   }
 
   appendFrame(frame: SerializedFrame): void {
-    this._pending.push({ t: frame.t, channelId: frame.channelId, payload: frame.payload });
+    this._pending.push({
+      t: frame.t,
+      channelId: frame.channelId,
+      payload: frame.payload,
+    });
   }
 
   async flush(): Promise<void> {
@@ -142,7 +146,11 @@ export class ReplayStore {
     await this._maybeEvict();
   }
 
-  async getFrames(fromMs: number, toMs: number, lowerOpen = false): Promise<SerializedFrame[]> {
+  async getFrames(
+    fromMs: number,
+    toMs: number,
+    lowerOpen = false,
+  ): Promise<SerializedFrame[]> {
     const db = this._assertOpen();
     return new Promise((resolve, reject) => {
       const tx = db.transaction("frames", "readonly");
@@ -222,7 +230,10 @@ export class ReplayStore {
     }));
   }
 
-  async deleteFramesBefore(cutoffMs: number, limit = MAX_DELETE_PER_EVICTION): Promise<void> {
+  async deleteFramesBefore(
+    cutoffMs: number,
+    limit = MAX_DELETE_PER_EVICTION,
+  ): Promise<void> {
     const db = this._assertOpen();
     return new Promise((resolve, reject) => {
       const tx = db.transaction("frames", "readwrite");
@@ -262,14 +273,20 @@ export class ReplayStore {
 
   startSegment(t = Date.now()): void {
     // Close any open segment first
-    if (this._segments.length > 0 && this._segments[this._segments.length - 1].end === null) {
+    if (
+      this._segments.length > 0 &&
+      this._segments[this._segments.length - 1].end === null
+    ) {
       this._segments[this._segments.length - 1].end = t;
     }
     this._segments.push({ start: t, end: null });
   }
 
   endSegment(t = Date.now()): void {
-    if (this._segments.length > 0 && this._segments[this._segments.length - 1].end === null) {
+    if (
+      this._segments.length > 0 &&
+      this._segments[this._segments.length - 1].end === null
+    ) {
       this._segments[this._segments.length - 1].end = t;
     }
   }
@@ -310,7 +327,11 @@ export class ReplayStore {
     });
   }
 
-  async writeVideoChunk(channelId: string, filename: string, data: Uint8Array): Promise<void> {
+  async writeVideoChunk(
+    channelId: string,
+    filename: string,
+    data: Uint8Array,
+  ): Promise<void> {
     const root = this._assertOpfs();
     const dir = await root.getDirectoryHandle(channelId, { create: true });
     const file = await dir.getFileHandle(filename, { create: true });
@@ -349,10 +370,14 @@ export class ReplayStore {
     if (!root) return;
     try {
       const names: string[] = [];
-      for await (const [name] of (root as unknown as { entries(): AsyncIterable<[string, FileSystemHandle]> }).entries()) {
+      for await (const [name] of (
+        root as unknown as { entries(): AsyncIterable<[string, FileSystemHandle]> }
+      ).entries()) {
         names.push(name);
       }
-      await Promise.all(names.map((n) => root.removeEntry(n, { recursive: true }).catch(() => {})));
+      await Promise.all(
+        names.map((n) => root.removeEntry(n, { recursive: true }).catch(() => {})),
+      );
     } catch {
       // OPFS iteration not supported in all environments — skip silently
     }
@@ -380,7 +405,8 @@ export class ReplayStore {
   }
 
   private _assertOpen(): IDBDatabase {
-    if (!this._db) throw new Error(`ReplayStore("${this._dbName}") is not open. Call open() first.`);
+    if (!this._db)
+      throw new Error(`ReplayStore("${this._dbName}") is not open. Call open() first.`);
     return this._db;
   }
 
@@ -453,8 +479,8 @@ export class ReplayStore {
         const info = await this.getStorageInfo();
         console.log(
           `[ReplayStore "${this._dbName}"] storage: ${info.percentUsed.toFixed(1)}% used` +
-          ` (${(info.usedBytes / 1024 / 1024).toFixed(1)} MB / ${(info.quotaBytes / 1024 / 1024).toFixed(1)} MB),` +
-          ` ${info.idbFrameCount} frames`,
+            ` (${(info.usedBytes / 1024 / 1024).toFixed(1)} MB / ${(info.quotaBytes / 1024 / 1024).toFixed(1)} MB),` +
+            ` ${info.idbFrameCount} frames`,
         );
       } catch {
         // ignore

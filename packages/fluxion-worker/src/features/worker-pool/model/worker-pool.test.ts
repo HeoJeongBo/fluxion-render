@@ -209,7 +209,11 @@ describe("WorkerHandle standalone (worker injection)", () => {
   it("release() calls the provided onRelease callback", () => {
     const w = makeFakeWorker();
     const onRelease = vi.fn();
-    const handle = new WorkerHandle<TestMsg>(w as unknown as Worker, "my-host", onRelease);
+    const handle = new WorkerHandle<TestMsg>(
+      w as unknown as Worker,
+      "my-host",
+      onRelease,
+    );
     handle.release();
     expect(onRelease).toHaveBeenCalledOnce();
   });
@@ -374,12 +378,8 @@ describe("WorkerHandle", () => {
       const h2 = pool.acquire();
       const received1: unknown[] = [];
       const received2: unknown[] = [];
-      h1.addEventListener("message", (e) =>
-        received1.push((e as MessageEvent).data),
-      );
-      h2.addEventListener("message", (e) =>
-        received2.push((e as MessageEvent).data),
-      );
+      h1.addEventListener("message", (e) => received1.push((e as MessageEvent).data));
+      h2.addEventListener("message", (e) => received2.push((e as MessageEvent).data));
       fakeWorkers[0]!._emit("message", { op: 1, hostId: h1.hostId });
       fakeWorkers[0]!._emit("message", { op: 2, hostId: h2.hostId });
       fakeWorkers[0]!._emit("message", { op: 3, hostId: "unknown" });
@@ -392,9 +392,7 @@ describe("WorkerHandle", () => {
       const { pool, fakeWorkers } = makePool(1);
       const handle = pool.acquire();
       const received: unknown[] = [];
-      handle.addEventListener("message", (e) =>
-        received.push((e as MessageEvent).data),
-      );
+      handle.addEventListener("message", (e) => received.push((e as MessageEvent).data));
       fakeWorkers[0]!._emit("message", { op: 1 }); // no hostId
       fakeWorkers[0]!._emit("message", null);
       fakeWorkers[0]!._emit("message", "string");
@@ -406,8 +404,7 @@ describe("WorkerHandle", () => {
       const { pool, fakeWorkers } = makePool(1);
       const handle = pool.acquire();
       const received: unknown[] = [];
-      const listener = (e: Event) =>
-        received.push((e as MessageEvent).data);
+      const listener = (e: Event) => received.push((e as MessageEvent).data);
       handle.addEventListener("message", listener);
       fakeWorkers[0]!._emit("message", { op: 1, hostId: handle.hostId });
       expect(received).toHaveLength(1);
@@ -794,7 +791,9 @@ describe("WorkerHandle.onMessage strips hostId", () => {
     const { pool, fakeWorkers } = makePool(1);
     const handle = pool.acquire();
     let received: Record<string, unknown> | undefined;
-    handle.onMessage((msg) => { received = msg as Record<string, unknown>; });
+    handle.onMessage((msg) => {
+      received = msg as Record<string, unknown>;
+    });
     fakeWorkers[0]!._emit("message", { op: 1, result: 42, hostId: handle.hostId });
     expect(received).toBeDefined();
     expect(received!["hostId"]).toBeUndefined();
@@ -840,9 +839,7 @@ describe("WorkerTimeoutError.is()", () => {
 describe("WorkerHandle.dispose()", () => {
   it("standalone: terminates the worker and cleans up listeners", () => {
     const fakeWorker = makeFakeWorker();
-    const handle = new WorkerHandle<TestMsg>(
-      () => fakeWorker as unknown as Worker,
-    );
+    const handle = new WorkerHandle<TestMsg>(() => fakeWorker as unknown as Worker);
     const cb = vi.fn();
     handle.onMessage(cb);
     handle.dispose();
@@ -1311,7 +1308,11 @@ describe("WorkerHandle.onStream()", () => {
     const handle = pool.acquire();
     const cb = vi.fn();
     handle.onStream(cb);
-    fakeWorkers[0]!._emit("message", { __fluxionStream: true, hostId: handle.hostId, value: 42 });
+    fakeWorkers[0]!._emit("message", {
+      __fluxionStream: true,
+      hostId: handle.hostId,
+      value: 42,
+    });
     expect(cb).toHaveBeenCalledOnce();
     expect(cb.mock.calls[0]![0]).toMatchObject({ value: 42 });
     pool.dispose();
@@ -1322,7 +1323,11 @@ describe("WorkerHandle.onStream()", () => {
     const handle = pool.acquire();
     const cb = vi.fn();
     handle.onStream(cb);
-    fakeWorkers[0]!._emit("message", { __fluxionStream: true, hostId: handle.hostId, parsed: 7 });
+    fakeWorkers[0]!._emit("message", {
+      __fluxionStream: true,
+      hostId: handle.hostId,
+      parsed: 7,
+    });
     const delivered = cb.mock.calls[0]![0] as Record<string, unknown>;
     expect(delivered.__fluxionStream).toBeUndefined();
     expect(delivered.hostId).toBeUndefined();
@@ -1345,7 +1350,11 @@ describe("WorkerHandle.onStream()", () => {
     const handle = pool.acquire();
     const cb = vi.fn();
     handle.onStream(cb);
-    fakeWorkers[0]!._emit("message", { __fluxionStream: true, hostId: "other-host", value: 1 });
+    fakeWorkers[0]!._emit("message", {
+      __fluxionStream: true,
+      hostId: "other-host",
+      value: 1,
+    });
     expect(cb).not.toHaveBeenCalled();
     pool.dispose();
   });
@@ -1355,7 +1364,11 @@ describe("WorkerHandle.onStream()", () => {
     const handle = pool.acquire();
     const rpcCb = vi.fn();
     handle.onMessage(rpcCb);
-    fakeWorkers[0]!._emit("message", { __fluxionStream: true, hostId: handle.hostId, value: 99 });
+    fakeWorkers[0]!._emit("message", {
+      __fluxionStream: true,
+      hostId: handle.hostId,
+      value: 99,
+    });
     expect(rpcCb).not.toHaveBeenCalled();
     pool.dispose();
   });
@@ -1366,7 +1379,11 @@ describe("WorkerHandle.onStream()", () => {
     const cb = vi.fn();
     const off = handle.onStream(cb);
     off();
-    fakeWorkers[0]!._emit("message", { __fluxionStream: true, hostId: handle.hostId, value: 1 });
+    fakeWorkers[0]!._emit("message", {
+      __fluxionStream: true,
+      hostId: handle.hostId,
+      value: 1,
+    });
     expect(cb).not.toHaveBeenCalled();
     pool.dispose();
   });

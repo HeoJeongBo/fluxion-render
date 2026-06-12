@@ -36,7 +36,10 @@ export class MetricChannel implements BaseChannel<MetricSample> {
     const nameLen = view.getUint16(8, true);
     const unitLen = view.getUint16(10, true);
     const name = decoder.decode(new Uint8Array(buffer, 12, nameLen));
-    const unit = unitLen > 0 ? decoder.decode(new Uint8Array(buffer, 12 + nameLen, unitLen)) : undefined;
+    const unit =
+      unitLen > 0
+        ? decoder.decode(new Uint8Array(buffer, 12 + nameLen, unitLen))
+        : undefined;
     return unit !== undefined ? { name, value, unit } : { name, value };
   }
 }

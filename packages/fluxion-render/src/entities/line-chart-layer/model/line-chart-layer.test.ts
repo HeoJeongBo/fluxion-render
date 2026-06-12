@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { AxisGridLayer } from "../../axis-grid-layer/model/axis-grid-layer";
 import { Viewport } from "../../../shared/model/viewport";
 import { createFakeCtx } from "../../../test/setup";
+import { AxisGridLayer } from "../../axis-grid-layer/model/axis-grid-layer";
 import { LineChartLayer } from "./line-chart-layer";
 
 function makeViewport() {
@@ -177,7 +177,10 @@ describe("LineChartLayer (streaming)", () => {
       const vp = makeViewport();
       // Fill 660 samples then push 1 more — oldest should be dropped (ring wraps)
       const buf = new Float32Array(660 * 2);
-      for (let i = 0; i < 660; i++) { buf[i * 2] = i; buf[i * 2 + 1] = 0; }
+      for (let i = 0; i < 660; i++) {
+        buf[i * 2] = i;
+        buf[i * 2 + 1] = 0;
+      }
       layer.setData(buf.buffer, buf.length, vp);
       const extra = new Float32Array([700, 9]);
       layer.setData(extra.buffer, 2, vp);
@@ -194,7 +197,10 @@ describe("LineChartLayer (streaming)", () => {
       const vp = makeViewport();
       // Fill 500 + 1 samples — ring wraps at 500, not 660
       const buf = new Float32Array(500 * 2);
-      for (let i = 0; i < 500; i++) { buf[i * 2] = i; buf[i * 2 + 1] = 1; }
+      for (let i = 0; i < 500; i++) {
+        buf[i * 2] = i;
+        buf[i * 2 + 1] = 1;
+      }
       layer.setData(buf.buffer, buf.length, vp);
       layer.setData(new Float32Array([600, 5]).buffer, 2, vp);
       vp.setBounds({ xMin: 0, xMax: 10000, yMin: -1, yMax: 10 });
@@ -210,7 +216,10 @@ describe("LineChartLayer (streaming)", () => {
       const vp = makeViewport();
       // Fill 100 samples + 1 overflow — ring capacity should still be 100
       const buf = new Float32Array(100 * 2);
-      for (let i = 0; i < 100; i++) { buf[i * 2] = i; buf[i * 2 + 1] = 0; }
+      for (let i = 0; i < 100; i++) {
+        buf[i * 2] = i;
+        buf[i * 2 + 1] = 0;
+      }
       layer.setData(buf.buffer, buf.length, vp);
       layer.setData(new Float32Array([200, 7]).buffer, 2, vp);
       vp.setBounds({ xMin: 0, xMax: 10000, yMin: -1, yMax: 10 });
@@ -376,11 +385,7 @@ describe("LineChartLayer (streaming)", () => {
       line.clearData();
       v.latestT = SEEK_T;
       // Two samples, the second exactly at SEEK_T.
-      line.setData(
-        new Float32Array([SEEK_T - 1_000, 0.1, SEEK_T, 0.2]).buffer,
-        4,
-        v,
-      );
+      line.setData(new Float32Array([SEEK_T - 1_000, 0.1, SEEK_T, 0.2]).buffer, 4, v);
 
       v.beginScan();
       axis.scan?.(v);

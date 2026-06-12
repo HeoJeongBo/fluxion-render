@@ -57,7 +57,7 @@ const S = {
     borderBottom: "none",
   },
   trEven: { background: "#ffffff" },
-  trOdd:  { background: "#ffffff" },
+  trOdd: { background: "#ffffff" },
 };
 
 /**
@@ -76,12 +76,19 @@ export function FluxionTable<R extends Record<string, unknown>>({
   style,
 }: FluxionTableProps<R>) {
   return (
-    <div className={classNames.root} style={classNames.root ? style : { ...S.root, ...style }}>
+    <div
+      className={classNames.root}
+      style={classNames.root ? style : { ...S.root, ...style }}
+    >
       <table className={classNames.table} style={classNames.table ? undefined : S.table}>
         <thead className={classNames.thead}>
           <tr className={classNames.tr}>
             {columns.map((col) => (
-              <th key={col.key} className={classNames.th} style={classNames.th ? undefined : S.th}>
+              <th
+                key={col.key}
+                className={classNames.th}
+                style={classNames.th ? undefined : S.th}
+              >
                 {col.header}
               </th>
             ))}
@@ -96,7 +103,11 @@ export function FluxionTable<R extends Record<string, unknown>>({
               style={classNames.tr ? undefined : i % 2 === 0 ? S.trEven : S.trOdd}
             >
               {columns.map((col) => (
-                <td key={col.key} className={classNames.td} style={classNames.td ? undefined : S.td}>
+                <td
+                  key={col.key}
+                  className={classNames.td}
+                  style={classNames.td ? undefined : S.td}
+                >
                   {col.render
                     ? col.render(row[col.key], row)
                     : String(row[col.key] ?? "")}

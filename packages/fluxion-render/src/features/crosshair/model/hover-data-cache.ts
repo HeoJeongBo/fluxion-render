@@ -57,13 +57,23 @@ export class HoverDataCache {
   clear(id?: string): void {
     if (id !== undefined) {
       const e = this._entries.get(id);
-      if (e) { e.head = 0; e.count = 0; }
+      if (e) {
+        e.head = 0;
+        e.count = 0;
+      }
     } else {
-      for (const e of this._entries.values()) { e.head = 0; e.count = 0; }
+      for (const e of this._entries.values()) {
+        e.head = 0;
+        e.count = 0;
+      }
     }
   }
 
-  findNearest(id: string, targetT: number, xMin: number): { t: number; y: number } | null {
+  findNearest(
+    id: string,
+    targetT: number,
+    xMin: number,
+  ): { t: number; y: number } | null {
     const e = this._entries.get(id);
     if (!e || e.count === 0) return null;
 

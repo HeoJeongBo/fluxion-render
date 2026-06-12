@@ -7,29 +7,27 @@ describe("useRecordingTimer", () => {
   afterEach(() => vi.useRealTimers());
 
   it("returns 0 when not recording", () => {
-    const { result } = renderHook(() =>
-      useRecordingTimer({ isRecording: false }),
-    );
+    const { result } = renderHook(() => useRecordingTimer({ isRecording: false }));
     expect(result.current.elapsedSec).toBe(0);
   });
 
   it("returns 0 while recording hasn't advanced yet", () => {
-    const { result } = renderHook(() =>
-      useRecordingTimer({ isRecording: true }),
-    );
+    const { result } = renderHook(() => useRecordingTimer({ isRecording: true }));
     expect(result.current.elapsedSec).toBe(0);
   });
 
   it("increments elapsedSec every second while recording", async () => {
-    const { result } = renderHook(() =>
-      useRecordingTimer({ isRecording: true }),
-    );
+    const { result } = renderHook(() => useRecordingTimer({ isRecording: true }));
     expect(result.current.elapsedSec).toBe(0);
 
-    await act(async () => { vi.advanceTimersByTime(1000); });
+    await act(async () => {
+      vi.advanceTimersByTime(1000);
+    });
     expect(result.current.elapsedSec).toBe(1);
 
-    await act(async () => { vi.advanceTimersByTime(2000); });
+    await act(async () => {
+      vi.advanceTimersByTime(2000);
+    });
     expect(result.current.elapsedSec).toBe(3);
   });
 
@@ -39,7 +37,9 @@ describe("useRecordingTimer", () => {
       { initialProps: { rec: true } },
     );
 
-    await act(async () => { vi.advanceTimersByTime(5000); });
+    await act(async () => {
+      vi.advanceTimersByTime(5000);
+    });
     expect(result.current.elapsedSec).toBe(5);
 
     rerender({ rec: false });
@@ -52,7 +52,9 @@ describe("useRecordingTimer", () => {
       { initialProps: { rec: true } },
     );
 
-    await act(async () => { vi.advanceTimersByTime(3000); });
+    await act(async () => {
+      vi.advanceTimersByTime(3000);
+    });
     expect(result.current.elapsedSec).toBe(3);
 
     // Stop
@@ -63,14 +65,14 @@ describe("useRecordingTimer", () => {
     rerender({ rec: true });
     expect(result.current.elapsedSec).toBe(0);
 
-    await act(async () => { vi.advanceTimersByTime(2000); });
+    await act(async () => {
+      vi.advanceTimersByTime(2000);
+    });
     expect(result.current.elapsedSec).toBe(2);
   });
 
   it("clears the interval on unmount", async () => {
-    const { unmount } = renderHook(() =>
-      useRecordingTimer({ isRecording: true }),
-    );
+    const { unmount } = renderHook(() => useRecordingTimer({ isRecording: true }));
     const clearSpy = vi.spyOn(globalThis, "clearInterval");
     unmount();
     expect(clearSpy).toHaveBeenCalled();

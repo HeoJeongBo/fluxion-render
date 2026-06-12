@@ -74,7 +74,9 @@ describe("Scenario 01: basic record and replay", () => {
 
     const player = await session.enterReplay();
     let ended = false;
-    player.onEnd(() => { ended = true; });
+    player.onEnd(() => {
+      ended = true;
+    });
     player.play();
 
     await vi.advanceTimersByTimeAsync(10_000);

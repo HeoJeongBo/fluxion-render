@@ -1,5 +1,9 @@
+import type {
+  FluxionHost,
+  LineLayerHandle,
+  LineSample,
+} from "@heojeongbo/fluxion-render";
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { FluxionHost, LineLayerHandle, LineSample } from "@heojeongbo/fluxion-render";
 import type { ReplayStore } from "../../../features/store/model/replay-store";
 import type { BaseChannel } from "../../../shared/model/base-channel";
 

@@ -35,7 +35,11 @@ describe("Scenario 04: storage pressure and auto-eviction", () => {
     });
 
     for (let i = 0; i < 50; i++) {
-      store.appendFrame({ t: 1_000 + i * 100, channelId: "cpu", payload: new ArrayBuffer(4) });
+      store.appendFrame({
+        t: 1_000 + i * 100,
+        channelId: "cpu",
+        payload: new ArrayBuffer(4),
+      });
     }
     await store.flush();
 
@@ -87,7 +91,10 @@ describe("Scenario 04: storage pressure and auto-eviction", () => {
 
   it("storageLogIntervalMs causes console.log output on each tick", async () => {
     const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
-    const store = new ReplayStore({ batchIntervalMs: 9_999, storageLogIntervalMs: 2_000 });
+    const store = new ReplayStore({
+      batchIntervalMs: 9_999,
+      storageLogIntervalMs: 2_000,
+    });
     await store.open();
 
     // Tick the timer twice
@@ -127,7 +134,11 @@ describe("Scenario 04: storage pressure and auto-eviction", () => {
     });
 
     for (let i = 0; i < 10; i++) {
-      session.store.appendFrame({ t: i * 1_000, channelId: "cpu", payload: new ArrayBuffer(4) });
+      session.store.appendFrame({
+        t: i * 1_000,
+        channelId: "cpu",
+        payload: new ArrayBuffer(4),
+      });
     }
     await session.store.flush();
 
@@ -150,7 +161,9 @@ describe("Scenario 04: storage pressure and auto-eviction", () => {
     const { unmount } = renderHook(() =>
       useStorageInfo(session, { intervalMs: 1_000, logToConsole: true }),
     );
-    await act(async () => { await Promise.resolve(); });
+    await act(async () => {
+      await Promise.resolve();
+    });
 
     expect(logSpy).toHaveBeenCalledWith(expect.stringContaining("[useStorageInfo]"));
     expect(logSpy).toHaveBeenCalledWith(expect.stringContaining("10.0% used"));
@@ -173,7 +186,9 @@ describe("Scenario 04: storage pressure and auto-eviction", () => {
     const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
 
     const { unmount } = renderHook(() => useStorageInfo(session, { intervalMs: 1_000 }));
-    await act(async () => { await Promise.resolve(); });
+    await act(async () => {
+      await Promise.resolve();
+    });
 
     expect(logSpy).not.toHaveBeenCalled();
 

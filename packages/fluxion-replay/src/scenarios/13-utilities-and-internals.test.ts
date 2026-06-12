@@ -94,7 +94,10 @@ describe("snapTimeToSegment", () => {
   const LATEST = 10_000;
 
   it("B1: t inside a segment is returned unchanged", () => {
-    const segments = [{ start: 0, end: 5_000 }, { start: 7_000, end: 10_000 }];
+    const segments = [
+      { start: 0, end: 5_000 },
+      { start: 7_000, end: 10_000 },
+    ];
     expect(snapTimeToSegment(2_500, segments, LATEST)).toBe(2_500);
     expect(snapTimeToSegment(8_000, segments, LATEST)).toBe(8_000);
   });

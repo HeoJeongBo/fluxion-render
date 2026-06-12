@@ -1,8 +1,8 @@
 import { useState } from "react";
 import { THEME } from "../../../shared/ui/theme";
+import { ReactHooksTab } from "./react-hooks-tab";
 import { WorkerHandleTab } from "./worker-handle-tab";
 import { WorkerPoolTab } from "./worker-pool-tab";
-import { ReactHooksTab } from "./react-hooks-tab";
 
 type Mode = "pool" | "standalone" | "hooks";
 
@@ -16,7 +16,15 @@ export function FluxionWorkerDemoPage() {
   const [mode, setMode] = useState<Mode>("pool");
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", width: "100%", height: "100%", overflow: "hidden" }}>
+    <div
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        width: "100%",
+        height: "100%",
+        overflow: "hidden",
+      }}
+    >
       {/* Header */}
       <div
         style={{
@@ -31,8 +39,12 @@ export function FluxionWorkerDemoPage() {
           flexShrink: 0,
         }}
       >
-        <strong style={{ color: THEME.page.textPrimary }}>@heojeongbo/fluxion-worker</strong>
-        <span style={{ color: THEME.page.textMuted }}>dispatch() · request() · stats() · dispose()</span>
+        <strong style={{ color: THEME.page.textPrimary }}>
+          @heojeongbo/fluxion-worker
+        </strong>
+        <span style={{ color: THEME.page.textMuted }}>
+          dispatch() · request() · stats() · dispose()
+        </span>
         <div style={{ marginLeft: "auto", display: "flex", gap: 6 }}>
           {(["pool", "standalone", "hooks"] as Mode[]).map((m) => (
             <button
@@ -43,7 +55,8 @@ export function FluxionWorkerDemoPage() {
                 fontSize: 11,
                 border: `1px solid ${m === mode ? THEME.button.border : THEME.page.border}`,
                 borderRadius: 4,
-                background: m === mode ? THEME.button.background : THEME.button.inactiveBackground,
+                background:
+                  m === mode ? THEME.button.background : THEME.button.inactiveBackground,
                 color: m === mode ? THEME.button.text : THEME.button.inactiveText,
                 cursor: "pointer",
               }}
@@ -56,7 +69,13 @@ export function FluxionWorkerDemoPage() {
 
       {/* Tab content */}
       <div style={{ display: "flex", flex: 1, minHeight: 0 }}>
-        {mode === "pool" ? <WorkerPoolTab /> : mode === "standalone" ? <WorkerHandleTab /> : <ReactHooksTab />}
+        {mode === "pool" ? (
+          <WorkerPoolTab />
+        ) : mode === "standalone" ? (
+          <WorkerHandleTab />
+        ) : (
+          <ReactHooksTab />
+        )}
       </div>
     </div>
   );

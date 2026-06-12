@@ -78,7 +78,9 @@ export function createFakeCtx(): FakeCtx {
     scale: rec("scale"),
     translate: rec("translate"),
     drawImage: rec("drawImage"),
-    createLinearGradient: (..._args: unknown[]) => ({ addColorStop: rec("addColorStop") }),
+    createLinearGradient: (..._args: unknown[]) => ({
+      addColorStop: rec("addColorStop"),
+    }),
   };
 }
 

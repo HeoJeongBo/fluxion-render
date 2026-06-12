@@ -12,7 +12,13 @@ describe("useTimeOrigin", () => {
   it("returns a positive number close to Date.now()", () => {
     const before = Date.now();
     let result = 0;
-    render(<Harness onResult={(v) => { result = v; }} />);
+    render(
+      <Harness
+        onResult={(v) => {
+          result = v;
+        }}
+      />,
+    );
     const after = Date.now();
     expect(result).toBeGreaterThanOrEqual(before);
     expect(result).toBeLessThanOrEqual(after);
@@ -21,9 +27,19 @@ describe("useTimeOrigin", () => {
   it("returns the same value on re-render", () => {
     const results: number[] = [];
     const { rerender } = render(
-      <Harness onResult={(v) => { results.push(v); }} />,
+      <Harness
+        onResult={(v) => {
+          results.push(v);
+        }}
+      />,
     );
-    rerender(<Harness onResult={(v) => { results.push(v); }} />);
+    rerender(
+      <Harness
+        onResult={(v) => {
+          results.push(v);
+        }}
+      />,
+    );
     expect(results).toHaveLength(2);
     expect(results[0]).toBe(results[1]);
   });
@@ -34,8 +50,20 @@ describe("useTimeOrigin", () => {
 
     let r1 = 0;
     let r2 = 0;
-    render(<Harness onResult={(v) => { r1 = v; }} />);
-    render(<Harness onResult={(v) => { r2 = v; }} />);
+    render(
+      <Harness
+        onResult={(v) => {
+          r1 = v;
+        }}
+      />,
+    );
+    render(
+      <Harness
+        onResult={(v) => {
+          r2 = v;
+        }}
+      />,
+    );
 
     expect(r1).toBe(1000);
     expect(r2).toBe(2000);

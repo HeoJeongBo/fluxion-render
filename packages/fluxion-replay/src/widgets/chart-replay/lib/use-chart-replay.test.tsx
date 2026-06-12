@@ -1,5 +1,15 @@
 import { act, render, renderHook } from "@testing-library/react";
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  afterAll,
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest";
+import { MetricChannel } from "../../../entities/metric-channel/metric-channel";
 import {
   buildRecording,
   ChartReplayProbe,
@@ -9,7 +19,6 @@ import {
   metricFrame,
   SIGNAL_CHANNEL,
 } from "./chart-replay-fixtures";
-import { MetricChannel } from "../../../entities/metric-channel/metric-channel";
 import { useChartReplay } from "./use-chart-replay";
 
 // Suppress console.error and console.warn at the file level so pending
@@ -38,7 +47,9 @@ describe("useChartReplay", () => {
     });
 
     await act(async () => {
-      render(<ChartReplayProbe host={host} player={player} store={store} windowMs={2000} />);
+      render(
+        <ChartReplayProbe host={host} player={player} store={store} windowMs={2000} />,
+      );
       // Allow the async hydrate Promise chain to resolve.
       await Promise.resolve();
       await Promise.resolve();
@@ -78,7 +89,9 @@ describe("useChartReplay", () => {
     });
 
     await act(async () => {
-      render(<ChartReplayProbe host={host} player={player} store={store} windowMs={2000} />);
+      render(
+        <ChartReplayProbe host={host} player={player} store={store} windowMs={2000} />,
+      );
       await Promise.resolve();
       await Promise.resolve();
     });
@@ -108,7 +121,9 @@ describe("useChartReplay", () => {
     const store = makeFakeStore({ signal: [] });
 
     await act(async () => {
-      render(<ChartReplayProbe host={host} player={player} store={store} windowMs={2000} />);
+      render(
+        <ChartReplayProbe host={host} player={player} store={store} windowMs={2000} />,
+      );
       await Promise.resolve();
       await Promise.resolve();
     });
@@ -141,7 +156,9 @@ describe("useChartReplay", () => {
     const ch = new MetricChannel("signal");
 
     await act(async () => {
-      render(<ChartReplayProbe host={host} player={player} store={store} windowMs={2000} />);
+      render(
+        <ChartReplayProbe host={host} player={player} store={store} windowMs={2000} />,
+      );
       await Promise.resolve();
       await Promise.resolve();
     });
@@ -149,8 +166,16 @@ describe("useChartReplay", () => {
 
     await act(async () => {
       // Emit two frames before the tick — both should land as a single pushBatch
-      player.emitFrame({ channelId: "signal", data: ch.decode(ch.encode({ name: "signal", value: 0.3 })), t: 5010 });
-      player.emitFrame({ channelId: "signal", data: ch.decode(ch.encode({ name: "signal", value: 0.6 })), t: 5020 });
+      player.emitFrame({
+        channelId: "signal",
+        data: ch.decode(ch.encode({ name: "signal", value: 0.3 })),
+        t: 5010,
+      });
+      player.emitFrame({
+        channelId: "signal",
+        data: ch.decode(ch.encode({ name: "signal", value: 0.6 })),
+        t: 5020,
+      });
       player.emitTick(5020);
     });
 
@@ -167,12 +192,18 @@ describe("useChartReplay", () => {
     const store = makeFakeStore({ signal: [] });
 
     await act(async () => {
-      render(<ChartReplayProbe host={host} player={player} store={store} windowMs={2000} />);
+      render(
+        <ChartReplayProbe host={host} player={player} store={store} windowMs={2000} />,
+      );
       await Promise.resolve();
     });
 
     await act(async () => {
-      player.emitFrame({ channelId: "other", data: { name: "other", value: 99 }, t: 5050 });
+      player.emitFrame({
+        channelId: "other",
+        data: { name: "other", value: 99 },
+        t: 5050,
+      });
     });
     expect(pushes).toHaveLength(0);
   });
@@ -182,7 +213,9 @@ describe("useChartReplay", () => {
     const store = makeFakeStore({ signal: [metricFrame("signal", 100, 1)] });
 
     await act(async () => {
-      render(<ChartReplayProbe host={host} player={null} store={store} windowMs={1000} />);
+      render(
+        <ChartReplayProbe host={host} player={null} store={store} windowMs={1000} />,
+      );
       await Promise.resolve();
     });
     expect(store.getFramesByChannel).not.toHaveBeenCalled();
@@ -196,7 +229,9 @@ describe("useChartReplay", () => {
     const store = makeFakeStore({ signal: [metricFrame("signal", 100, 1)] });
 
     await act(async () => {
-      render(<ChartReplayProbe host={null} player={player} store={store} windowMs={1000} />);
+      render(
+        <ChartReplayProbe host={null} player={player} store={store} windowMs={1000} />,
+      );
       await Promise.resolve();
     });
     expect(store.getFramesByChannel).not.toHaveBeenCalled();
@@ -211,7 +246,9 @@ describe("useChartReplay", () => {
 
     let unmount: () => void = () => {};
     await act(async () => {
-      const r = render(<ChartReplayProbe host={host} player={player} store={store} windowMs={2000} />);
+      const r = render(
+        <ChartReplayProbe host={host} player={player} store={store} windowMs={2000} />,
+      );
       unmount = r.unmount;
       await Promise.resolve();
       await Promise.resolve();
@@ -223,7 +260,9 @@ describe("useChartReplay", () => {
     const basePushes = pushes.length;
     const baseBatches = batches.length;
 
-    await act(async () => { unmount(); });
+    await act(async () => {
+      unmount();
+    });
     expect(player.frameListenerCount()).toBe(0);
     expect(player.seekListenerCount()).toBe(0);
     expect(player.tickListenerCount()).toBe(0);
@@ -231,7 +270,11 @@ describe("useChartReplay", () => {
     // Post-unmount emissions are ignored.
     await act(async () => {
       player.emitSeek(2000);
-      player.emitFrame({ channelId: "signal", data: { name: "signal", value: 1 }, t: 100 });
+      player.emitFrame({
+        channelId: "signal",
+        data: { name: "signal", value: 1 },
+        t: 100,
+      });
       await Promise.resolve();
     });
     expect(resets.length).toBe(baseResets);
@@ -247,7 +290,9 @@ describe("useChartReplay", () => {
 
     let unmount: () => void = () => {};
     await act(async () => {
-      const r = render(<ChartReplayProbe host={host} player={player} store={store} windowMs={2000} />);
+      const r = render(
+        <ChartReplayProbe host={host} player={player} store={store} windowMs={2000} />,
+      );
       unmount = r.unmount;
       await Promise.resolve(); // effect runs; hydrate parked at the await
     });
@@ -255,7 +300,9 @@ describe("useChartReplay", () => {
 
     // Unmount (sets cancelled) BEFORE releasing the query → the post-await
     // `if (cancelled) return` must skip reset/pushBatch.
-    await act(async () => { unmount(); });
+    await act(async () => {
+      unmount();
+    });
     await act(async () => {
       await store.release();
       await Promise.resolve();
@@ -270,7 +317,9 @@ describe("useChartReplay", () => {
     const store = makeFakeStore({ signal: [] }); // nothing in range
 
     await act(async () => {
-      render(<ChartReplayProbe host={host} player={player} store={store} windowMs={2000} />);
+      render(
+        <ChartReplayProbe host={host} player={player} store={store} windowMs={2000} />,
+      );
       await Promise.resolve();
       await Promise.resolve();
     });
@@ -361,7 +410,9 @@ describe("useChartReplay", () => {
       });
 
       await act(async () => {
-        render(<ChartReplayProbe host={host} player={player} store={store} windowMs={2000} />);
+        render(
+          <ChartReplayProbe host={host} player={player} store={store} windowMs={2000} />,
+        );
         await Promise.resolve();
         await Promise.resolve();
       });
@@ -800,7 +851,7 @@ describe("useChartReplay", () => {
           metricFrame("signal", ORIGIN + 9_500, 0.95),
           metricFrame("signal", ORIGIN + 14_500, 1.45),
           metricFrame("signal", ORIGIN + 19_500, 1.95),
-          metricFrame("signal", ORIGIN + 28_000, 2.80),
+          metricFrame("signal", ORIGIN + 28_000, 2.8),
         ],
       });
 
@@ -841,7 +892,7 @@ describe("useChartReplay", () => {
 
       expect(resets.length).toBe(2);
       expect(resets[0].latestT).toBe(30_000); // mount
-      expect(resets[1].latestT).toBe(5_000);  // last seek wins
+      expect(resets[1].latestT).toBe(5_000); // last seek wins
     });
 
     it("Phase 16: cleanup during in-flight hydrate prevents the chart write", async () => {
@@ -943,7 +994,6 @@ describe("useChartReplay", () => {
   // A missing / NaN / non-positive value silently produced empty backfill —
   // chart looked broken with no error. Throw at mount so the typo is caught.
   describe("Phase 20: windowMs validation", () => {
-
     // Render the hook directly so the throw happens during the render
     // (not inside a useEffect, where React would swallow it). Using
     // renderHook keeps each case isolated from React's concurrent-root
@@ -997,7 +1047,9 @@ describe("useChartReplay", () => {
     const player = makeFakePlayer(0);
     const received: string[] = [];
     // Bare listener overload → typeof channelOrListener === "function" → lines 68-70
-    const off = player.onFrame((frame) => { received.push(frame.channelId); });
+    const off = player.onFrame((frame) => {
+      received.push(frame.channelId);
+    });
     player.emitFrame({ channelId: "signal", data: {}, t: 100 });
     expect(received).toEqual(["signal"]);
     off();

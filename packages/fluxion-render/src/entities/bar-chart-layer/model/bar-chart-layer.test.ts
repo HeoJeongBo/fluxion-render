@@ -18,7 +18,13 @@ describe("BarChartLayer", () => {
 
   it("setConfig updates color, barWidth, layout, xRange, visible", () => {
     const layer = new BarChartLayer("bar1");
-    layer.setConfig({ color: "#ff0000", barWidth: 12, layout: "y", xRange: [0, 100], visible: false });
+    layer.setConfig({
+      color: "#ff0000",
+      barWidth: 12,
+      layout: "y",
+      xRange: [0, 100],
+      visible: false,
+    });
     const vp = makeViewport();
     const data = new Float32Array([10, 20, 30]);
     layer.setData(data.buffer, 3, vp);

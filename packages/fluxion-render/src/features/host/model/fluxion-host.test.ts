@@ -359,7 +359,9 @@ describe("FluxionHost", () => {
         if (idx >= 0) listeners.splice(idx, 1);
       },
     };
-    const host = new FluxionHost(makeCanvas(), { workerFactory: () => workerWithEvents as unknown as Worker });
+    const host = new FluxionHost(makeCanvas(), {
+      workerFactory: () => workerWithEvents as unknown as Worker,
+    });
     expect(listeners).toHaveLength(1);
     host.dispose();
     expect(listeners).toHaveLength(0);
@@ -378,10 +380,14 @@ describe("FluxionHost", () => {
       },
       removeEventListener: () => {},
     };
-    const host = new FluxionHost(makeCanvas(), { workerFactory: () => workerWithEvents as unknown as Worker });
+    const host = new FluxionHost(makeCanvas(), {
+      workerFactory: () => workerWithEvents as unknown as Worker,
+    });
     const received: { yMin: number; yMax: number; latestT: number }[] = [];
     host.onBoundsChange((yMin, yMax, latestT) => received.push({ yMin, yMax, latestT }));
-    messageHandler!({ data: { op: WorkerOp.BOUNDS_UPDATE, hostId: "x", yMin: -1, yMax: 1, latestT: 500 } } as unknown as Event);
+    messageHandler!({
+      data: { op: WorkerOp.BOUNDS_UPDATE, hostId: "x", yMin: -1, yMax: 1, latestT: 500 },
+    } as unknown as Event);
     expect(received).toHaveLength(1);
     expect(received[0]).toEqual({ yMin: -1, yMax: 1, latestT: 500 });
     host.dispose();
@@ -397,12 +403,16 @@ describe("FluxionHost", () => {
       },
       removeEventListener: () => {},
     };
-    const host = new FluxionHost(makeCanvas(), { workerFactory: () => workerWithEvents as unknown as Worker });
+    const host = new FluxionHost(makeCanvas(), {
+      workerFactory: () => workerWithEvents as unknown as Worker,
+    });
     const received: { xTicks: unknown; yTicks: unknown }[] = [];
     host.onTickUpdate((xTicks, yTicks) => received.push({ xTicks, yTicks }));
     const xTicks = [{ value: 0, label: "0", fraction: 0 }];
     const yTicks = [{ value: 1, label: "1", fraction: 0.5 }];
-    messageHandler!({ data: { op: WorkerOp.TICK_UPDATE, hostId: "x", xTicks, yTicks, xRawValues: [] } } as unknown as Event);
+    messageHandler!({
+      data: { op: WorkerOp.TICK_UPDATE, hostId: "x", xTicks, yTicks, xRawValues: [] },
+    } as unknown as Event);
     expect(received).toHaveLength(1);
     expect(received[0].xTicks).toBe(xTicks);
     expect(received[0].yTicks).toBe(yTicks);
@@ -419,13 +429,21 @@ describe("FluxionHost", () => {
       },
       removeEventListener: () => {},
     };
-    const host = new FluxionHost(makeCanvas(), { workerFactory: () => workerWithEvents as unknown as Worker });
+    const host = new FluxionHost(makeCanvas(), {
+      workerFactory: () => workerWithEvents as unknown as Worker,
+    });
     let count = 0;
-    const unsub = host.onBoundsChange(() => { count++; });
-    messageHandler!({ data: { op: WorkerOp.BOUNDS_UPDATE, hostId: "x", yMin: 0, yMax: 1, latestT: 0 } } as unknown as Event);
+    const unsub = host.onBoundsChange(() => {
+      count++;
+    });
+    messageHandler!({
+      data: { op: WorkerOp.BOUNDS_UPDATE, hostId: "x", yMin: 0, yMax: 1, latestT: 0 },
+    } as unknown as Event);
     expect(count).toBe(1);
     unsub();
-    messageHandler!({ data: { op: WorkerOp.BOUNDS_UPDATE, hostId: "x", yMin: 0, yMax: 1, latestT: 0 } } as unknown as Event);
+    messageHandler!({
+      data: { op: WorkerOp.BOUNDS_UPDATE, hostId: "x", yMin: 0, yMax: 1, latestT: 0 },
+    } as unknown as Event);
     expect(count).toBe(1);
     host.dispose();
   });
@@ -440,13 +458,33 @@ describe("FluxionHost", () => {
       },
       removeEventListener: () => {},
     };
-    const host = new FluxionHost(makeCanvas(), { workerFactory: () => workerWithEvents as unknown as Worker });
+    const host = new FluxionHost(makeCanvas(), {
+      workerFactory: () => workerWithEvents as unknown as Worker,
+    });
     let count = 0;
-    const unsub = host.onTickUpdate(() => { count++; });
-    messageHandler!({ data: { op: WorkerOp.TICK_UPDATE, hostId: "x", xTicks: [], yTicks: [], xRawValues: [] } } as unknown as Event);
+    const unsub = host.onTickUpdate(() => {
+      count++;
+    });
+    messageHandler!({
+      data: {
+        op: WorkerOp.TICK_UPDATE,
+        hostId: "x",
+        xTicks: [],
+        yTicks: [],
+        xRawValues: [],
+      },
+    } as unknown as Event);
     expect(count).toBe(1);
     unsub();
-    messageHandler!({ data: { op: WorkerOp.TICK_UPDATE, hostId: "x", xTicks: [], yTicks: [], xRawValues: [] } } as unknown as Event);
+    messageHandler!({
+      data: {
+        op: WorkerOp.TICK_UPDATE,
+        hostId: "x",
+        xTicks: [],
+        yTicks: [],
+        xRawValues: [],
+      },
+    } as unknown as Event);
     expect(count).toBe(1);
     host.dispose();
   });
@@ -461,7 +499,9 @@ describe("FluxionHost", () => {
       },
       removeEventListener: () => {},
     };
-    const host = new FluxionHost(makeCanvas(), { workerFactory: () => workerWithEvents as unknown as Worker });
+    const host = new FluxionHost(makeCanvas(), {
+      workerFactory: () => workerWithEvents as unknown as Worker,
+    });
     expect(() => {
       messageHandler!({ data: { op: 999 } } as unknown as Event);
       messageHandler!({ data: null } as unknown as Event);
@@ -478,7 +518,12 @@ describe("FluxionHost", () => {
     host.emitStream("sensor", buffer, 4);
     expect(posts).toHaveLength(1);
     const [post] = posts;
-    const msg = post.msg as { id: string; length: number; mode: string; buffer: ArrayBuffer };
+    const msg = post.msg as {
+      id: string;
+      length: number;
+      mode: string;
+      buffer: ArrayBuffer;
+    };
     expect(msg.id).toBe("sensor");
     expect(msg.length).toBe(4);
     expect(msg.mode).toBe("stream");

@@ -15,14 +15,14 @@
  *
  * Result: 1 postMessage → worker parses → each engine gets 1 sample.
  */
-import { Engine, Op } from "@heojeongbo/fluxion-render/worker";
+
 import type {
   FluxionPoolStreamMsg,
   HostMsg,
   PoolDisposeMsg,
   PoolInitMsg,
 } from "@heojeongbo/fluxion-render/worker";
-
+import { Engine, Op } from "@heojeongbo/fluxion-render/worker";
 
 const RAW_MAX = 32767;
 const SOLO_HOST_ID = "__solo__";

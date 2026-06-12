@@ -13,7 +13,6 @@
  * both are built from the same activeTargets array in the same loop.
  */
 import type { FluxionHost } from "@heojeongbo/fluxion-render";
-import { createSineSynth, mulberry32 } from "@heojeongbo/fluxion-render/testing";
 import {
   axisGridLayer,
   FluxionCanvas,
@@ -21,6 +20,7 @@ import {
   useFluxionWorkerPool,
   useTimeOrigin,
 } from "@heojeongbo/fluxion-render/react";
+import { createSineSynth, mulberry32 } from "@heojeongbo/fluxion-render/testing";
 import { useEffect, useMemo, useRef } from "react";
 import { THEME } from "../../../shared/ui/theme";
 
@@ -71,7 +71,12 @@ function SensorChart({ index, timeOrigin, pool, onReady }: SensorChartProps) {
         axisColor: THEME.chart.axisColor,
         yPadPx: 4,
       }),
-      scatterLayer("line", { color, pointSize: 3, retentionMs: TIME_WINDOW_MS, maxHz: MAX_HZ }),
+      scatterLayer("line", {
+        color,
+        pointSize: 3,
+        retentionMs: TIME_WINDOW_MS,
+        maxHz: MAX_HZ,
+      }),
     ],
     [timeOrigin, color],
   );
@@ -125,10 +130,9 @@ export function StreamWorkerDemoPage() {
   const pool = useFluxionWorkerPool({
     size: 1,
     workerFactory: () =>
-      new Worker(
-        new URL("../lib/pool-sensor-worker.ts", import.meta.url),
-        { type: "module" },
-      ),
+      new Worker(new URL("../lib/pool-sensor-worker.ts", import.meta.url), {
+        type: "module",
+      }),
   });
 
   const timeOrigin = useTimeOrigin();
@@ -185,7 +189,9 @@ export function StreamWorkerDemoPage() {
   }, [pool, timeOrigin]);
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", width: "100%", height: "100%" }}>
+    <div
+      style={{ display: "flex", flexDirection: "column", width: "100%", height: "100%" }}
+    >
       <div
         style={{
           display: "flex",
@@ -201,8 +207,8 @@ export function StreamWorkerDemoPage() {
       >
         <strong style={{ color: THEME.page.textPrimary }}>Pool Fan-Out Stream</strong>
         <span>
-          size-1 pool · {CHART_COUNT} canvases · 1 worker · 1 postMessage/tick ·
-          {" "}worker parses all channels · each chart gets different values
+          size-1 pool · {CHART_COUNT} canvases · 1 worker · 1 postMessage/tick · worker
+          parses all channels · each chart gets different values
         </span>
       </div>
       <div

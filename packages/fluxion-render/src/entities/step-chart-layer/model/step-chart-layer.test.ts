@@ -34,7 +34,10 @@ describe("StepChartLayer", () => {
     const vp = makeViewport();
     // fill capacity=110 with y=0, then overflow 2 samples
     const buf = new Float32Array(110 * 2);
-    for (let i = 0; i < 110; i++) { buf[i * 2] = i * 10; buf[i * 2 + 1] = 0; }
+    for (let i = 0; i < 110; i++) {
+      buf[i * 2] = i * 10;
+      buf[i * 2 + 1] = 0;
+    }
     layer.setData(buf.buffer, buf.length, vp);
     layer.setData(new Float32Array([2000, 77, 2100, -5]).buffer, 4, vp);
     vp.setBounds({ xMin: 0, xMax: 100000, yMin: -100, yMax: 200 });

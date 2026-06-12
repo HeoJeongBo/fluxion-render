@@ -204,7 +204,9 @@ describe("FluxionWorkerPool.broadcastStream", () => {
     const buf = new Float32Array(4).buffer;
     pool.broadcastStream(targets, buf, 4);
 
-    const msg = fakeWorkers[0]!.postMessage.mock.calls[0]![0] as { targets: typeof targets };
+    const msg = fakeWorkers[0]!.postMessage.mock.calls[0]![0] as {
+      targets: typeof targets;
+    };
     expect(msg.targets.map((t) => t.hostId)).toEqual([h0.hostId, h1.hostId, h2.hostId]);
     pool.dispose();
   });
@@ -224,8 +226,12 @@ describe("FluxionWorkerPool.broadcastStream", () => {
     expect(fakeWorkers[0]!.postMessage).toHaveBeenCalledTimes(1);
     expect(fakeWorkers[1]!.postMessage).toHaveBeenCalledTimes(1);
 
-    const buf0 = (fakeWorkers[0]!.postMessage.mock.calls[0]![0] as { buffer: ArrayBuffer }).buffer;
-    const buf1 = (fakeWorkers[1]!.postMessage.mock.calls[0]![0] as { buffer: ArrayBuffer }).buffer;
+    const buf0 = (
+      fakeWorkers[0]!.postMessage.mock.calls[0]![0] as { buffer: ArrayBuffer }
+    ).buffer;
+    const buf1 = (
+      fakeWorkers[1]!.postMessage.mock.calls[0]![0] as { buffer: ArrayBuffer }
+    ).buffer;
     // The two workers must NOT share the same ArrayBuffer reference
     expect(buf0).not.toBe(buf1);
     pool.dispose();
@@ -241,7 +247,9 @@ describe("FluxionWorkerPool.broadcastStream", () => {
     const buf = new Float32Array(4).buffer;
     pool.broadcastStream(targets, buf, 4);
 
-    const msg = fakeWorkers[0]!.postMessage.mock.calls[0]![0] as { targets: typeof targets };
+    const msg = fakeWorkers[0]!.postMessage.mock.calls[0]![0] as {
+      targets: typeof targets;
+    };
     expect(msg.targets).toHaveLength(1);
     expect(msg.targets[0]!.hostId).toBe(handle.hostId);
     pool.dispose();
@@ -267,7 +275,13 @@ describe("FluxionWorkerHandle.emitStream", () => {
     handle.emitStream("sensor", buffer, 4);
 
     const [call] = fakeWorkers[0]!.postMessage.mock.calls;
-    const msg = call![0] as { id: string; length: number; mode: string; hostId: string; buffer: ArrayBuffer };
+    const msg = call![0] as {
+      id: string;
+      length: number;
+      mode: string;
+      hostId: string;
+      buffer: ArrayBuffer;
+    };
     expect(msg.id).toBe("sensor");
     expect(msg.length).toBe(4);
     expect(msg.mode).toBe("stream");

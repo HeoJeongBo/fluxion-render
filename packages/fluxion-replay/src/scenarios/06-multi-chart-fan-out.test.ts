@@ -101,9 +101,15 @@ describe("Scenario 06: multi-chart fan-out", () => {
     const ch1Values: number[] = [];
     const ch2Values: number[] = [];
 
-    player.onFrame(ch0, ({ data }) => { if (data.value >= 0) ch0Values.push(data.value); });
-    player.onFrame(ch1, ({ data }) => { if (data.value >= 0) ch1Values.push(data.value); });
-    player.onFrame(ch2, ({ data }) => { if (data.value >= 0) ch2Values.push(data.value); });
+    player.onFrame(ch0, ({ data }) => {
+      if (data.value >= 0) ch0Values.push(data.value);
+    });
+    player.onFrame(ch1, ({ data }) => {
+      if (data.value >= 0) ch1Values.push(data.value);
+    });
+    player.onFrame(ch2, ({ data }) => {
+      if (data.value >= 0) ch2Values.push(data.value);
+    });
 
     player.play();
     await vi.advanceTimersByTimeAsync(12_000);
@@ -128,9 +134,15 @@ describe("Scenario 06: multi-chart fan-out", () => {
     const ch2Values: number[] = [];
 
     // ch0 gets multiples of 10 (0,10,20,30,40), ch1 gets +1, ch2 gets +2
-    player.onFrame(ch0, ({ data }) => { if (data.value >= 0) ch0Values.push(data.value); });
-    player.onFrame(ch1, ({ data }) => { if (data.value >= 0) ch1Values.push(data.value); });
-    player.onFrame(ch2, ({ data }) => { if (data.value >= 0) ch2Values.push(data.value); });
+    player.onFrame(ch0, ({ data }) => {
+      if (data.value >= 0) ch0Values.push(data.value);
+    });
+    player.onFrame(ch1, ({ data }) => {
+      if (data.value >= 0) ch1Values.push(data.value);
+    });
+    player.onFrame(ch2, ({ data }) => {
+      if (data.value >= 0) ch2Values.push(data.value);
+    });
 
     player.play();
     await vi.advanceTimersByTimeAsync(12_000);
@@ -162,9 +174,15 @@ describe("Scenario 06: multi-chart fan-out", () => {
     const ch1Ts: number[] = [];
     const ch2Ts: number[] = [];
 
-    player.onFrame(ch0, ({ t, data }) => { if (data.value >= 0) ch0Ts.push(t); });
-    player.onFrame(ch1, ({ t, data }) => { if (data.value >= 0) ch1Ts.push(t); });
-    player.onFrame(ch2, ({ t, data }) => { if (data.value >= 0) ch2Ts.push(t); });
+    player.onFrame(ch0, ({ t, data }) => {
+      if (data.value >= 0) ch0Ts.push(t);
+    });
+    player.onFrame(ch1, ({ t, data }) => {
+      if (data.value >= 0) ch1Ts.push(t);
+    });
+    player.onFrame(ch2, ({ t, data }) => {
+      if (data.value >= 0) ch2Ts.push(t);
+    });
 
     player.play();
     await vi.advanceTimersByTimeAsync(12_000);
@@ -197,9 +215,15 @@ describe("Scenario 06: multi-chart fan-out", () => {
     const ch1Ts: number[] = [];
     const ch2Ts: number[] = [];
 
-    player.onFrame(ch0, ({ t, data }) => { if (data.value >= 0) ch0Ts.push(t); });
-    player.onFrame(ch1, ({ t, data }) => { if (data.value >= 0) ch1Ts.push(t); });
-    player.onFrame(ch2, ({ t, data }) => { if (data.value >= 0) ch2Ts.push(t); });
+    player.onFrame(ch0, ({ t, data }) => {
+      if (data.value >= 0) ch0Ts.push(t);
+    });
+    player.onFrame(ch1, ({ t, data }) => {
+      if (data.value >= 0) ch1Ts.push(t);
+    });
+    player.onFrame(ch2, ({ t, data }) => {
+      if (data.value >= 0) ch2Ts.push(t);
+    });
 
     player.play();
     await vi.advanceTimersByTimeAsync(12_000);
@@ -273,10 +297,18 @@ describe("Scenario 06: multi-chart fan-out", () => {
     const ch2Values: number[] = [];
     let endCount = 0;
 
-    player.onFrame(ch0, ({ data }) => { if (data.value >= 0) ch0Values.push(data.value); });
-    player.onFrame(ch1, ({ data }) => { if (data.value >= 0) ch1Values.push(data.value); });
-    player.onFrame(ch2, ({ data }) => { if (data.value >= 0) ch2Values.push(data.value); });
-    player.onEnd(() => { endCount++; });
+    player.onFrame(ch0, ({ data }) => {
+      if (data.value >= 0) ch0Values.push(data.value);
+    });
+    player.onFrame(ch1, ({ data }) => {
+      if (data.value >= 0) ch1Values.push(data.value);
+    });
+    player.onFrame(ch2, ({ data }) => {
+      if (data.value >= 0) ch2Values.push(data.value);
+    });
+    player.onEnd(() => {
+      endCount++;
+    });
 
     player.play();
     await vi.advanceTimersByTimeAsync(12_000);
@@ -302,9 +334,15 @@ describe("Scenario 06: multi-chart fan-out", () => {
     const ch1Values: number[] = [];
     const ch2Values: number[] = [];
 
-    player.onFrame(ch0, ({ data }) => { if (data.value >= 0) ch0Values.push(data.value); });
-    player.onFrame(ch1, ({ data }) => { if (data.value >= 0) ch1Values.push(data.value); });
-    const offCh2 = player.onFrame(ch2, ({ data }) => { if (data.value >= 0) ch2Values.push(data.value); });
+    player.onFrame(ch0, ({ data }) => {
+      if (data.value >= 0) ch0Values.push(data.value);
+    });
+    player.onFrame(ch1, ({ data }) => {
+      if (data.value >= 0) ch1Values.push(data.value);
+    });
+    const offCh2 = player.onFrame(ch2, ({ data }) => {
+      if (data.value >= 0) ch2Values.push(data.value);
+    });
 
     // Unsubscribe ch2 before play starts
     offCh2();
@@ -345,10 +383,18 @@ describe("Scenario 06: multi-chart fan-out", () => {
     const ch2Values: number[] = [];
     let endCount = 0;
 
-    player.onFrame(ch0, ({ data }) => { if (data.value >= 0) ch0Values.push(data.value); });
-    player.onFrame(ch1, ({ data }) => { if (data.value >= 0) ch1Values.push(data.value); });
-    player.onFrame(ch2, ({ data }) => { if (data.value >= 0) ch2Values.push(data.value); });
-    player.onEnd(() => { endCount++; });
+    player.onFrame(ch0, ({ data }) => {
+      if (data.value >= 0) ch0Values.push(data.value);
+    });
+    player.onFrame(ch1, ({ data }) => {
+      if (data.value >= 0) ch1Values.push(data.value);
+    });
+    player.onFrame(ch2, ({ data }) => {
+      if (data.value >= 0) ch2Values.push(data.value);
+    });
+    player.onEnd(() => {
+      endCount++;
+    });
 
     player.play();
     await vi.advanceTimersByTimeAsync(12_000);
@@ -374,9 +420,15 @@ describe("Scenario 06: multi-chart fan-out", () => {
     const ch1Values: number[] = [];
     const ch2Values: number[] = [];
 
-    player.onFrame(ch0, ({ data }) => { if (data.value >= 0) ch0Values.push(data.value); });
-    const offCh1 = player.onFrame(ch1, ({ data }) => { if (data.value >= 0) ch1Values.push(data.value); });
-    player.onFrame(ch2, ({ data }) => { if (data.value >= 0) ch2Values.push(data.value); });
+    player.onFrame(ch0, ({ data }) => {
+      if (data.value >= 0) ch0Values.push(data.value);
+    });
+    const offCh1 = player.onFrame(ch1, ({ data }) => {
+      if (data.value >= 0) ch1Values.push(data.value);
+    });
+    player.onFrame(ch2, ({ data }) => {
+      if (data.value >= 0) ch2Values.push(data.value);
+    });
 
     player.play();
     // Advance past the first 2 ticks (t=1000, t=2000)

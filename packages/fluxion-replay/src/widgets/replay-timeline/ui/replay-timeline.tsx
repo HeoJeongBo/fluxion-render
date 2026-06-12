@@ -64,7 +64,10 @@ export function ReplayTimeline({
     `${Math.max(0, Math.min(100, ((end - start) / duration) * 100))}%`;
 
   return (
-    <div className={className} style={{ display: "flex", alignItems: "center", gap: 8, ...style }}>
+    <div
+      className={className}
+      style={{ display: "flex", alignItems: "center", gap: 8, ...style }}
+    >
       <span style={{ fontVariantNumeric: "tabular-nums", fontSize: 12, minWidth: 40 }}>
         {formatTime(currentT, earliest)}
       </span>
@@ -131,7 +134,14 @@ export function ReplayTimeline({
         />
       </div>
 
-      <span style={{ fontVariantNumeric: "tabular-nums", fontSize: 12, minWidth: 40, textAlign: "right" }}>
+      <span
+        style={{
+          fontVariantNumeric: "tabular-nums",
+          fontSize: 12,
+          minWidth: 40,
+          textAlign: "right",
+        }}
+      >
         {formatTime(latest, earliest)}
       </span>
     </div>

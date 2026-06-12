@@ -17,7 +17,9 @@ function makeFakeStream(): MediaStream {
 
 describe("useDisplayMedia", () => {
   beforeEach(() => {
-    vi.spyOn(navigator.mediaDevices, "getDisplayMedia").mockResolvedValue(makeFakeStream());
+    vi.spyOn(navigator.mediaDevices, "getDisplayMedia").mockResolvedValue(
+      makeFakeStream(),
+    );
   });
 
   afterEach(() => {
@@ -31,14 +33,20 @@ describe("useDisplayMedia", () => {
 
   it("start() sets the stream", async () => {
     const { result } = renderHook(() => useDisplayMedia());
-    await act(async () => { await result.current.start(); });
+    await act(async () => {
+      await result.current.start();
+    });
     expect(result.current.stream).not.toBeNull();
   });
 
   it("stop() clears the stream", async () => {
     const { result } = renderHook(() => useDisplayMedia());
-    await act(async () => { await result.current.start(); });
-    act(() => { result.current.stop(); });
+    await act(async () => {
+      await result.current.start();
+    });
+    act(() => {
+      result.current.stop();
+    });
     expect(result.current.stream).toBeNull();
   });
 
@@ -47,7 +55,11 @@ describe("useDisplayMedia", () => {
       Object.assign(new Error("Permission denied"), { name: "NotAllowedError" }),
     );
     const { result } = renderHook(() => useDisplayMedia());
-    await expect(act(async () => { await result.current.start(); })).rejects.toThrow();
+    await expect(
+      act(async () => {
+        await result.current.start();
+      }),
+    ).rejects.toThrow();
     expect(result.current.stream).toBeNull();
   });
 
@@ -56,13 +68,15 @@ describe("useDisplayMedia", () => {
     vi.spyOn(navigator.mediaDevices, "getDisplayMedia").mockResolvedValue(fakeStream);
 
     const { result, unmount } = renderHook(() => useDisplayMedia());
-    await act(async () => { await result.current.start(); });
+    await act(async () => {
+      await result.current.start();
+    });
 
     unmount();
 
     const tracks = fakeStream.getTracks();
     for (const t of tracks) {
-      expect((t.stop as ReturnType<typeof vi.fn>)).toHaveBeenCalled();
+      expect(t.stop as ReturnType<typeof vi.fn>).toHaveBeenCalled();
     }
   });
 
@@ -74,14 +88,18 @@ describe("useDisplayMedia", () => {
       .mockResolvedValueOnce(second);
 
     const { result } = renderHook(() => useDisplayMedia());
-    await act(async () => { await result.current.start(); });
+    await act(async () => {
+      await result.current.start();
+    });
     const firstStream = result.current.stream;
-    await act(async () => { await result.current.start(); });
+    await act(async () => {
+      await result.current.start();
+    });
 
     expect(result.current.stream).not.toBe(firstStream);
     // First stream tracks should have been stopped
     for (const t of first.getTracks()) {
-      expect((t.stop as ReturnType<typeof vi.fn>)).toHaveBeenCalled();
+      expect(t.stop as ReturnType<typeof vi.fn>).toHaveBeenCalled();
     }
   });
 });

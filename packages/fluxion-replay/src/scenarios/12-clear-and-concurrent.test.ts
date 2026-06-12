@@ -68,7 +68,10 @@ describe("Scenario 12-A: clearRecording lifecycle", () => {
     const values: number[] = [];
     const timestamps: number[] = [];
     player.onFrame(CPU, ({ t, data }) => {
-      if (data.value >= 0) { values.push(data.value); timestamps.push(t); }
+      if (data.value >= 0) {
+        values.push(data.value);
+        timestamps.push(t);
+      }
     });
 
     player.play();
@@ -143,8 +146,12 @@ describe("Scenario 12-A: clearRecording lifecycle", () => {
     const cpuValues: number[] = [];
     const tempValues: number[] = [];
 
-    player.onFrame(CPU, ({ data }) => { if (data.value >= 0) cpuValues.push(data.value); });
-    player.onFrame(TEMP, ({ data }) => { if (data.value >= 0) tempValues.push(data.value); });
+    player.onFrame(CPU, ({ data }) => {
+      if (data.value >= 0) cpuValues.push(data.value);
+    });
+    player.onFrame(TEMP, ({ data }) => {
+      if (data.value >= 0) tempValues.push(data.value);
+    });
 
     player.play();
     await vi.advanceTimersByTimeAsync(60_000);
@@ -230,7 +237,9 @@ describe("Scenario 12-B: concurrent record + replay", () => {
     await drain();
 
     const values: number[] = [];
-    player2.onFrame(CPU, ({ data }) => { if (data.value >= 0) values.push(data.value); });
+    player2.onFrame(CPU, ({ data }) => {
+      if (data.value >= 0) values.push(data.value);
+    });
 
     player2.play();
     await vi.advanceTimersByTimeAsync(15_000);

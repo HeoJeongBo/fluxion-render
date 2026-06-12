@@ -52,9 +52,9 @@ describe("Scenario 02: multi-channel recording and replay", () => {
     // Add a sentinel frame beyond the others so timeRange.latest doesn't
     // coincide with the frames we want to verify (the player fires onEnd
     // when currentT >= latest, before emitting that final frame).
-    seedMetricFrames(session, "cpu", 2);    // t = 1000, 2000
-    seedMetricFrames(session, "mem", 2);    // t = 1000, 2000
-    seedLogFrames(session, "events", 2);    // t = 1000, 2000
+    seedMetricFrames(session, "cpu", 2); // t = 1000, 2000
+    seedMetricFrames(session, "mem", 2); // t = 1000, 2000
+    seedLogFrames(session, "events", 2); // t = 1000, 2000
     session.record("cpu", { name: "cpu", value: -1 }, 9_000); // sentinel
     await session.store.flush();
 
@@ -79,8 +79,8 @@ describe("Scenario 02: multi-channel recording and replay", () => {
   });
 
   it("untyped onFrame receives all channels and carries correct channelId", async () => {
-    seedMetricFrames(session, "cpu", 2);   // t = 1000, 2000
-    seedLogFrames(session, "events", 1);   // t = 1000
+    seedMetricFrames(session, "cpu", 2); // t = 1000, 2000
+    seedLogFrames(session, "events", 1); // t = 1000
     session.record("cpu", { name: "cpu", value: -1 }, 9_000); // sentinel so 2000 isn't latest
     await session.store.flush();
 
@@ -88,7 +88,13 @@ describe("Scenario 02: multi-channel recording and replay", () => {
     const seen = new Map<string, number>();
     player.onFrame(({ channelId, data }) => {
       // exclude sentinel
-      if (typeof data === "object" && data !== null && "value" in data && (data as { value: number }).value === -1) return;
+      if (
+        typeof data === "object" &&
+        data !== null &&
+        "value" in data &&
+        (data as { value: number }).value === -1
+      )
+        return;
       seen.set(channelId, (seen.get(channelId) ?? 0) + 1);
     });
     player.play();

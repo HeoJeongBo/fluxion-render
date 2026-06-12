@@ -29,11 +29,16 @@ cache.registerLayer("line", { capacity: 4096, label: "signal", color: "#4fc3f7" 
 export function BrushDemoPage() {
   const timeOrigin = useTimeOrigin();
   const [host, setHost] = useState<FluxionHost | null>(null);
-  const [selection, setSelection] = useState<{ tStart: number; tEnd: number } | null>(null);
+  const [selection, setSelection] = useState<{ tStart: number; tEnd: number } | null>(
+    null,
+  );
   const overlayRef = useRef<HTMLDivElement>(null!);
   const [overlayW, setOverlayW] = useState(0);
   const [overlayH, setOverlayH] = useState(0);
-  useResizeObserver(overlayRef, ({ width, height }) => { setOverlayW(width); setOverlayH(height); });
+  useResizeObserver(overlayRef, ({ width, height }) => {
+    setOverlayW(width);
+    setOverlayH(height);
+  });
 
   const layers = useMemo(
     () => [
@@ -50,7 +55,12 @@ export function BrushDemoPage() {
         showYLabels: false,
         yPadPx: Y_PAD_PX,
       }),
-      lineLayer("line", { color: "#4fc3f7", lineWidth: 2, retentionMs: 10_000, maxHz: TARGET_HZ }),
+      lineLayer("line", {
+        color: "#4fc3f7",
+        lineWidth: 2,
+        retentionMs: 10_000,
+        maxHz: TARGET_HZ,
+      }),
     ],
     [timeOrigin],
   );
@@ -70,7 +80,11 @@ export function BrushDemoPage() {
     },
   });
 
-  const { brushRef, selection: brushSel, clearSelection } = useFluxionBrush({
+  const {
+    brushRef,
+    selection: brushSel,
+    clearSelection,
+  } = useFluxionBrush({
     host,
     onSelect: setSelection,
   });
@@ -91,8 +105,24 @@ export function BrushDemoPage() {
   const fmtDuration = (ms: number) => `${(ms / 1000).toFixed(2)}s`;
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", width: "100%", height: "100%", background: THEME.page.background }}>
-      <div style={{ padding: "8px 12px", display: "flex", gap: 12, alignItems: "center", borderBottom: `1px solid ${THEME.page.border}` }}>
+    <div
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        width: "100%",
+        height: "100%",
+        background: THEME.page.background,
+      }}
+    >
+      <div
+        style={{
+          padding: "8px 12px",
+          display: "flex",
+          gap: 12,
+          alignItems: "center",
+          borderBottom: `1px solid ${THEME.page.border}`,
+        }}
+      >
         <span style={{ fontSize: 12, color: THEME.page.textSecondary }}>
           {selection
             ? `Selection: ${fmtDuration(selection.tEnd - selection.tStart)} · click chart to clear`
@@ -101,21 +131,48 @@ export function BrushDemoPage() {
         <div style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
           {selection && (
             <button
-              onClick={() => { clearSelection(); setSelection(null); }}
-              style={{ padding: "4px 10px", fontSize: 12, background: "transparent", color: THEME.page.textSecondary, border: `1px solid ${THEME.page.border}`, borderRadius: 4, cursor: "pointer" }}
+              onClick={() => {
+                clearSelection();
+                setSelection(null);
+              }}
+              style={{
+                padding: "4px 10px",
+                fontSize: 12,
+                background: "transparent",
+                color: THEME.page.textSecondary,
+                border: `1px solid ${THEME.page.border}`,
+                borderRadius: 4,
+                cursor: "pointer",
+              }}
             >
               Clear
             </button>
           )}
           <button
             onClick={() => exportCSV()}
-            style={{ padding: "4px 12px", fontSize: 12, background: THEME.button.background, color: THEME.button.text, border: "none", borderRadius: 4, cursor: "pointer" }}
+            style={{
+              padding: "4px 12px",
+              fontSize: 12,
+              background: THEME.button.background,
+              color: THEME.button.text,
+              border: "none",
+              borderRadius: 4,
+              cursor: "pointer",
+            }}
           >
             Export CSV
           </button>
           <button
             onClick={() => exportJSON()}
-            style={{ padding: "4px 12px", fontSize: 12, background: THEME.button.background, color: THEME.button.text, border: "none", borderRadius: 4, cursor: "pointer" }}
+            style={{
+              padding: "4px 12px",
+              fontSize: 12,
+              background: THEME.button.background,
+              color: THEME.button.text,
+              border: "none",
+              borderRadius: 4,
+              cursor: "pointer",
+            }}
           >
             Export JSON
           </button>

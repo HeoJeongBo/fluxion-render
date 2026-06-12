@@ -159,9 +159,18 @@ describe("useYAxisCanvas", () => {
     const canvas = setupCanvas(60, 200);
     const fillText = vi.fn();
     const fakeCtx = {
-      clearRect: vi.fn(), strokeStyle: "", lineWidth: 0, fillStyle: "", font: "",
-      textAlign: "", textBaseline: "", beginPath: vi.fn(), moveTo: vi.fn(),
-      lineTo: vi.fn(), stroke: vi.fn(), fillText,
+      clearRect: vi.fn(),
+      strokeStyle: "",
+      lineWidth: 0,
+      fillStyle: "",
+      font: "",
+      textAlign: "",
+      textBaseline: "",
+      beginPath: vi.fn(),
+      moveTo: vi.fn(),
+      lineTo: vi.fn(),
+      stroke: vi.fn(),
+      fillText,
     };
     vi.spyOn(canvas, "getContext").mockReturnValue(fakeCtx as any);
 
@@ -178,14 +187,25 @@ describe("useYAxisCanvas", () => {
     const canvas = setupCanvas(60, 200);
     const stroke = vi.fn();
     const fakeCtx = {
-      clearRect: vi.fn(), strokeStyle: "", lineWidth: 0, fillStyle: "", font: "",
-      textAlign: "", textBaseline: "", beginPath: vi.fn(), moveTo: vi.fn(),
-      lineTo: vi.fn(), stroke, fillText: vi.fn(),
+      clearRect: vi.fn(),
+      strokeStyle: "",
+      lineWidth: 0,
+      fillStyle: "",
+      font: "",
+      textAlign: "",
+      textBaseline: "",
+      beginPath: vi.fn(),
+      moveTo: vi.fn(),
+      lineTo: vi.fn(),
+      stroke,
+      fillText: vi.fn(),
     };
     vi.spyOn(canvas, "getContext").mockReturnValue(fakeCtx as any);
 
     renderHook(() => {
-      const ref = useYAxisCanvas([{ label: "50", fraction: 0.5, value: 50 }], { tickSize: 0 });
+      const ref = useYAxisCanvas([{ label: "50", fraction: 0.5, value: 50 }], {
+        tickSize: 0,
+      });
       (ref as any).current = canvas;
       return ref;
     });
@@ -282,9 +302,18 @@ describe("useXAxisCanvas", () => {
     const canvas = setupCanvas(300, 30);
     const fillText = vi.fn();
     const fakeCtx = {
-      clearRect: vi.fn(), strokeStyle: "", lineWidth: 0, fillStyle: "", font: "",
-      textAlign: "", textBaseline: "", beginPath: vi.fn(), moveTo: vi.fn(),
-      lineTo: vi.fn(), stroke: vi.fn(), fillText,
+      clearRect: vi.fn(),
+      strokeStyle: "",
+      lineWidth: 0,
+      fillStyle: "",
+      font: "",
+      textAlign: "",
+      textBaseline: "",
+      beginPath: vi.fn(),
+      moveTo: vi.fn(),
+      lineTo: vi.fn(),
+      stroke: vi.fn(),
+      fillText,
     };
     vi.spyOn(canvas, "getContext").mockReturnValue(fakeCtx as any);
 
@@ -303,9 +332,19 @@ describe("useXAxisCanvas", () => {
     canvas.height = 1;
     const scale = vi.fn();
     const fakeCtx = {
-      clearRect: vi.fn(), strokeStyle: "", lineWidth: 0, fillStyle: "", font: "",
-      textAlign: "", textBaseline: "", beginPath: vi.fn(), moveTo: vi.fn(),
-      lineTo: vi.fn(), stroke: vi.fn(), fillText: vi.fn(), scale,
+      clearRect: vi.fn(),
+      strokeStyle: "",
+      lineWidth: 0,
+      fillStyle: "",
+      font: "",
+      textAlign: "",
+      textBaseline: "",
+      beginPath: vi.fn(),
+      moveTo: vi.fn(),
+      lineTo: vi.fn(),
+      stroke: vi.fn(),
+      fillText: vi.fn(),
+      scale,
     };
     vi.spyOn(canvas, "getContext").mockReturnValue(fakeCtx as any);
     vi.spyOn(canvas, "getBoundingClientRect").mockReturnValue({

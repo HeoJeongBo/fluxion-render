@@ -7,27 +7,19 @@ describe("snapTimeToSegment", () => {
   });
 
   it("returns t unchanged when t falls inside a segment", () => {
-    expect(
-      snapTimeToSegment(5_500, [{ start: 1_000, end: 6_000 }], 10_000),
-    ).toBe(5_500);
+    expect(snapTimeToSegment(5_500, [{ start: 1_000, end: 6_000 }], 10_000)).toBe(5_500);
   });
 
   it("returns t unchanged when t equals a segment's exact start", () => {
-    expect(
-      snapTimeToSegment(1_000, [{ start: 1_000, end: 6_000 }], 10_000),
-    ).toBe(1_000);
+    expect(snapTimeToSegment(1_000, [{ start: 1_000, end: 6_000 }], 10_000)).toBe(1_000);
   });
 
   it("returns t unchanged when t equals a segment's exact end", () => {
-    expect(
-      snapTimeToSegment(6_000, [{ start: 1_000, end: 6_000 }], 10_000),
-    ).toBe(6_000);
+    expect(snapTimeToSegment(6_000, [{ start: 1_000, end: 6_000 }], 10_000)).toBe(6_000);
   });
 
   it("treats an open-ended (null end) segment as extending to latest", () => {
-    expect(snapTimeToSegment(9_999, [{ start: 0, end: null }], 10_000)).toBe(
-      9_999,
-    );
+    expect(snapTimeToSegment(9_999, [{ start: 0, end: null }], 10_000)).toBe(9_999);
   });
 
   it("forward-snaps a gap target to the next segment's start", () => {

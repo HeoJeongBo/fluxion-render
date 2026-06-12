@@ -21,9 +21,9 @@ import {
 
 const ORIGIN = 1_000_000;
 const HZ = 20;
-const SESSION_MS = 60_000;        // 60s recording
-const WINDOW_MS = 5_000;          // 5s visible window
-const SEEK_AT = ORIGIN + 30_000;  // seek to t = 30s
+const SESSION_MS = 60_000; // 60s recording
+const WINDOW_MS = 5_000; // 5s visible window
+const SEEK_AT = ORIGIN + 30_000; // seek to t = 30s
 const SEEK_BACK = ORIGIN + 20_000; // re-seek another 10s back
 
 // Built once per process — 1200 SerializedFrames. Each bench iteration reuses
@@ -63,35 +63,32 @@ describe("useChartReplay — 60s recording, seek to 30s", () => {
     },
   );
 
-  bench(
-    "warm seek: mount + one seek round trip (two hydrate cycles)",
-    async () => {
-      const { host } = makeFakeHost();
-      const player = makeFakePlayer(SEEK_AT);
-      const store = makeFakeStore({ signal: FRAMES });
+  bench("warm seek: mount + one seek round trip (two hydrate cycles)", async () => {
+    const { host } = makeFakeHost();
+    const player = makeFakePlayer(SEEK_AT);
+    const store = makeFakeStore({ signal: FRAMES });
 
-      let result: ReturnType<typeof render> | undefined;
-      await act(async () => {
-        result = render(
-          <ChartReplayProbe
-            host={host}
-            player={player}
-            store={store}
-            windowMs={WINDOW_MS}
-            timeOrigin={ORIGIN}
-          />,
-        );
-        await Promise.resolve();
-        await Promise.resolve();
-      });
+    let result: ReturnType<typeof render> | undefined;
+    await act(async () => {
+      result = render(
+        <ChartReplayProbe
+          host={host}
+          player={player}
+          store={store}
+          windowMs={WINDOW_MS}
+          timeOrigin={ORIGIN}
+        />,
+      );
+      await Promise.resolve();
+      await Promise.resolve();
+    });
 
-      await act(async () => {
-        player.emitSeek(SEEK_BACK);
-        await Promise.resolve();
-        await Promise.resolve();
-      });
+    await act(async () => {
+      player.emitSeek(SEEK_BACK);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
 
-      result?.unmount();
-    },
-  );
+    result?.unmount();
+  });
 });

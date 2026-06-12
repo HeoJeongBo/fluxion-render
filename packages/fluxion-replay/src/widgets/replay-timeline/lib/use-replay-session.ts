@@ -1,6 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { ReplayPlayer } from "../../../features/player/model/replay-player";
-import { ReplaySession, type ReplaySessionMode, type ReplaySessionOptions } from "../../../features/session/model/replay-session";
+import {
+  ReplaySession,
+  type ReplaySessionMode,
+  type ReplaySessionOptions,
+} from "../../../features/session/model/replay-session";
 
 export interface UseReplaySessionOptions extends ReplaySessionOptions {
   autoOpen?: boolean;
@@ -35,7 +39,9 @@ export function useReplaySession(opts: UseReplaySessionOptions): UseReplaySessio
   const [isReady, setIsReady] = useState(false);
   const [error, setError] = useState<Error | null>(null);
   const [mode, setMode] = useState<ReplaySessionMode>("live");
-  const [timeRange, setTimeRange] = useState<{ earliest: number; latest: number } | null>(null);
+  const [timeRange, setTimeRange] = useState<{ earliest: number; latest: number } | null>(
+    null,
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -66,9 +72,12 @@ export function useReplaySession(opts: UseReplaySessionOptions): UseReplaySessio
     };
   }, []);
 
-  const record = useCallback(<T>(channelId: string, data: T, t?: number) => {
-    session?.record(channelId, data, t);
-  }, [session]);
+  const record = useCallback(
+    <T>(channelId: string, data: T, t?: number) => {
+      session?.record(channelId, data, t);
+    },
+    [session],
+  );
 
   // Bumped by every enterReplay() and exitReplay(). An enterReplay whose
   // captured gen no longer matches after its awaits was superseded — it must

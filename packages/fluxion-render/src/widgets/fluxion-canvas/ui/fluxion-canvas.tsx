@@ -1,7 +1,13 @@
-import { type CSSProperties, forwardRef, useImperativeHandle, useMemo, useRef } from "react";
+import {
+  type CSSProperties,
+  forwardRef,
+  useImperativeHandle,
+  useMemo,
+  useRef,
+} from "react";
 import type { FluxionHost, FluxionHostOptions } from "../../../features/host";
-import { useAxisTicks } from "../lib/use-axis-ticks";
 import { useXAxisCanvas, useYAxisCanvas } from "../lib/use-axis-canvas";
+import { useAxisTicks } from "../lib/use-axis-ticks";
 import { type FluxionLayerSpec, useFluxionCanvas } from "../lib/use-fluxion-canvas";
 
 export interface FluxionCanvasProps {
@@ -75,7 +81,12 @@ export const FluxionCanvas = forwardRef<FluxionCanvasHandle, FluxionCanvasProps>
     const yAxisContainerRef = useRef<HTMLDivElement>(null);
 
     const axisStyle = useMemo(
-      () => ({ color: axisColor, font: axisFont, tickSize: axisTickSize, tickMargin: axisTickMargin }),
+      () => ({
+        color: axisColor,
+        font: axisFont,
+        tickSize: axisTickSize,
+        tickMargin: axisTickMargin,
+      }),
       [axisColor, axisFont, axisTickSize, axisTickMargin],
     );
 
@@ -95,7 +106,10 @@ export const FluxionCanvas = forwardRef<FluxionCanvasHandle, FluxionCanvasProps>
     // Hooks must be called unconditionally — they no-op when host/ticks are absent.
     const tickSet = useAxisTicks(layers, axisLayerId, 16, externalAxes ? null : host);
     const legacyYCanvasRef = useYAxisCanvas(tickSet?.yTicks ?? [], axisStyle);
-    const legacyXCanvasRef = useXAxisCanvas(xAxisHeight > 0 ? (tickSet?.xTicks ?? []) : [], axisStyle);
+    const legacyXCanvasRef = useXAxisCanvas(
+      xAxisHeight > 0 ? (tickSet?.xTicks ?? []) : [],
+      axisStyle,
+    );
 
     if (!externalAxes) {
       void legacyYCanvasRef;
@@ -136,18 +150,36 @@ export const FluxionCanvas = forwardRef<FluxionCanvasHandle, FluxionCanvasProps>
       >
         <div
           ref={yAxisContainerRef}
-          style={{ position: "relative", width: "100%", height: "100%", minWidth: 0, minHeight: 0 }}
+          style={{
+            position: "relative",
+            width: "100%",
+            height: "100%",
+            minWidth: 0,
+            minHeight: 0,
+          }}
         />
         <div
           ref={containerRef}
-          style={{ position: "relative", width: "100%", height: "100%", minWidth: 0, minHeight: 0 }}
+          style={{
+            position: "relative",
+            width: "100%",
+            height: "100%",
+            minWidth: 0,
+            minHeight: 0,
+          }}
         />
         {xAxisHeight > 0 && (
           <>
             <div />
             <div
               ref={xAxisContainerRef}
-              style={{ position: "relative", width: "100%", height: "100%", minWidth: 0, minHeight: 0 }}
+              style={{
+                position: "relative",
+                width: "100%",
+                height: "100%",
+                minWidth: 0,
+                minHeight: 0,
+              }}
             />
           </>
         )}

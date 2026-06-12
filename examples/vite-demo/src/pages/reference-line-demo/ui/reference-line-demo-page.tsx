@@ -43,7 +43,12 @@ export function ReferenceLineDemoPage() {
         color: "#4a6db8",
         label: `target=${setpoint}`,
       }),
-      lineLayer("actual", { color: "#ff5252", lineWidth: 2, retentionMs: 12_000, maxHz: TARGET_HZ }),
+      lineLayer("actual", {
+        color: "#ff5252",
+        lineWidth: 2,
+        retentionMs: 12_000,
+        maxHz: TARGET_HZ,
+      }),
     ],
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [timeOrigin],
@@ -154,9 +159,7 @@ export function ReferenceLineDemoPage() {
             { color: "#ff5252", label: "Actual value" },
           ].map(({ color, label }) => (
             <div key={label} style={{ display: "flex", alignItems: "center", gap: 5 }}>
-              <div
-                style={{ width: 12, height: 3, background: color, borderRadius: 2 }}
-              />
+              <div style={{ width: 12, height: 3, background: color, borderRadius: 2 }} />
               <span>{label}</span>
             </div>
           ))}
@@ -183,7 +186,13 @@ function SliderControl({
 }) {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 4, minWidth: 160 }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "baseline",
+        }}
+      >
         <span style={{ fontSize: 11, fontWeight: 600, color: THEME.page.textSecondary }}>
           {label}
         </span>

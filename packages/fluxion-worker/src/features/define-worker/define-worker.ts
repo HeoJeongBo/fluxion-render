@@ -144,9 +144,7 @@ export function defineWorkerWithState<
 ): void {
   const stateMap = new Map<string, TState>();
 
-  (self as unknown as Worker).onmessage = (
-    evt: MessageEvent<WorkerMsg<TMsg>>,
-  ) => {
+  (self as unknown as Worker).onmessage = (evt: MessageEvent<WorkerMsg<TMsg>>) => {
     const msg = evt.data;
     const hostId = msg.hostId;
     const key = hostId ?? _SOLO_KEY;
@@ -156,9 +154,10 @@ export function defineWorkerWithState<
 
     if (mode === "stream" && streamHandler) {
       const push: PushFn<TStreamResult> = (result, transfer) => {
-        const out = hostId !== undefined
-          ? { ...result, hostId, __fluxionStream: true as const }
-          : { ...result, __fluxionStream: true as const };
+        const out =
+          hostId !== undefined
+            ? { ...result, hostId, __fluxionStream: true as const }
+            : { ...result, __fluxionStream: true as const };
         if (transfer && transfer.length > 0) {
           (self as unknown as Worker).postMessage(out, transfer);
         } else {
@@ -214,27 +213,23 @@ export function defineWorker<
   TStreamMsg extends object = TMsg,
   TStreamResult extends object = object,
 >(
-  rpcHandler: (
-    msg: WorkerMsg<TMsg>,
-    reply: ReplyFn<TResult>,
-  ) => void | Promise<void>,
+  rpcHandler: (msg: WorkerMsg<TMsg>, reply: ReplyFn<TResult>) => void | Promise<void>,
   streamHandler?: (
     msg: WorkerMsg<TStreamMsg>,
     push: PushFn<TStreamResult>,
   ) => void | Promise<void>,
 ): void {
-  (self as unknown as Worker).onmessage = (
-    evt: MessageEvent<WorkerMsg<TMsg>>,
-  ) => {
+  (self as unknown as Worker).onmessage = (evt: MessageEvent<WorkerMsg<TMsg>>) => {
     const msg = evt.data;
     const hostId = msg.hostId;
     const mode: FluxionMode = (msg as { mode?: FluxionMode }).mode ?? "rpc";
 
     if (mode === "stream" && streamHandler) {
       const push: PushFn<TStreamResult> = (result, transfer) => {
-        const out = hostId !== undefined
-          ? { ...result, hostId, __fluxionStream: true as const }
-          : { ...result, __fluxionStream: true as const };
+        const out =
+          hostId !== undefined
+            ? { ...result, hostId, __fluxionStream: true as const }
+            : { ...result, __fluxionStream: true as const };
         if (transfer && transfer.length > 0) {
           (self as unknown as Worker).postMessage(out, transfer);
         } else {

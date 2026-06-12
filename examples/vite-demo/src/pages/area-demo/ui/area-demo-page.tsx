@@ -134,9 +134,15 @@ export function AreaDemoPage() {
         }}
       >
         <div style={{ pointerEvents: "auto" }}>
-          <WindowSelector value={localWindowMs} onChange={setLocalWindowMs} options={WINDOW_OPTIONS} />
+          <WindowSelector
+            value={localWindowMs}
+            onChange={setLocalWindowMs}
+            options={WINDOW_OPTIONS}
+          />
         </div>
-        <span>{hz} Hz · {localWindowMs / 1000}s window</span>
+        <span>
+          {hz} Hz · {localWindowMs / 1000}s window
+        </span>
       </div>
     </div>
   );

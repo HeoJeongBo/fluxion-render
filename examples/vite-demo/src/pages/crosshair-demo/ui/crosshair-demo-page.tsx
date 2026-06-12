@@ -1,9 +1,9 @@
 import type { FluxionHost } from "@heojeongbo/fluxion-render";
 import {
+  axisGridLayer,
   FluxionCanvas,
   FluxionCrosshair,
   HoverDataCache,
-  axisGridLayer,
   lineLayer,
   useFluxionCrosshair,
   useFluxionStream,
@@ -11,10 +11,7 @@ import {
   useTimeOrigin,
 } from "@heojeongbo/fluxion-render/react";
 import { useMemo, useState } from "react";
-import {
-  generateFloat32StampedBatch,
-  stampToMs,
-} from "../../../shared/lib/test-data";
+import { generateFloat32StampedBatch, stampToMs } from "../../../shared/lib/test-data";
 import { THEME } from "../../../shared/ui/theme";
 import { WindowSelector } from "../../../shared/ui/window-selector";
 
@@ -31,9 +28,30 @@ const X_AXIS_HEIGHT = 30;
 const Y_PAD_PX = 8;
 
 const SERIES = [
-  { id: "s1", label: "Sensor A", color: "#4fc3f7", freqHz: 0.8, amplitude: 0.9, offset: 0 },
-  { id: "s2", label: "Sensor B", color: "#80ffa0", freqHz: 1.3, amplitude: 0.7, offset: 1.1 },
-  { id: "s3", label: "Sensor C", color: "#ffb060", freqHz: 2.1, amplitude: 0.5, offset: 2.2 },
+  {
+    id: "s1",
+    label: "Sensor A",
+    color: "#4fc3f7",
+    freqHz: 0.8,
+    amplitude: 0.9,
+    offset: 0,
+  },
+  {
+    id: "s2",
+    label: "Sensor B",
+    color: "#80ffa0",
+    freqHz: 1.3,
+    amplitude: 0.7,
+    offset: 1.1,
+  },
+  {
+    id: "s3",
+    label: "Sensor C",
+    color: "#ffb060",
+    freqHz: 2.1,
+    amplitude: 0.5,
+    offset: 2.2,
+  },
 ];
 
 export function CrosshairDemoPage() {

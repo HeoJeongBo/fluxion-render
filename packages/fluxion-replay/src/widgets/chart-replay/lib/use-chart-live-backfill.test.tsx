@@ -9,11 +9,19 @@ import {
 } from "./chart-replay-fixtures";
 import { useChartLiveBackfill } from "./use-chart-live-backfill";
 
-function setup(active: boolean, frames = [metricFrame("signal", 100, 1)], timeOrigin = 0) {
+function setup(
+  active: boolean,
+  frames = [metricFrame("signal", 100, 1)],
+  timeOrigin = 0,
+) {
   const host = makeFakeHost();
   const store = makeFakeStore({ signal: frames });
   const { rerender, unmount } = renderHook(
-    ({ active: a, h, s }: {
+    ({
+      active: a,
+      h,
+      s,
+    }: {
       active: boolean;
       h: typeof host.host | null;
       s: typeof store | null;
@@ -42,7 +50,9 @@ describe("useChartLiveBackfill", () => {
   it("active=false: no flush, no query, no chart writes", async () => {
     const { store, host } = setup(false);
     // Microtask hop just in case some async slipped through.
-    await act(async () => { await Promise.resolve(); });
+    await act(async () => {
+      await Promise.resolve();
+    });
     expect(store.flush).not.toHaveBeenCalled();
     expect(store.getFramesByChannel).not.toHaveBeenCalled();
     expect(host.resets).toEqual([]);
@@ -58,7 +68,10 @@ describe("useChartLiveBackfill", () => {
     ];
     const { store, host } = setup(true, frames);
 
-    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
 
     expect(store.flush).toHaveBeenCalledTimes(1);
     expect(store.getFramesByChannel).toHaveBeenCalledWith(
@@ -96,7 +109,9 @@ describe("useChartLiveBackfill", () => {
     const { host, store, rerender } = setup(false, [
       metricFrame("signal", fixedNow - 2_000, 9),
     ]);
-    await act(async () => { await Promise.resolve(); });
+    await act(async () => {
+      await Promise.resolve();
+    });
     expect(store.flush).not.toHaveBeenCalled();
 
     await act(async () => {
@@ -119,7 +134,10 @@ describe("useChartLiveBackfill", () => {
     const { host, store, rerender } = setup(true, [
       metricFrame("signal", fixedNow - 1_000, 5),
     ]);
-    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
 
     const flushBefore = store.flush.mock.calls.length;
     const resetsBefore = host.resets.length;
@@ -147,7 +165,10 @@ describe("useChartLiveBackfill", () => {
       metricFrame("signal", fixedNow - 500, 2),
     ];
     const { host } = setup(true, frames, timeOrigin);
-    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
 
     // Ring-only clear — no latestT rewind. The host-relative shift is applied
     // to the batch data (below), which advances the axis as it lands.
@@ -165,7 +186,10 @@ describe("useChartLiveBackfill", () => {
     // Frame outside the [now - 5000, now] window.
     const frames = [metricFrame("signal", fixedNow - 60_000, 99)];
     const { host } = setup(true, frames);
-    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
 
     // Single post-query reset (ring-only, no latestT), 0 batches.
     expect(host.resets).toEqual([{ id: "signal", latestT: undefined }]);
@@ -181,13 +205,17 @@ describe("useChartLiveBackfill", () => {
     const { store, host, unmount } = setup(true, frames);
     // Hold the query so the pending promise can't resolve before unmount.
     store.hold();
-    await act(async () => { await Promise.resolve(); });
+    await act(async () => {
+      await Promise.resolve();
+    });
     // No premature reset fires; the async chain is held at the query, and is
     // what we want to confirm bails on cancellation.
     expect(host.resets.length).toBe(0);
     // Unmount BEFORE releasing.
     unmount();
-    await act(async () => { await store.release(); });
+    await act(async () => {
+      await store.release();
+    });
     // Should NOT have touched the layer at all — the cancelled chain bails.
     expect(host.resets.length).toBe(0);
     expect(host.batches).toEqual([]);
@@ -213,7 +241,10 @@ describe("useChartLiveBackfill", () => {
         active: true,
       }),
     );
-    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
     // host.line should have been called with "signal" (channel.channelId)
     expect(host.host.line).toHaveBeenCalledWith("signal");
     vi.restoreAllMocks();
@@ -234,9 +265,11 @@ describe("useChartLiveBackfill", () => {
           pickValue: (d) => d.value,
           active: true,
         }),
-      )
+      ),
     ).not.toThrow();
-    await act(async () => { await Promise.resolve(); });
+    await act(async () => {
+      await Promise.resolve();
+    });
     expect(store.flush).not.toHaveBeenCalled();
   });
 
@@ -251,14 +284,19 @@ describe("useChartLiveBackfill", () => {
     // Hold the query so the async chain can't progress past its IDB await.
     store.hold();
     // Allow microtasks to run (the `await store.flush()` resolves).
-    await act(async () => { await Promise.resolve(); });
+    await act(async () => {
+      await Promise.resolve();
+    });
     // The query is in flight (held). NOTHING has touched the chart yet — no
     // premature clear, so the existing (live-pushed) data stays on screen.
     expect(host.resets.length).toBe(0);
     expect(host.batches.length).toBe(0);
     expect(host.order).toEqual([]);
     // Release the query — reset + pushBatch land together, reset first.
-    await act(async () => { await store.release(); await Promise.resolve(); });
+    await act(async () => {
+      await store.release();
+      await Promise.resolve();
+    });
     expect(host.resets.length).toBe(1);
     expect(host.batches.length).toBe(1);
     // The very first chart-mutating op the user could see is the reset,
@@ -277,7 +315,10 @@ describe("useChartLiveBackfill", () => {
     const fixedNow = 1_700_000_000_000;
     vi.spyOn(Date, "now").mockReturnValue(fixedNow);
     const { host } = setup(true, [metricFrame("signal", fixedNow - 1_000, 7)]);
-    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
 
     expect(host.resets).toEqual([{ id: "signal", latestT: undefined }]);
     expect(host.order[0]).toBe("reset:undef");

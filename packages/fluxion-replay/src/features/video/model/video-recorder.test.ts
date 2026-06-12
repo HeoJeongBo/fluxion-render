@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
-import { ReplayStore } from "../../store/model/replay-store";
-import { ReplayRecorder } from "../../recorder/model/replay-recorder";
 import { VideoChannel } from "../../../entities/video-channel/video-channel";
+import { ReplayRecorder } from "../../recorder/model/replay-recorder";
+import { ReplayStore } from "../../store/model/replay-store";
 import { VideoRecorder } from "./video-recorder";
 
 async function makeOpenRecorder() {
@@ -40,7 +40,11 @@ describe("VideoRecorder", () => {
 
   it("uses fallback when VideoEncoder is not available", async () => {
     const origVideoEncoder = globalThis.VideoEncoder;
-    Object.defineProperty(globalThis, "VideoEncoder", { value: undefined, writable: true, configurable: true });
+    Object.defineProperty(globalThis, "VideoEncoder", {
+      value: undefined,
+      writable: true,
+      configurable: true,
+    });
 
     const { store, recorder } = makeRecorder();
     const vr = new VideoRecorder({ channelId: "cam", store, recorder });
@@ -53,7 +57,11 @@ describe("VideoRecorder", () => {
 
     vr.stop();
     warnSpy.mockRestore();
-    Object.defineProperty(globalThis, "VideoEncoder", { value: origVideoEncoder, writable: true, configurable: true });
+    Object.defineProperty(globalThis, "VideoEncoder", {
+      value: origVideoEncoder,
+      writable: true,
+      configurable: true,
+    });
   });
 
   it("stop() sets isRunning to false", async () => {
@@ -106,7 +114,9 @@ describe("VideoRecorder", () => {
       }
     }
     Object.defineProperty(globalThis, "MediaStreamTrackProcessor", {
-      value: OneFrameProcessor, writable: true, configurable: true,
+      value: OneFrameProcessor,
+      writable: true,
+      configurable: true,
     });
 
     const vr = new VideoRecorder({ channelId: "cam", store, recorder });
@@ -120,14 +130,18 @@ describe("VideoRecorder", () => {
     expect(fakeFrame.close).toHaveBeenCalled();
     vr.stop();
     Object.defineProperty(globalThis, "MediaStreamTrackProcessor", {
-      value: origMSTP, writable: true, configurable: true,
+      value: origMSTP,
+      writable: true,
+      configurable: true,
     });
   });
 
   it("uses fallback when MediaStreamTrackProcessor is not available", async () => {
     const origMSTP = globalThis.MediaStreamTrackProcessor;
     Object.defineProperty(globalThis, "MediaStreamTrackProcessor", {
-      value: undefined, writable: true, configurable: true,
+      value: undefined,
+      writable: true,
+      configurable: true,
     });
 
     const { store, recorder } = makeRecorder();
@@ -136,12 +150,16 @@ describe("VideoRecorder", () => {
     const track = {} as MediaStreamTrack;
     await vr.start(track);
     expect(vr.isRunning).toBe(true);
-    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining("MediaStreamTrackProcessor"));
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining("MediaStreamTrackProcessor"),
+    );
 
     vr.stop();
     warnSpy.mockRestore();
     Object.defineProperty(globalThis, "MediaStreamTrackProcessor", {
-      value: origMSTP, writable: true, configurable: true,
+      value: origMSTP,
+      writable: true,
+      configurable: true,
     });
   });
 
@@ -154,25 +172,36 @@ describe("VideoRecorder", () => {
       constructor(init: { output: unknown; error: (e: Error) => void }) {
         capturedError = init.error;
       }
-      configure(_config: unknown) { this.state = "configured"; }
+      configure(_config: unknown) {
+        this.state = "configured";
+      }
       encode(_frame: unknown, _opts?: unknown) {}
       async flush() {}
-      close() { this.state = "closed"; }
+      close() {
+        this.state = "closed";
+      }
     }
     Object.defineProperty(globalThis, "VideoEncoder", {
-      value: ErrorCapturingEncoder, writable: true, configurable: true,
+      value: ErrorCapturingEncoder,
+      writable: true,
+      configurable: true,
     });
 
     const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
     const vr = new VideoRecorder({ channelId: "cam", store, recorder });
     await vr.start({} as MediaStreamTrack);
     capturedError!(new Error("encode error"));
-    expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining("VideoEncoder"), expect.any(Error));
+    expect(errorSpy).toHaveBeenCalledWith(
+      expect.stringContaining("VideoEncoder"),
+      expect.any(Error),
+    );
 
     vr.stop();
     errorSpy.mockRestore();
     Object.defineProperty(globalThis, "VideoEncoder", {
-      value: origVideoEncoder, writable: true, configurable: true,
+      value: origVideoEncoder,
+      writable: true,
+      configurable: true,
     });
   });
 
@@ -195,7 +224,9 @@ describe("VideoRecorder", () => {
       }
     }
     Object.defineProperty(globalThis, "MediaStreamTrackProcessor", {
-      value: ThrowingProcessor, writable: true, configurable: true,
+      value: ThrowingProcessor,
+      writable: true,
+      configurable: true,
     });
 
     const vr = new VideoRecorder({ channelId: "cam", store, recorder });
@@ -208,7 +239,9 @@ describe("VideoRecorder", () => {
     vr.stop();
 
     Object.defineProperty(globalThis, "MediaStreamTrackProcessor", {
-      value: origMSTP, writable: true, configurable: true,
+      value: origMSTP,
+      writable: true,
+      configurable: true,
     });
   });
 
@@ -221,16 +254,25 @@ describe("VideoRecorder", () => {
     let capturedOutput: ((chunk: EncodedVideoChunk, meta: unknown) => void) | null = null;
     class ImmediateVideoEncoder {
       state = "unconfigured";
-      constructor(init: { output: (chunk: EncodedVideoChunk, meta: unknown) => void; error: (e: Error) => void }) {
+      constructor(init: {
+        output: (chunk: EncodedVideoChunk, meta: unknown) => void;
+        error: (e: Error) => void;
+      }) {
         capturedOutput = init.output;
       }
-      configure(_config: unknown) { this.state = "configured"; }
+      configure(_config: unknown) {
+        this.state = "configured";
+      }
       encode(_frame: unknown, _opts?: unknown) {}
       async flush() {}
-      close() { this.state = "closed"; }
+      close() {
+        this.state = "closed";
+      }
     }
     Object.defineProperty(globalThis, "VideoEncoder", {
-      value: ImmediateVideoEncoder, writable: true, configurable: true,
+      value: ImmediateVideoEncoder,
+      writable: true,
+      configurable: true,
     });
 
     const vr = new VideoRecorder({ channelId: "cam", store, recorder });
@@ -252,7 +294,9 @@ describe("VideoRecorder", () => {
     vr.stop();
 
     Object.defineProperty(globalThis, "VideoEncoder", {
-      value: origVideoEncoder, writable: true, configurable: true,
+      value: origVideoEncoder,
+      writable: true,
+      configurable: true,
     });
 
     expect(recordSpy).toHaveBeenCalledWith(

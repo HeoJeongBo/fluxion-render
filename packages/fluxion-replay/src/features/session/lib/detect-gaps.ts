@@ -40,7 +40,7 @@ export function detectGaps(
   for (let i = 0; i < sorted.length - 1; i++) {
     const current = sorted[i]!;
     const next = sorted[i + 1]!;
-    const gapStart = current.end ?? (latest ?? current.start);
+    const gapStart = current.end ?? latest ?? current.start;
     const gapEnd = next.start;
     if (gapEnd > gapStart) {
       gaps.push({ start: gapStart, end: gapEnd, durationMs: gapEnd - gapStart });

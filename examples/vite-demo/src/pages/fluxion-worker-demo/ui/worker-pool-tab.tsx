@@ -1,5 +1,5 @@
-import { WorkerPool, WorkerTimeoutError } from "@heojeongbo/fluxion-worker";
 import type { WorkerPoolStats } from "@heojeongbo/fluxion-worker";
+import { WorkerPool, WorkerTimeoutError } from "@heojeongbo/fluxion-worker";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { THEME } from "../../../shared/ui/theme";
 import type { CalcMsg, CalcOp, CalcResultMsg } from "../lib/calc-worker";
@@ -60,10 +60,7 @@ export function WorkerPoolTab() {
     poolRef.current = new WorkerPool<CalcMsg>({
       size,
       workerFactory: () =>
-        new Worker(
-          new URL("../lib/calc-worker.ts", import.meta.url),
-          { type: "module" },
-        ),
+        new Worker(new URL("../lib/calc-worker.ts", import.meta.url), { type: "module" }),
     });
     setStats(poolRef.current.stats());
     return () => {
@@ -76,34 +73,39 @@ export function WorkerPoolTab() {
     if (poolRef.current) setStats(poolRef.current.stats());
   }, []);
 
-  const dispatch = useCallback(async (op: CalcOp, count: number) => {
-    const pool = poolRef.current;
-    if (!pool) return;
-    setPending((p) => p + 1);
-    try {
-      const msg = await pool.dispatch<CalcResultMsg>(
-        { op, values: randomValues(count) },
-        { timeoutMs: 5000 },
-      );
-      setResults((prev) => [
-        { op: msg.op, result: msg.result, durationMs: msg.durationMs },
-        ...prev.slice(0, 19),
-      ]);
-    } catch (e) {
-      setResults((prev) => [
-        {
-          op,
-          error: WorkerTimeoutError.is(e)
-            ? `timeout (${e.timeoutMs}ms)`
-            : e instanceof Error ? e.message : String(e),
-        },
-        ...prev.slice(0, 19),
-      ]);
-    } finally {
-      refreshStats();
-      setPending((p) => Math.max(0, p - 1));
-    }
-  }, [refreshStats]);
+  const dispatch = useCallback(
+    async (op: CalcOp, count: number) => {
+      const pool = poolRef.current;
+      if (!pool) return;
+      setPending((p) => p + 1);
+      try {
+        const msg = await pool.dispatch<CalcResultMsg>(
+          { op, values: randomValues(count) },
+          { timeoutMs: 5000 },
+        );
+        setResults((prev) => [
+          { op: msg.op, result: msg.result, durationMs: msg.durationMs },
+          ...prev.slice(0, 19),
+        ]);
+      } catch (e) {
+        setResults((prev) => [
+          {
+            op,
+            error: WorkerTimeoutError.is(e)
+              ? `timeout (${e.timeoutMs}ms)`
+              : e instanceof Error
+                ? e.message
+                : String(e),
+          },
+          ...prev.slice(0, 19),
+        ]);
+      } finally {
+        refreshStats();
+        setPending((p) => Math.max(0, p - 1));
+      }
+    },
+    [refreshStats],
+  );
 
   const poolSnippet = `// WorkerPool — dispatch() = acquire + request + release
 const pool = new WorkerPool({
@@ -155,7 +157,10 @@ pool.stats();
                   fontSize: 12,
                   border: `1px solid ${n === size ? THEME.button.border : THEME.page.border}`,
                   borderRadius: 4,
-                  background: n === size ? THEME.button.background : THEME.button.inactiveBackground,
+                  background:
+                    n === size
+                      ? THEME.button.background
+                      : THEME.button.inactiveBackground,
                   color: n === size ? THEME.button.text : THEME.button.inactiveText,
                   cursor: "pointer",
                 }}
@@ -202,8 +207,14 @@ pool.stats();
                       padding: "2px 8px",
                       borderRadius: 3,
                       fontSize: 11,
-                      background: i === stats.leastBusyIndex ? THEME.button.background : THEME.panel.background,
-                      color: i === stats.leastBusyIndex ? THEME.button.text : THEME.page.textSecondary,
+                      background:
+                        i === stats.leastBusyIndex
+                          ? THEME.button.background
+                          : THEME.panel.background,
+                      color:
+                        i === stats.leastBusyIndex
+                          ? THEME.button.text
+                          : THEME.page.textSecondary,
                       border: `1px solid ${THEME.page.border}`,
                     }}
                   >
@@ -282,9 +293,23 @@ pool.stats();
       </div>
 
       {/* Results panel */}
-      <div style={{ flex: 1, overflowY: "auto", padding: 16, background: THEME.page.background }}>
+      <div
+        style={{
+          flex: 1,
+          overflowY: "auto",
+          padding: 16,
+          background: THEME.page.background,
+        }}
+      >
         {results.length === 0 ? (
-          <div style={{ color: THEME.page.textMuted, fontSize: 13, paddingTop: 24, textAlign: "center" }}>
+          <div
+            style={{
+              color: THEME.page.textMuted,
+              fontSize: 13,
+              paddingTop: 24,
+              textAlign: "center",
+            }}
+          >
             Dispatch a job to see results
           </div>
         ) : (
@@ -304,7 +329,13 @@ pool.stats();
                   fontSize: 12,
                 }}
               >
-                <span style={{ fontWeight: 700, color: r.error ? "#e74c3c" : THEME.button.background, fontFamily: "monospace" }}>
+                <span
+                  style={{
+                    fontWeight: 700,
+                    color: r.error ? "#e74c3c" : THEME.button.background,
+                    fontFamily: "monospace",
+                  }}
+                >
                   {r.op}
                 </span>
                 {r.error ? (
@@ -313,10 +344,22 @@ pool.stats();
                   </span>
                 ) : (
                   <>
-                    <span style={{ fontWeight: 600, color: THEME.page.textPrimary, fontFamily: "monospace" }}>
+                    <span
+                      style={{
+                        fontWeight: 600,
+                        color: THEME.page.textPrimary,
+                        fontFamily: "monospace",
+                      }}
+                    >
                       = {r.result?.toFixed(2)}
                     </span>
-                    <span style={{ color: THEME.page.textMuted, fontSize: 11, textAlign: "right" }}>
+                    <span
+                      style={{
+                        color: THEME.page.textMuted,
+                        fontSize: 11,
+                        textAlign: "right",
+                      }}
+                    >
                       {r.durationMs?.toFixed(3)} ms
                     </span>
                   </>

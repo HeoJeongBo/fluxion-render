@@ -19,14 +19,20 @@ describe("ReplayStore", () => {
   });
 
   it("throws when not open", () => {
-    expect(() => store.appendFrame({ t: 0, channelId: "ch", payload: new ArrayBuffer(4) })).not.toThrow();
+    expect(() =>
+      store.appendFrame({ t: 0, channelId: "ch", payload: new ArrayBuffer(4) }),
+    ).not.toThrow();
     // getFrames should throw because db is null
   });
 
   it("open() still succeeds when OPFS is unavailable", async () => {
     const origStorage = navigator.storage;
     Object.defineProperty(globalThis.navigator, "storage", {
-      value: { getDirectory: async () => { throw new Error("OPFS unavailable"); } },
+      value: {
+        getDirectory: async () => {
+          throw new Error("OPFS unavailable");
+        },
+      },
       writable: true,
       configurable: true,
     });
@@ -40,14 +46,16 @@ describe("ReplayStore", () => {
 
   describe("open lifecycle (StrictMode race / blocked)", () => {
     // Test-only IDB controls installed by src/test/setup.ts.
-    const idb = (globalThis as unknown as {
-      __fakeIDBControls: {
-        setForceBlocked: (v: boolean) => void;
-        setDeferOpen: (v: boolean) => void;
-        resolvePendingOpens: () => Array<{ closeCount: number }>;
-        reset: () => void;
-      };
-    }).__fakeIDBControls;
+    const idb = (
+      globalThis as unknown as {
+        __fakeIDBControls: {
+          setForceBlocked: (v: boolean) => void;
+          setDeferOpen: (v: boolean) => void;
+          resolvePendingOpens: () => Array<{ closeCount: number }>;
+          reset: () => void;
+        };
+      }
+    ).__fakeIDBControls;
 
     afterEach(() => idb.reset());
 
@@ -220,15 +228,23 @@ describe("ReplayStore", () => {
       const storeNoOpfs = new ReplayStore({ batchIntervalMs: 9999 });
       const origStorage = navigator.storage;
       Object.defineProperty(globalThis.navigator, "storage", {
-        value: { getDirectory: async () => { throw new Error("no opfs"); } },
+        value: {
+          getDirectory: async () => {
+            throw new Error("no opfs");
+          },
+        },
         writable: true,
         configurable: true,
       });
       await storeNoOpfs.open();
       Object.defineProperty(globalThis.navigator, "storage", {
-        value: origStorage, writable: true, configurable: true,
+        value: origStorage,
+        writable: true,
+        configurable: true,
       });
-      await expect(storeNoOpfs.deleteVideoChunk("cam", "x.chunk")).resolves.toBeUndefined();
+      await expect(
+        storeNoOpfs.deleteVideoChunk("cam", "x.chunk"),
+      ).resolves.toBeUndefined();
       storeNoOpfs.dispose();
     });
 
@@ -236,15 +252,23 @@ describe("ReplayStore", () => {
       const storeNoOpfs = new ReplayStore({ batchIntervalMs: 9999 });
       const origStorage = navigator.storage;
       Object.defineProperty(globalThis.navigator, "storage", {
-        value: { getDirectory: async () => { throw new Error("no opfs"); } },
+        value: {
+          getDirectory: async () => {
+            throw new Error("no opfs");
+          },
+        },
         writable: true,
         configurable: true,
       });
       await storeNoOpfs.open();
       Object.defineProperty(globalThis.navigator, "storage", {
-        value: origStorage, writable: true, configurable: true,
+        value: origStorage,
+        writable: true,
+        configurable: true,
       });
-      await expect(storeNoOpfs.writeVideoChunk("cam", "x.chunk", new Uint8Array([1]))).rejects.toThrow("OPFS");
+      await expect(
+        storeNoOpfs.writeVideoChunk("cam", "x.chunk", new Uint8Array([1])),
+      ).rejects.toThrow("OPFS");
       storeNoOpfs.dispose();
     });
 
@@ -343,7 +367,10 @@ describe("ReplayStore", () => {
     });
 
     it("_maybeEvict does nothing when evictThresholdPct is 100", async () => {
-      const noEvictStore = new ReplayStore({ batchIntervalMs: 9999, evictThresholdPct: 100 });
+      const noEvictStore = new ReplayStore({
+        batchIntervalMs: 9999,
+        evictThresholdPct: 100,
+      });
       await noEvictStore.open();
       const deleteSpy = vi.spyOn(noEvictStore, "deleteFramesBefore");
 
@@ -386,7 +413,10 @@ describe("ReplayStore", () => {
       // Segment spans [0, 5000]; frames at t=[1000..5000]
       evictStore.startSegment(0);
       vi.spyOn(evictStore, "getStorageInfo").mockResolvedValue({
-        usedBytes: 100, quotaBytes: 100, percentUsed: 50, idbFrameCount: 5,
+        usedBytes: 100,
+        quotaBytes: 100,
+        percentUsed: 50,
+        idbFrameCount: 5,
       });
       for (const t of [1000, 2000, 3000, 4000, 5000]) {
         evictStore.appendFrame({ t, channelId: "ch", payload: new ArrayBuffer(4) });
@@ -409,7 +439,10 @@ describe("ReplayStore", () => {
       evictStore.startSegment(2000);
       evictStore.endSegment(5000);
       vi.spyOn(evictStore, "getStorageInfo").mockResolvedValue({
-        usedBytes: 100, quotaBytes: 100, percentUsed: 50, idbFrameCount: 5,
+        usedBytes: 100,
+        quotaBytes: 100,
+        percentUsed: 50,
+        idbFrameCount: 5,
       });
       // Frames: earliest=1000, latest=5000 → cutoff = 1400
       for (const t of [1000, 2000, 3000, 4000, 5000]) {
@@ -432,7 +465,10 @@ describe("ReplayStore", () => {
       // Open segment representing an ongoing recording
       evictStore.startSegment(0);
       vi.spyOn(evictStore, "getStorageInfo").mockResolvedValue({
-        usedBytes: 100, quotaBytes: 100, percentUsed: 50, idbFrameCount: 5,
+        usedBytes: 100,
+        quotaBytes: 100,
+        percentUsed: 50,
+        idbFrameCount: 5,
       });
       for (const t of [1000, 2000, 3000, 4000, 5000]) {
         evictStore.appendFrame({ t, channelId: "ch", payload: new ArrayBuffer(4) });
@@ -452,7 +488,10 @@ describe("ReplayStore", () => {
       await evictStore.open();
       const deleteSpy = vi.spyOn(evictStore, "deleteFramesBefore");
       vi.spyOn(evictStore, "getStorageInfo").mockResolvedValue({
-        usedBytes: 100, quotaBytes: 100, percentUsed: 50, idbFrameCount: 0,
+        usedBytes: 100,
+        quotaBytes: 100,
+        percentUsed: 50,
+        idbFrameCount: 0,
       });
       // No frames recorded → getTimeRange() returns null → eviction bails.
       await evictStore.flush();
@@ -466,7 +505,10 @@ describe("ReplayStore", () => {
       await evictStore.open();
       const deleteSpy = vi.spyOn(evictStore, "deleteFramesBefore");
       vi.spyOn(evictStore, "getStorageInfo").mockResolvedValue({
-        usedBytes: 100, quotaBytes: 100, percentUsed: 50, idbFrameCount: 1,
+        usedBytes: 100,
+        quotaBytes: 100,
+        percentUsed: 50,
+        idbFrameCount: 1,
       });
       // A single frame → earliest === latest → spanMs <= 0 → eviction bails.
       evictStore.appendFrame({ t: 1000, channelId: "ch", payload: new ArrayBuffer(4) });
@@ -477,7 +519,10 @@ describe("ReplayStore", () => {
     });
 
     it("_maybeEvict does nothing when storage is below threshold", async () => {
-      const evictStore = new ReplayStore({ batchIntervalMs: 9999, evictThresholdPct: 80 });
+      const evictStore = new ReplayStore({
+        batchIntervalMs: 9999,
+        evictThresholdPct: 80,
+      });
       await evictStore.open();
       const deleteSpy = vi.spyOn(evictStore, "deleteFramesBefore");
 
@@ -497,7 +542,10 @@ describe("ReplayStore", () => {
     });
 
     it("storageLogTimer calls console.log on interval", async () => {
-      const logStore = new ReplayStore({ batchIntervalMs: 9999, storageLogIntervalMs: 1000 });
+      const logStore = new ReplayStore({
+        batchIntervalMs: 9999,
+        storageLogIntervalMs: 1000,
+      });
       const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
       await logStore.open();
 
@@ -509,7 +557,10 @@ describe("ReplayStore", () => {
     });
 
     it("storageLogTimer is not started when storageLogIntervalMs is 0", async () => {
-      const logStore = new ReplayStore({ batchIntervalMs: 9999, storageLogIntervalMs: 0 });
+      const logStore = new ReplayStore({
+        batchIntervalMs: 9999,
+        storageLogIntervalMs: 0,
+      });
       const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
       await logStore.open();
 
@@ -581,7 +632,9 @@ describe("ReplayStore", () => {
 
     it("readVideoChunk returns null when file does not exist (catch path)", async () => {
       const fakeRoot = {
-        getDirectoryHandle: vi.fn(async () => { throw new Error("not found"); }),
+        getDirectoryHandle: vi.fn(async () => {
+          throw new Error("not found");
+        }),
       };
       // biome-ignore lint/suspicious/noExplicitAny: injecting fake OPFS root
       (store as any)._opfsRoot = fakeRoot;
@@ -592,7 +645,9 @@ describe("ReplayStore", () => {
     it("writeVideoChunk throws when opfsRoot is null (_assertOpfs)", async () => {
       // biome-ignore lint/suspicious/noExplicitAny: injecting null OPFS root
       (store as any)._opfsRoot = null;
-      await expect(store.writeVideoChunk("cam", "x.chunk", new Uint8Array([1]))).rejects.toThrow("OPFS");
+      await expect(
+        store.writeVideoChunk("cam", "x.chunk", new Uint8Array([1])),
+      ).rejects.toThrow("OPFS");
     });
 
     it("_writeBatch is called during flush (statements coverage lines 411-423)", async () => {

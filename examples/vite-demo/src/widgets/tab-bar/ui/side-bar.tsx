@@ -36,7 +36,13 @@ export function SideBar<T extends string>({ groups, active, onSelect }: SideBarP
           flexShrink: 0,
         }}
       >
-        <strong style={{ fontSize: 13, color: THEME.page.textPrimary, letterSpacing: "-0.01em" }}>
+        <strong
+          style={{
+            fontSize: 13,
+            color: THEME.page.textPrimary,
+            letterSpacing: "-0.01em",
+          }}
+        >
           FluxionRender
         </strong>
       </div>

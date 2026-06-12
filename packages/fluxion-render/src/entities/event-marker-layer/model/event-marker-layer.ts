@@ -56,7 +56,10 @@ export class EventMarkerLayer implements Layer {
     const count = Math.floor(length / 2);
     const next: MarkerRecord[] = new Array(count);
     for (let i = 0; i < count; i++) {
-      next[i] = { t: arr[i * 2]!, severity: Math.max(0, Math.min(2, Math.round(arr[i * 2 + 1]!))) };
+      next[i] = {
+        t: arr[i * 2]!,
+        severity: Math.max(0, Math.min(2, Math.round(arr[i * 2 + 1]!))),
+      };
     }
     this.markers = next;
   }

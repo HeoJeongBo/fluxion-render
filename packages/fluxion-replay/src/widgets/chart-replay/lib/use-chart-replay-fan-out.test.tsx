@@ -122,7 +122,11 @@ describe("useChartReplayFanOut", () => {
     });
 
     // Visible window [1000-5000, 1000] widened by the ±3000ms prefetch margin.
-    expect(store.getFramesByChannel).toHaveBeenCalledWith(CHANNEL, 1000 - 5000 - 3000, 1000 + 3000);
+    expect(store.getFramesByChannel).toHaveBeenCalledWith(
+      CHANNEL,
+      1000 - 5000 - 3000,
+      1000 + 3000,
+    );
     // 4 handles each got reset(1000) then a pushBatch.
     for (const h of [a, b]) {
       for (const op of ["reset", "pushBatch"]) {
@@ -274,7 +278,11 @@ describe("useChartReplayFanOut", () => {
       await flushMicrotasks();
     });
 
-    expect(store.getFramesByChannel).toHaveBeenCalledWith(CHANNEL, 3000 - 5000 - 3000, 3000 + 3000);
+    expect(store.getFramesByChannel).toHaveBeenCalledWith(
+      CHANNEL,
+      3000 - 5000 - 3000,
+      3000 + 3000,
+    );
     const resets = a.calls.filter((c) => c.op === "reset");
     expect(resets[0]!.arg).toBe(3000);
   });
@@ -616,7 +624,11 @@ describe("useChartReplayFanOut", () => {
     });
 
     // store query stays absolute (widened by ±3000 margin); reset + batch shifted by 500.
-    expect(store.getFramesByChannel).toHaveBeenCalledWith(CHANNEL, 1000 - 5000 - 3000, 1000 + 3000);
+    expect(store.getFramesByChannel).toHaveBeenCalledWith(
+      CHANNEL,
+      1000 - 5000 - 3000,
+      1000 + 3000,
+    );
     const reset = a.calls.find((c) => c.op === "reset")!;
     expect(reset.arg).toBe(500); // 1000 - 500
     const batch = a.calls.find((c) => c.op === "pushBatch")!.arg as { t: number }[];

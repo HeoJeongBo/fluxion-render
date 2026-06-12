@@ -36,7 +36,9 @@ describe("ScatterColoredLayer", () => {
     const vp = makeViewport();
     layer.setData(new Float32Array(makeSample(100, 5, 0.5, 0.5)).buffer, 4, vp);
     const ctx = createFakeCtx();
-    expect(() => layer.draw(ctx as unknown as OffscreenCanvasRenderingContext2D, vp)).not.toThrow();
+    expect(() =>
+      layer.draw(ctx as unknown as OffscreenCanvasRenderingContext2D, vp),
+    ).not.toThrow();
   });
 
   it("setConfig colormap=viridis uses viridis LUT", () => {
@@ -45,7 +47,9 @@ describe("ScatterColoredLayer", () => {
     const vp = makeViewport();
     layer.setData(new Float32Array(makeSample(100, 5, 0.5, 0.5)).buffer, 4, vp);
     const ctx = createFakeCtx();
-    expect(() => layer.draw(ctx as unknown as OffscreenCanvasRenderingContext2D, vp)).not.toThrow();
+    expect(() =>
+      layer.draw(ctx as unknown as OffscreenCanvasRenderingContext2D, vp),
+    ).not.toThrow();
   });
 
   it("setConfig colormap=plasma uses plasma LUT", () => {
@@ -54,7 +58,9 @@ describe("ScatterColoredLayer", () => {
     const vp = makeViewport();
     layer.setData(new Float32Array(makeSample(100, 5, 0.5, 0.5)).buffer, 4, vp);
     const ctx = createFakeCtx();
-    expect(() => layer.draw(ctx as unknown as OffscreenCanvasRenderingContext2D, vp)).not.toThrow();
+    expect(() =>
+      layer.draw(ctx as unknown as OffscreenCanvasRenderingContext2D, vp),
+    ).not.toThrow();
   });
 
   it("setConfig colormap=hot uses hot LUT", () => {
@@ -63,7 +69,9 @@ describe("ScatterColoredLayer", () => {
     const vp = makeViewport();
     layer.setData(new Float32Array(makeSample(100, 5, 0.5, 0.5)).buffer, 4, vp);
     const ctx = createFakeCtx();
-    expect(() => layer.draw(ctx as unknown as OffscreenCanvasRenderingContext2D, vp)).not.toThrow();
+    expect(() =>
+      layer.draw(ctx as unknown as OffscreenCanvasRenderingContext2D, vp),
+    ).not.toThrow();
   });
 
   it("setConfig colormap=gradient builds gradient LUT from minColor+maxColor", () => {
@@ -72,7 +80,9 @@ describe("ScatterColoredLayer", () => {
     const vp = makeViewport();
     layer.setData(new Float32Array(makeSample(100, 5, 0.5, 0.5)).buffer, 4, vp);
     const ctx = createFakeCtx();
-    expect(() => layer.draw(ctx as unknown as OffscreenCanvasRenderingContext2D, vp)).not.toThrow();
+    expect(() =>
+      layer.draw(ctx as unknown as OffscreenCanvasRenderingContext2D, vp),
+    ).not.toThrow();
   });
 
   it("setConfig updates gradient LUT when minColor changes after colormap=gradient is set", () => {
@@ -82,7 +92,9 @@ describe("ScatterColoredLayer", () => {
     const vp = makeViewport();
     layer.setData(new Float32Array(makeSample(100, 5, 1.0, 1.0)).buffer, 4, vp);
     const ctx = createFakeCtx();
-    expect(() => layer.draw(ctx as unknown as OffscreenCanvasRenderingContext2D, vp)).not.toThrow();
+    expect(() =>
+      layer.draw(ctx as unknown as OffscreenCanvasRenderingContext2D, vp),
+    ).not.toThrow();
   });
 
   it("setConfig updates gradient LUT when maxColor changes after colormap=gradient is set", () => {
@@ -92,7 +104,9 @@ describe("ScatterColoredLayer", () => {
     const vp = makeViewport();
     layer.setData(new Float32Array(makeSample(100, 5, 0.0, 0.0)).buffer, 4, vp);
     const ctx = createFakeCtx();
-    expect(() => layer.draw(ctx as unknown as OffscreenCanvasRenderingContext2D, vp)).not.toThrow();
+    expect(() =>
+      layer.draw(ctx as unknown as OffscreenCanvasRenderingContext2D, vp),
+    ).not.toThrow();
   });
 
   it("setConfig auto-calculates capacity from retentionMs + maxHz", () => {
@@ -199,7 +213,9 @@ describe("ScatterColoredLayer", () => {
     ]);
     layer.setData(data.buffer, 8, vp);
     const ctx = createFakeCtx();
-    expect(() => layer.draw(ctx as unknown as OffscreenCanvasRenderingContext2D, vp)).not.toThrow();
+    expect(() =>
+      layer.draw(ctx as unknown as OffscreenCanvasRenderingContext2D, vp),
+    ).not.toThrow();
   });
 
   describe("scan", () => {

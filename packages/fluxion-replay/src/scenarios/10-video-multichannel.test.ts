@@ -48,11 +48,7 @@ describe("Scenario 10: multi-channel (metric + log + video) record â†’ replay â†
     vi.useFakeTimers();
     keyframeIndex = new TimelineIndex();
     session = new ReplaySession({
-      channels: [
-        new MetricChannel(CPU),
-        new LogChannel(EVENTS),
-        new VideoChannel(CAM),
-      ],
+      channels: [new MetricChannel(CPU), new LogChannel(EVENTS), new VideoChannel(CAM)],
       retentionMs: 10 * 60_000,
     });
     await session.open();
@@ -168,11 +164,15 @@ describe("Scenario 10: multi-channel (metric + log + video) record â†’ replay â†
     expect(keyframeIndex.floor(1_250)).toBe(1_000);
 
     // seekTo decodes frames in [keyframeT=1000, t=1250] without throwing.
-    await expect(replayer.seekTo(1_250, keyframeIndex, playerFrames)).resolves.toBeUndefined();
+    await expect(
+      replayer.seekTo(1_250, keyframeIndex, playerFrames),
+    ).resolves.toBeUndefined();
 
     // Seeking before the first keyframe (floor null) is a safe no-op.
     keyframeIndex.insert(0); // ensure 0 present
-    await expect(replayer.seekTo(0, keyframeIndex, playerFrames)).resolves.toBeUndefined();
+    await expect(
+      replayer.seekTo(0, keyframeIndex, playerFrames),
+    ).resolves.toBeUndefined();
 
     replayer.dispose();
   });

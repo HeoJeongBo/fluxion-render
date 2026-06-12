@@ -37,7 +37,9 @@ describe("EventMarkerLayer", () => {
     const vp = makeViewport();
     layer.setData(new Float32Array([100, 0]).buffer, 2, vp);
     const ctx = createFakeCtx();
-    expect(() => layer.draw(ctx as unknown as OffscreenCanvasRenderingContext2D, vp)).not.toThrow();
+    expect(() =>
+      layer.draw(ctx as unknown as OffscreenCanvasRenderingContext2D, vp),
+    ).not.toThrow();
   });
 
   it("setConfig clamps markerSize to minimum 4", () => {
@@ -46,7 +48,9 @@ describe("EventMarkerLayer", () => {
     const vp = makeViewport();
     layer.setData(new Float32Array([100, 0]).buffer, 2, vp);
     const ctx = createFakeCtx();
-    expect(() => layer.draw(ctx as unknown as OffscreenCanvasRenderingContext2D, vp)).not.toThrow();
+    expect(() =>
+      layer.draw(ctx as unknown as OffscreenCanvasRenderingContext2D, vp),
+    ).not.toThrow();
   });
 
   it("setData stores markers from [t, severity] pairs", () => {
@@ -150,7 +154,9 @@ describe("EventMarkerLayer", () => {
     const vp = makeViewport();
     layer.setData(new Float32Array([100, 5, 200, -1]).buffer, 4, vp);
     const ctx = createFakeCtx();
-    expect(() => layer.draw(ctx as unknown as OffscreenCanvasRenderingContext2D, vp)).not.toThrow();
+    expect(() =>
+      layer.draw(ctx as unknown as OffscreenCanvasRenderingContext2D, vp),
+    ).not.toThrow();
     expect(ctx.calls.filter((c) => c.name === "stroke").length).toBe(2);
   });
 

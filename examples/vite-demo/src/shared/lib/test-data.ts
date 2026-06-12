@@ -14,10 +14,7 @@
  * `rng` for backwards compatibility and uses them internally.
  */
 
-import {
-  mulberry32,
-  createSineSynth,
-} from "@heojeongbo/fluxion-render/testing";
+import { createSineSynth, mulberry32 } from "@heojeongbo/fluxion-render/testing";
 
 // ────────────────────────────────────────────────────────────────────────
 // Deterministic PRNG (Mulberry32) — re-exported from library for callers

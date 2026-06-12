@@ -67,7 +67,9 @@ describe("Scenario 11: playback rate control", () => {
     // --- 1x baseline ---
     const player1x = await session.enterReplay(0);
     const frames1x: number[] = [];
-    player1x.onFrame(CPU, ({ data }) => { if (data.value >= 0) frames1x.push(data.value); });
+    player1x.onFrame(CPU, ({ data }) => {
+      if (data.value >= 0) frames1x.push(data.value);
+    });
     player1x.play(1.0);
     await vi.advanceTimersByTimeAsync(WALL_MS);
     session.exitReplay();
@@ -75,7 +77,9 @@ describe("Scenario 11: playback rate control", () => {
     // --- 2x ---
     const player2x = await session.enterReplay(0);
     const frames2x: number[] = [];
-    player2x.onFrame(CPU, ({ data }) => { if (data.value >= 0) frames2x.push(data.value); });
+    player2x.onFrame(CPU, ({ data }) => {
+      if (data.value >= 0) frames2x.push(data.value);
+    });
     player2x.play(2.0);
     await vi.advanceTimersByTimeAsync(WALL_MS);
     session.exitReplay();
@@ -102,7 +106,9 @@ describe("Scenario 11: playback rate control", () => {
     // --- 1x baseline ---
     const player1x = await session.enterReplay(0);
     const frames1x: number[] = [];
-    player1x.onFrame(CPU, ({ data }) => { if (data.value >= 0) frames1x.push(data.value); });
+    player1x.onFrame(CPU, ({ data }) => {
+      if (data.value >= 0) frames1x.push(data.value);
+    });
     player1x.play(1.0);
     await vi.advanceTimersByTimeAsync(WALL_MS);
     session.exitReplay();
@@ -110,7 +116,9 @@ describe("Scenario 11: playback rate control", () => {
     // --- 0.5x ---
     const player05x = await session.enterReplay(0);
     const frames05x: number[] = [];
-    player05x.onFrame(CPU, ({ data }) => { if (data.value >= 0) frames05x.push(data.value); });
+    player05x.onFrame(CPU, ({ data }) => {
+      if (data.value >= 0) frames05x.push(data.value);
+    });
     player05x.play(0.5);
     await vi.advanceTimersByTimeAsync(WALL_MS);
     session.exitReplay();
@@ -128,7 +136,9 @@ describe("Scenario 11: playback rate control", () => {
     const player = await session.enterReplay(0);
 
     const frames: { t: number; value: number }[] = [];
-    player.onFrame(CPU, ({ t, data }) => { if (data.value >= 0) frames.push({ t, value: data.value }); });
+    player.onFrame(CPU, ({ t, data }) => {
+      if (data.value >= 0) frames.push({ t, value: data.value });
+    });
 
     // Phase 1: 1x for 3s
     player.play(1.0);
@@ -168,7 +178,9 @@ describe("Scenario 11: playback rate control", () => {
     const player = await session.enterReplay(0);
 
     const frames: { t: number; value: number }[] = [];
-    player.onFrame(CPU, ({ t, data }) => { if (data.value >= 0) frames.push({ t, value: data.value }); });
+    player.onFrame(CPU, ({ t, data }) => {
+      if (data.value >= 0) frames.push({ t, value: data.value });
+    });
 
     // Phase 1: 1x for 2s
     player.play(1.0);
@@ -221,7 +233,9 @@ describe("Scenario 11: playback rate control", () => {
 
     const framesAfterPrefetch: number[] = [];
     // Subscribe AFTER the initial tick to capture only frames from ongoing play
-    player.onFrame(CPU, ({ data }) => { if (data.value >= 0) framesAfterPrefetch.push(data.value); });
+    player.onFrame(CPU, ({ data }) => {
+      if (data.value >= 0) framesAfterPrefetch.push(data.value);
+    });
 
     // Advance a large wall-clock window — virtual time must stay frozen
     await vi.advanceTimersByTimeAsync(5_000);

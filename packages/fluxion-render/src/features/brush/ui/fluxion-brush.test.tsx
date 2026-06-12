@@ -20,21 +20,32 @@ function renderBrush(props: Partial<React.ComponentProps<typeof FluxionBrush>> =
   );
   const svg = container.querySelector("svg") as SVGSVGElement;
   vi.spyOn(svg, "getBoundingClientRect").mockReturnValue({
-    left: 0, top: 0, right: 400, bottom: 200,
-    width: 400, height: 200, x: 0, y: 0, toJSON: () => {},
+    left: 0,
+    top: 0,
+    right: 400,
+    bottom: 200,
+    width: 400,
+    height: 200,
+    x: 0,
+    y: 0,
+    toJSON: () => {},
   } as DOMRect);
   return { container, svg, brushRef, unmount, rerender };
 }
 
 function fireMouseDown(el: Element, clientX: number) {
   act(() => {
-    el.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true, clientX }));
+    el.dispatchEvent(
+      new MouseEvent("mousedown", { bubbles: true, cancelable: true, clientX }),
+    );
   });
 }
 
 function fireMouseMove(clientX: number) {
   act(() => {
-    window.dispatchEvent(new MouseEvent("mousemove", { bubbles: true, cancelable: true, clientX }));
+    window.dispatchEvent(
+      new MouseEvent("mousemove", { bubbles: true, cancelable: true, clientX }),
+    );
   });
 }
 

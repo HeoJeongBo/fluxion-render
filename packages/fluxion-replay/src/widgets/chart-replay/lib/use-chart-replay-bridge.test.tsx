@@ -16,9 +16,7 @@ import { useChartReplayBridge } from "./use-chart-replay-bridge";
  * `player`. The other fields exist so the type matches without consumers
  * having to assemble a full UseReplayDvrResult in tests.
  */
-function makeDvr(
-  player: ReturnType<typeof makeFakePlayer> | null,
-): UseReplayDvrResult {
+function makeDvr(player: ReturnType<typeof makeFakePlayer> | null): UseReplayDvrResult {
   return {
     isDvr: player !== null,
     player: player as unknown as UseReplayDvrResult["player"],
@@ -74,14 +72,20 @@ describe("useChartReplayBridge", () => {
     );
 
     // Advance one tick interval (default 20Hz = 50ms).
-    act(() => { vi.advanceTimersByTime(60); });
+    act(() => {
+      vi.advanceTimersByTime(60);
+    });
 
     expect(host.pushes.length).toBeGreaterThan(0);
     expect(host.pushes[0]).toEqual({
       id: "signal",
       sample: { t: 0, y: 0.42 },
     });
-    expect(record).toHaveBeenCalledWith("signal", { name: "signal", value: 0.42 }, fixedNow);
+    expect(record).toHaveBeenCalledWith(
+      "signal",
+      { name: "signal", value: 0.42 },
+      fixedNow,
+    );
 
     vi.restoreAllMocks();
   });
@@ -110,7 +114,9 @@ describe("useChartReplayBridge", () => {
       }),
     );
 
-    act(() => { vi.advanceTimersByTime(60); });
+    act(() => {
+      vi.advanceTimersByTime(60);
+    });
 
     // record() always fires (so the store keeps growing during DVR).
     expect(record).toHaveBeenCalled();
@@ -151,7 +157,10 @@ describe("useChartReplayBridge", () => {
     );
 
     // Two microtask hops drain the hydrate's await chain.
-    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
 
     // The hydrate ran and pushed the backfill batch.
     expect(host.batches.length).toBeGreaterThan(0);
@@ -195,14 +204,18 @@ describe("useChartReplayBridge", () => {
     );
 
     // First tick fires while still live — push happens.
-    act(() => { vi.advanceTimersByTime(60); });
+    act(() => {
+      vi.advanceTimersByTime(60);
+    });
     const pushesAfterLive = host.pushes.length;
     expect(pushesAfterLive).toBeGreaterThan(0);
 
     // Re-render with isLive=false (DVR enter). Subsequent ticks must NOT
     // produce a new push.
     rerender({ isLive: false });
-    act(() => { vi.advanceTimersByTime(120); });
+    act(() => {
+      vi.advanceTimersByTime(120);
+    });
     expect(host.pushes.length).toBe(pushesAfterLive);
 
     vi.restoreAllMocks();

@@ -30,20 +30,31 @@ export function useDisplayMedia(): UseDisplayMediaResult {
     setStream(null);
   }, []);
 
-  const start = useCallback(async (constraints?: DisplayMediaStreamOptions): Promise<MediaStream> => {
-    stop(); // clear any existing stream first
-    const s = await navigator.mediaDevices.getDisplayMedia(
-      constraints ?? { video: { frameRate: 30 } as MediaTrackConstraints, audio: false },
-    );
-    streamRef.current = s;
-    setStream(s);
-    // Auto-stop when the user ends sharing via browser UI
-    s.getVideoTracks()[0]?.addEventListener("ended", stop, { once: true });
-    return s;
-  }, [stop]);
+  const start = useCallback(
+    async (constraints?: DisplayMediaStreamOptions): Promise<MediaStream> => {
+      stop(); // clear any existing stream first
+      const s = await navigator.mediaDevices.getDisplayMedia(
+        constraints ?? {
+          video: { frameRate: 30 } as MediaTrackConstraints,
+          audio: false,
+        },
+      );
+      streamRef.current = s;
+      setStream(s);
+      // Auto-stop when the user ends sharing via browser UI
+      s.getVideoTracks()[0]?.addEventListener("ended", stop, { once: true });
+      return s;
+    },
+    [stop],
+  );
 
   // Cleanup on unmount
-  useEffect(() => () => { stop(); }, [stop]);
+  useEffect(
+    () => () => {
+      stop();
+    },
+    [stop],
+  );
 
   return { stream, start, stop };
 }

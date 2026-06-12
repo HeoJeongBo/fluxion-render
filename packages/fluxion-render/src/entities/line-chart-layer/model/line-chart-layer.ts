@@ -70,7 +70,11 @@ export class LineChartLayer implements Layer {
     if (c.decimate !== undefined) this.decimate = c.decimate;
     if (c.maxGapMs !== undefined) this.maxGapMs = c.maxGapMs;
     let newCapacity: number | undefined = c.capacity;
-    if (newCapacity === undefined && c.retentionMs !== undefined && c.maxHz !== undefined) {
+    if (
+      newCapacity === undefined &&
+      c.retentionMs !== undefined &&
+      c.maxHz !== undefined
+    ) {
       newCapacity = Math.ceil((c.retentionMs / 1000) * c.maxHz * 1.1);
     }
     if (newCapacity !== undefined && newCapacity !== this.ring.capacity) {

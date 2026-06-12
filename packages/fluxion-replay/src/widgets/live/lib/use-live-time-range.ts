@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { RecordingSegment } from "../../../features/store/model/replay-store";
 import type { ReplaySession } from "../../../features/session/model/replay-session";
+import type { RecordingSegment } from "../../../features/store/model/replay-store";
 
 export type { RecordingSegment };
 
@@ -32,7 +32,9 @@ export function useLiveTimeRange(
   options?: UseLiveTimeRangeOptions,
 ): UseLiveTimeRangeResult {
   const intervalMs = options?.intervalMs ?? 500;
-  const [timeRange, setTimeRange] = useState<{ earliest: number; latest: number } | null>(null);
+  const [timeRange, setTimeRange] = useState<{ earliest: number; latest: number } | null>(
+    null,
+  );
   const [segments, setSegments] = useState<RecordingSegment[]>([]);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 

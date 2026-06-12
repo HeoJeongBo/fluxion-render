@@ -37,7 +37,8 @@ export class AreaChartLayer implements Layer {
   setConfig(config: unknown): void {
     const c = config as AreaChartConfig;
     if (c.color !== undefined) this.color = c.color;
-    if (c.fillOpacity !== undefined) this.fillOpacity = Math.max(0, Math.min(1, c.fillOpacity));
+    if (c.fillOpacity !== undefined)
+      this.fillOpacity = Math.max(0, Math.min(1, c.fillOpacity));
     if (c.lineWidth !== undefined) this.lineWidth = c.lineWidth;
     if (c.visible !== undefined) this.visible = c.visible;
     if (c.maxGapMs !== undefined) this.maxGapMs = c.maxGapMs;

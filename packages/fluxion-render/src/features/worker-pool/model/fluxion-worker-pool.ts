@@ -1,5 +1,5 @@
-import { WorkerPool } from "@heojeongbo/fluxion-worker";
 import type { WorkerPoolOptions } from "@heojeongbo/fluxion-worker";
+import { WorkerPool } from "@heojeongbo/fluxion-worker";
 
 import type { FluxionPoolStreamMsg, HostMsg } from "../../../shared/protocol";
 import { FluxionWorkerHandle } from "./fluxion-worker-handle";
@@ -52,13 +52,19 @@ export class FluxionWorkerPool extends WorkerPool<HostMsg> {
     // Group targets by worker index (not by handle instance — each acquire() returns
     // a new handle object even when backed by the same worker, so using the handle as
     // a Map key would create one group per host instead of one group per worker).
-    const byWorkerIndex = new Map<number, { handle: FluxionWorkerHandle; targets: FluxionPoolStreamMsg["targets"] }>();
+    const byWorkerIndex = new Map<
+      number,
+      { handle: FluxionWorkerHandle; targets: FluxionPoolStreamMsg["targets"] }
+    >();
     for (const t of targets) {
       const h = this._registry.get(t.hostId);
       const idx = this._hostIndex.get(t.hostId);
       if (!h || idx === undefined) continue;
       let group = byWorkerIndex.get(idx);
-      if (!group) { group = { handle: h, targets: [] }; byWorkerIndex.set(idx, group); }
+      if (!group) {
+        group = { handle: h, targets: [] };
+        byWorkerIndex.set(idx, group);
+      }
       group.targets.push(t);
     }
 

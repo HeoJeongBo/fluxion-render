@@ -33,7 +33,9 @@ describe("AreaChartLayer", () => {
     const vp = makeViewport();
     layer.setData(new Float32Array([0, 1, 100, 2]).buffer, 4, vp);
     const ctx = createFakeCtx();
-    expect(() => layer.draw(ctx as unknown as OffscreenCanvasRenderingContext2D, vp)).not.toThrow();
+    expect(() =>
+      layer.draw(ctx as unknown as OffscreenCanvasRenderingContext2D, vp),
+    ).not.toThrow();
   });
 
   it("setData pushes samples and advances viewport.latestT", () => {
@@ -113,7 +115,10 @@ describe("AreaChartLayer", () => {
     // for first sample only, rest y=0, then overflow. Simpler: just fill cap samples
     // with y=0, then push 1 with y=99 and 1 with y=-5 to exceed min.
     const buf = new Float32Array(110 * 2);
-    for (let i = 0; i < 110; i++) { buf[i * 2] = i * 10; buf[i * 2 + 1] = 0; }
+    for (let i = 0; i < 110; i++) {
+      buf[i * 2] = i * 10;
+      buf[i * 2 + 1] = 0;
+    }
     layer.setData(buf.buffer, buf.length, vp);
     // push 2 more: the ring is full at 110, these 2 push evict oldest 2
     layer.setData(new Float32Array([2000, 99, 2100, -5]).buffer, 4, vp);

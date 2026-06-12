@@ -67,27 +67,44 @@ describe("push + findNearest", () => {
 
   it("finds nearest by smallest |t - targetT|", () => {
     const c = makeCache();
-    pushMany(c, "a", [[10, 1], [20, 2], [30, 3], [40, 4]]);
+    pushMany(c, "a", [
+      [10, 1],
+      [20, 2],
+      [30, 3],
+      [40, 4],
+    ]);
     expect(c.findNearest("a", 22, 0)).toEqual({ t: 20, y: 2 });
     expect(c.findNearest("a", 28, 0)).toEqual({ t: 30, y: 3 });
   });
 
   it("returns the exact match when it exists", () => {
     const c = makeCache();
-    pushMany(c, "a", [[5, 99], [10, 100], [15, 101]]);
+    pushMany(c, "a", [
+      [5, 99],
+      [10, 100],
+      [15, 101],
+    ]);
     expect(c.findNearest("a", 10, 0)).toEqual({ t: 10, y: 100 });
   });
 
   it("skips points where t < xMin", () => {
     const c = makeCache();
-    pushMany(c, "a", [[1, 10], [2, 20], [5, 50], [8, 80]]);
+    pushMany(c, "a", [
+      [1, 10],
+      [2, 20],
+      [5, 50],
+      [8, 80],
+    ]);
     // xMin = 4 → skip t=1,2; nearest of {5,8} to targetT=6 is t=5
     expect(c.findNearest("a", 6, 4)).toEqual({ t: 5, y: 50 });
   });
 
   it("returns null when all points are before xMin", () => {
     const c = makeCache();
-    pushMany(c, "a", [[1, 10], [2, 20]]);
+    pushMany(c, "a", [
+      [1, 10],
+      [2, 20],
+    ]);
     expect(c.findNearest("a", 5, 10)).toBeNull();
   });
 });
@@ -119,7 +136,12 @@ describe("ring-wrap behavior", () => {
   it("evicts the oldest entry when capacity is exceeded", () => {
     const c = new HoverDataCache();
     c.registerLayer("a", { capacity: 3 });
-    pushMany(c, "a", [[1, 1], [2, 2], [3, 3], [4, 4]]); // wraps: evicts t=1
+    pushMany(c, "a", [
+      [1, 1],
+      [2, 2],
+      [3, 3],
+      [4, 4],
+    ]); // wraps: evicts t=1
     // xMin=0 → all visible. Nearest to t=1 is now t=2 (t=1 was evicted)
     expect(c.findNearest("a", 1, 0)).toEqual({ t: 2, y: 2 });
   });
@@ -187,7 +209,11 @@ describe("getLatestT", () => {
 
   it("returns the t of the last pushed point", () => {
     const c = makeCache();
-    pushMany(c, "a", [[1, 10], [5, 50], [3, 30]]);
+    pushMany(c, "a", [
+      [1, 10],
+      [5, 50],
+      [3, 30],
+    ]);
     // Last pushed is t=3 (not the max — it's insertion order)
     expect(c.getLatestT()).toBe(3);
   });
@@ -204,7 +230,13 @@ describe("getLatestT", () => {
   it("updates correctly after ring-wrap", () => {
     const c = new HoverDataCache();
     c.registerLayer("a", { capacity: 3 });
-    pushMany(c, "a", [[1, 1], [2, 2], [3, 3], [4, 4], [5, 5]]);
+    pushMany(c, "a", [
+      [1, 1],
+      [2, 2],
+      [3, 3],
+      [4, 4],
+      [5, 5],
+    ]);
     expect(c.getLatestT()).toBe(5);
   });
 

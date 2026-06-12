@@ -1,5 +1,5 @@
 import { render } from "@testing-library/react";
-import { StrictMode, createRef } from "react";
+import { createRef, StrictMode } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { Op } from "../../../shared/protocol";
 import { FluxionCanvas, type FluxionCanvasHandle } from "./fluxion-canvas";

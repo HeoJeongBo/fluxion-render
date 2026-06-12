@@ -146,18 +146,12 @@ describe("LidarScatterLayer", () => {
       // Grow to 8000
       const big = new Float32Array(8000 * 4);
       layer.setData(big.buffer, big.length, vp);
-      layer.draw(
-        createFakeCtx() as unknown as OffscreenCanvasRenderingContext2D,
-        vp,
-      );
+      layer.draw(createFakeCtx() as unknown as OffscreenCanvasRenderingContext2D, vp);
 
       // Shrink trigger (< 25% of 8000 ≈ 2000)
       const small = new Float32Array(50 * 4);
       layer.setData(small.buffer, small.length, vp);
-      layer.draw(
-        createFakeCtx() as unknown as OffscreenCanvasRenderingContext2D,
-        vp,
-      );
+      layer.draw(createFakeCtx() as unknown as OffscreenCanvasRenderingContext2D, vp);
 
       // Grow again — must re-allocate and draw all points
       const big2 = new Float32Array(6000 * 4);

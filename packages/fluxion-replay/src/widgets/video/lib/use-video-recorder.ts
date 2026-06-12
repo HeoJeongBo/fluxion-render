@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
-import { VideoRecorder } from "../../../features/video/model/video-recorder";
 import type { ReplaySession } from "../../../features/session/model/replay-session";
+import { VideoRecorder } from "../../../features/video/model/video-recorder";
 
 export interface UseVideoRecorderOptions {
   /**

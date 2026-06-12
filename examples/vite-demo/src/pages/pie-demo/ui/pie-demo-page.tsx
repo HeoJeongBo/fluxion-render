@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from "react";
 import { FluxionPieChart } from "@heojeongbo/fluxion-render/react";
+import { useEffect, useRef, useState } from "react";
 import { THEME } from "../../../shared/ui/theme";
 
 const SYSTEM_DATA = [
@@ -38,11 +38,31 @@ function useStreamingPieData() {
       const t = tickRef.current;
       // Vary each slice value with a sine wave so transitions are visible
       setData([
-        { name: "CPU",     value: Math.max(5, Math.round(38 + 20 * Math.sin(t * 0.7))),  fill: "#4fc3f7" },
-        { name: "RAM",     value: Math.max(5, Math.round(29 + 15 * Math.sin(t * 0.4 + 1))), fill: "#80ffa0" },
-        { name: "GPU",     value: Math.max(5, Math.round(18 + 10 * Math.sin(t * 0.9 + 2))), fill: "#ffb060" },
-        { name: "Disk I/O",value: Math.max(3, Math.round(10 + 6  * Math.sin(t * 0.5 + 3))), fill: "#ce93d8" },
-        { name: "Network", value: Math.max(2, Math.round(5  + 4  * Math.sin(t * 1.1 + 4))), fill: "#ff7043" },
+        {
+          name: "CPU",
+          value: Math.max(5, Math.round(38 + 20 * Math.sin(t * 0.7))),
+          fill: "#4fc3f7",
+        },
+        {
+          name: "RAM",
+          value: Math.max(5, Math.round(29 + 15 * Math.sin(t * 0.4 + 1))),
+          fill: "#80ffa0",
+        },
+        {
+          name: "GPU",
+          value: Math.max(5, Math.round(18 + 10 * Math.sin(t * 0.9 + 2))),
+          fill: "#ffb060",
+        },
+        {
+          name: "Disk I/O",
+          value: Math.max(3, Math.round(10 + 6 * Math.sin(t * 0.5 + 3))),
+          fill: "#ce93d8",
+        },
+        {
+          name: "Network",
+          value: Math.max(2, Math.round(5 + 4 * Math.sin(t * 1.1 + 4))),
+          fill: "#ff7043",
+        },
       ]);
     }, 1000);
     return () => clearInterval(id);
@@ -53,7 +73,15 @@ function useStreamingPieData() {
 
 // ── Section wrapper ───────────────────────────────────────────────────────────
 
-function Section({ title, description, children }: { title: string; description: string; children: React.ReactNode }) {
+function Section({
+  title,
+  description,
+  children,
+}: {
+  title: string;
+  description: string;
+  children: React.ReactNode;
+}) {
   return (
     <div
       style={{
@@ -69,8 +97,12 @@ function Section({ title, description, children }: { title: string; description:
       }}
     >
       <div style={{ textAlign: "center" }}>
-        <div style={{ fontSize: 13, fontWeight: 700, color: THEME.page.textPrimary }}>{title}</div>
-        <div style={{ fontSize: 11, color: THEME.page.textMuted, marginTop: 3 }}>{description}</div>
+        <div style={{ fontSize: 13, fontWeight: 700, color: THEME.page.textPrimary }}>
+          {title}
+        </div>
+        <div style={{ fontSize: 11, color: THEME.page.textMuted, marginTop: 3 }}>
+          {description}
+        </div>
       </div>
       {children}
     </div>
@@ -106,7 +138,8 @@ export function PieDemoPage() {
           Pie Chart
         </div>
         <div style={{ fontSize: 11, color: THEME.page.textMuted, marginTop: 2 }}>
-          Pie · Donut · Semi-circle — enter &amp; update animations, hover tooltip, label, legend
+          Pie · Donut · Semi-circle — enter &amp; update animations, hover tooltip, label,
+          legend
         </div>
       </div>
 
@@ -125,7 +158,10 @@ export function PieDemoPage() {
         Static
       </div>
       <div style={{ display: "flex", gap: 16, padding: "0 20px 0", flexShrink: 0 }}>
-        <Section title="Pie Chart" description="label=name · labelLine · tooltip · legend">
+        <Section
+          title="Pie Chart"
+          description="label=name · labelLine · tooltip · legend"
+        >
           <FluxionPieChart
             data={SYSTEM_DATA}
             outerRadius={80}
@@ -138,7 +174,10 @@ export function PieDemoPage() {
           />
         </Section>
 
-        <Section title="Donut Chart" description="innerRadius · paddingAngle · centerValue · legend">
+        <Section
+          title="Donut Chart"
+          description="innerRadius · paddingAngle · centerValue · legend"
+        >
           <FluxionPieChart
             data={TASK_DATA}
             innerRadius={52}
@@ -155,7 +194,10 @@ export function PieDemoPage() {
           />
         </Section>
 
-        <Section title="Semi-circle" description="startAngle=180 · endAngle=0 · label=percent">
+        <Section
+          title="Semi-circle"
+          description="startAngle=180 · endAngle=0 · label=percent"
+        >
           <FluxionPieChart
             data={STATUS_DATA}
             outerRadius={80}
@@ -175,7 +217,10 @@ export function PieDemoPage() {
 
       {/* Row 2: Static variants */}
       <div style={{ display: "flex", gap: 16, padding: "16px 20px 0", flexShrink: 0 }}>
-        <Section title="Rounded corners" description="cornerRadius=10 · paddingAngle=4 · label=value">
+        <Section
+          title="Rounded corners"
+          description="cornerRadius=10 · paddingAngle=4 · label=value"
+        >
           <FluxionPieChart
             data={SYSTEM_DATA}
             outerRadius={80}
@@ -189,7 +234,10 @@ export function PieDemoPage() {
           />
         </Section>
 
-        <Section title="Legend: right" description="legendPosition=right · label off · tooltip">
+        <Section
+          title="Legend: right"
+          description="legendPosition=right · label off · tooltip"
+        >
           <FluxionPieChart
             data={TASK_DATA}
             innerRadius={45}

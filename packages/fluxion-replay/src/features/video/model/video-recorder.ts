@@ -72,13 +72,17 @@ export class VideoRecorder {
 
     // Progressive enhancement: WebCodecs may not be available
     if (typeof VideoEncoder === "undefined") {
-      console.warn("[VideoRecorder] WebCodecs (VideoEncoder) is not supported in this browser.");
+      console.warn(
+        "[VideoRecorder] WebCodecs (VideoEncoder) is not supported in this browser.",
+      );
       this._startFallback(track);
       return;
     }
 
     if (typeof MediaStreamTrackProcessor === "undefined") {
-      console.warn("[VideoRecorder] MediaStreamTrackProcessor is not supported. Falling back.");
+      console.warn(
+        "[VideoRecorder] MediaStreamTrackProcessor is not supported. Falling back.",
+      );
       this._startFallback(track);
       return;
     }
@@ -88,7 +92,9 @@ export class VideoRecorder {
     this._startVideoUs = -1; // set on first frame
     this._setupEncoder();
 
-    const processor = new MediaStreamTrackProcessor({ track } as MediaStreamTrackProcessorInit);
+    const processor = new MediaStreamTrackProcessor({
+      track,
+    } as MediaStreamTrackProcessorInit);
     const reader = (processor.readable as ReadableStream<VideoFrame>).getReader();
     this._processor = reader;
 
@@ -132,7 +138,9 @@ export class VideoRecorder {
     });
   }
 
-  private async _readLoop(reader: ReadableStreamDefaultReader<VideoFrame>): Promise<void> {
+  private async _readLoop(
+    reader: ReadableStreamDefaultReader<VideoFrame>,
+  ): Promise<void> {
     const keyframeEvery = Math.round(
       (this._config.framerate ?? DEFAULT_FRAMERATE) * this._keyframeIntervalSec,
     );

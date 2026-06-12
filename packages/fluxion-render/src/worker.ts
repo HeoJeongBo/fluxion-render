@@ -26,25 +26,26 @@
  * );
  * ```
  */
-export { Engine } from "./features/engine";
-export { Op } from "./shared/protocol";
+
 export type {
-  FluxionPoolStreamMsg,
-  HostMsg,
-  LayerKind,
-  DType,
-  PoolInitMsg,
-  PoolDisposeMsg,
-  StreamDataMsg,
-} from "./shared/protocol";
+  FluxionMode,
+  HostContext,
+  PushFn,
+  ReplyFn,
+  WorkerMsg,
+} from "@heojeongbo/fluxion-worker";
 export {
   defineWorker,
   defineWorkerWithState,
 } from "@heojeongbo/fluxion-worker";
+export { Engine } from "./features/engine";
 export type {
-  HostContext,
-  WorkerMsg,
-  PushFn,
-  ReplyFn,
-  FluxionMode,
-} from "@heojeongbo/fluxion-worker";
+  DType,
+  FluxionPoolStreamMsg,
+  HostMsg,
+  LayerKind,
+  PoolDisposeMsg,
+  PoolInitMsg,
+  StreamDataMsg,
+} from "./shared/protocol";
+export { Op } from "./shared/protocol";

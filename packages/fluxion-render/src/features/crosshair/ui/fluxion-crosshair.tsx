@@ -40,11 +40,7 @@ export function FluxionCrosshair({
       {position && (
         <>
           {/* SVG crosshair lines */}
-          <svg
-            width="100%"
-            height="100%"
-            style={{ position: "absolute", inset: 0 }}
-          >
+          <svg width="100%" height="100%" style={{ position: "absolute", inset: 0 }}>
             {/* Vertical line */}
             <line
               x1={position.pxX}
@@ -145,10 +141,7 @@ function Tooltip({ pxX, pxY, points, bg, color, fontSize }: TooltipProps) {
         {xLabel}
       </div>
       {points.map((pt) => (
-        <div
-          key={pt.layerId}
-          style={{ display: "flex", alignItems: "center", gap: 6 }}
-        >
+        <div key={pt.layerId} style={{ display: "flex", alignItems: "center", gap: 6 }}>
           <span
             style={{
               display: "inline-block",

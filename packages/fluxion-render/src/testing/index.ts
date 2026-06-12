@@ -10,5 +10,5 @@
  */
 
 export { mulberry32 } from "./signals/mulberry32";
-export { createSineSynth, createLinearRamp } from "./signals/pumps";
-export type { SineSynthOptions, LinearRampOptions } from "./signals/pumps";
+export type { LinearRampOptions, SineSynthOptions } from "./signals/pumps";
+export { createLinearRamp, createSineSynth } from "./signals/pumps";

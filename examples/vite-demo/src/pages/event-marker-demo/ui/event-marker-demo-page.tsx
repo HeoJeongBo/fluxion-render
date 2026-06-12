@@ -38,7 +38,12 @@ export function EventMarkerDemoPage() {
         showYLabels: false,
         yPadPx: 12,
       }),
-      lineLayer("line", { color: "#4fc3f7", lineWidth: 2, retentionMs: 10_000, maxHz: TARGET_HZ }),
+      lineLayer("line", {
+        color: "#4fc3f7",
+        lineWidth: 2,
+        retentionMs: 10_000,
+        maxHz: TARGET_HZ,
+      }),
       eventMarkerLayer("markers"),
     ],
     [timeOrigin],
@@ -71,9 +76,27 @@ export function EventMarkerDemoPage() {
   const severityColor = ["#4caf50", "#ffb060", "#ff5252"];
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", width: "100%", height: "100%", background: THEME.page.background }}>
-      <div style={{ padding: "8px 12px", display: "flex", gap: 8, alignItems: "center", borderBottom: `1px solid ${THEME.page.border}` }}>
-        <span style={{ fontSize: 13, color: THEME.page.textSecondary, marginRight: 4 }}>Add marker:</span>
+    <div
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        width: "100%",
+        height: "100%",
+        background: THEME.page.background,
+      }}
+    >
+      <div
+        style={{
+          padding: "8px 12px",
+          display: "flex",
+          gap: 8,
+          alignItems: "center",
+          borderBottom: `1px solid ${THEME.page.border}`,
+        }}
+      >
+        <span style={{ fontSize: 13, color: THEME.page.textSecondary, marginRight: 4 }}>
+          Add marker:
+        </span>
         {([0, 1, 2] as const).map((sev) => (
           <button
             key={sev}
@@ -101,7 +124,15 @@ export function EventMarkerDemoPage() {
               setEvents([]);
               markerHandle?.clearEvents();
             }}
-            style={{ padding: "4px 10px", fontSize: 12, background: "transparent", color: THEME.page.textSecondary, border: `1px solid ${THEME.page.border}`, borderRadius: 4, cursor: "pointer" }}
+            style={{
+              padding: "4px 10px",
+              fontSize: 12,
+              background: "transparent",
+              color: THEME.page.textSecondary,
+              border: `1px solid ${THEME.page.border}`,
+              borderRadius: 4,
+              cursor: "pointer",
+            }}
           >
             Clear
           </button>

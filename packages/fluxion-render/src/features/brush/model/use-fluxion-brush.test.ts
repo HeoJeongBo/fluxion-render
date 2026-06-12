@@ -7,12 +7,15 @@ import { useFluxionBrush } from "./use-fluxion-brush";
 
 function makeMockHost() {
   let tickCb: ((xTicks: { value: number; fraction: number }[]) => void) | null = null;
-  const unsubscribe = vi.fn(() => { tickCb = null; });
+  const unsubscribe = vi.fn(() => {
+    tickCb = null;
+  });
   const onTickUpdate = vi.fn((listener: any) => {
     tickCb = listener;
     return unsubscribe;
   });
-  const fireTickUpdate = (ticks: { value: number; fraction: number }[]) => tickCb?.(ticks as any);
+  const fireTickUpdate = (ticks: { value: number; fraction: number }[]) =>
+    tickCb?.(ticks as any);
   return {
     host: { onTickUpdate } as unknown as FluxionHost,
     fireTickUpdate,
@@ -33,9 +36,13 @@ function BrushHarness(props: UseFluxionBrushOptions & { width?: number; left?: n
   });
 }
 
-function renderBrush(opts: UseFluxionBrushOptions & { width?: number; left?: number } = { host: null }) {
+function renderBrush(
+  opts: UseFluxionBrushOptions & { width?: number; left?: number } = { host: null },
+) {
   capturedResult = null;
-  const { container, unmount, rerender } = render(React.createElement(BrushHarness, opts));
+  const { container, unmount, rerender } = render(
+    React.createElement(BrushHarness, opts),
+  );
   const svg = container.querySelector("svg") as SVGSVGElement;
   const w = opts.width ?? 400;
   const l = opts.left ?? 0;
@@ -50,18 +57,26 @@ function renderBrush(opts: UseFluxionBrushOptions & { width?: number; left?: num
     y: 0,
     toJSON: () => {},
   } as DOMRect);
-  return { svg, unmount, rerender: (newProps: any) => rerender(React.createElement(BrushHarness, newProps)) };
+  return {
+    svg,
+    unmount,
+    rerender: (newProps: any) => rerender(React.createElement(BrushHarness, newProps)),
+  };
 }
 
 function fireMouseDown(svg: SVGSVGElement, clientX: number) {
   act(() => {
-    svg.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true, clientX }));
+    svg.dispatchEvent(
+      new MouseEvent("mousedown", { bubbles: true, cancelable: true, clientX }),
+    );
   });
 }
 
 function fireMouseUp(clientX: number) {
   act(() => {
-    window.dispatchEvent(new MouseEvent("mouseup", { bubbles: true, cancelable: true, clientX }));
+    window.dispatchEvent(
+      new MouseEvent("mouseup", { bubbles: true, cancelable: true, clientX }),
+    );
   });
 }
 
@@ -96,7 +111,9 @@ describe("useFluxionBrush — initial state", () => {
 describe("useFluxionBrush — clearSelection", () => {
   it("clearSelection is a no-op when selection is already null", () => {
     renderBrush({ host: null });
-    act(() => { capturedResult!.clearSelection(); });
+    act(() => {
+      capturedResult!.clearSelection();
+    });
     expect(capturedResult!.selection).toBeNull();
   });
 
@@ -108,7 +125,9 @@ describe("useFluxionBrush — clearSelection", () => {
 
     expect(capturedResult!.selection).not.toBeNull();
 
-    act(() => { capturedResult!.clearSelection(); });
+    act(() => {
+      capturedResult!.clearSelection();
+    });
 
     expect(capturedResult!.selection).toBeNull();
   });

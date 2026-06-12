@@ -61,7 +61,12 @@ export class ScatterColoredLayer implements Layer {
       if (c.colormap === "gradient") {
         this.lut = buildGradientLut(c.minColor ?? "#0000ff", c.maxColor ?? "#ff0000");
       } else {
-        this.lut = c.colormap === "plasma" ? PLASMA_LUT : c.colormap === "hot" ? HOT_LUT : VIRIDIS_LUT;
+        this.lut =
+          c.colormap === "plasma"
+            ? PLASMA_LUT
+            : c.colormap === "hot"
+              ? HOT_LUT
+              : VIRIDIS_LUT;
       }
     }
     if (c.minColor !== undefined && this.colormap === "gradient") {
@@ -75,7 +80,11 @@ export class ScatterColoredLayer implements Layer {
     if (c.shape !== undefined) this.shape = c.shape;
     if (c.visible !== undefined) this.visible = c.visible;
     let newCapacity: number | undefined = c.capacity;
-    if (newCapacity === undefined && c.retentionMs !== undefined && c.maxHz !== undefined) {
+    if (
+      newCapacity === undefined &&
+      c.retentionMs !== undefined &&
+      c.maxHz !== undefined
+    ) {
       newCapacity = Math.ceil((c.retentionMs / 1000) * c.maxHz * 1.1);
     }
     if (newCapacity !== undefined && newCapacity !== this.ring.capacity) {
@@ -155,9 +164,13 @@ export class ScatterColoredLayer implements Layer {
 
 function hexToRgb(hex: string): [number, number, number] {
   const h = hex.replace("#", "");
-  const full = h.length === 3
-    ? h.split("").map((c) => c + c).join("")
-    : h;
+  const full =
+    h.length === 3
+      ? h
+          .split("")
+          .map((c) => c + c)
+          .join("")
+      : h;
   const n = parseInt(full, 16);
   return [(n >> 16) & 0xff, (n >> 8) & 0xff, n & 0xff];
 }
@@ -192,24 +205,24 @@ function buildLut(stops: [number, number, number, number][]): Uint8Array {
 }
 
 const VIRIDIS_LUT = buildLut([
-  [0.0,   68,   1,  84],
-  [0.25,  59,  82, 139],
-  [0.5,   33, 145, 140],
-  [0.75,  94, 201,  98],
-  [1.0,  253, 231,  37],
+  [0.0, 68, 1, 84],
+  [0.25, 59, 82, 139],
+  [0.5, 33, 145, 140],
+  [0.75, 94, 201, 98],
+  [1.0, 253, 231, 37],
 ]);
 
 const PLASMA_LUT = buildLut([
-  [0.0,   13,   8, 135],
-  [0.25, 126,   3, 168],
-  [0.5,  204,  71, 120],
-  [0.75, 248, 149,  64],
-  [1.0,  240, 249,  33],
+  [0.0, 13, 8, 135],
+  [0.25, 126, 3, 168],
+  [0.5, 204, 71, 120],
+  [0.75, 248, 149, 64],
+  [1.0, 240, 249, 33],
 ]);
 
 const HOT_LUT = buildLut([
-  [0.0,    0,   0,   0],
-  [0.333, 255,   0,   0],
-  [0.667, 255, 255,   0],
-  [1.0,  255, 255, 255],
+  [0.0, 0, 0, 0],
+  [0.333, 255, 0, 0],
+  [0.667, 255, 255, 0],
+  [1.0, 255, 255, 255],
 ]);

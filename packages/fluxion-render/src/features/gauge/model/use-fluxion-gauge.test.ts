@@ -5,12 +5,17 @@ import { useFluxionGauge } from "./use-fluxion-gauge";
 
 function makeMockHost() {
   let cb: ((yMin: number, yMax: number, latestT: number) => void) | null = null;
-  const unsubscribe = vi.fn(() => { cb = null; });
-  const onBoundsChange = vi.fn((listener: (yMin: number, yMax: number, latestT: number) => void) => {
-    cb = listener;
-    return unsubscribe;
+  const unsubscribe = vi.fn(() => {
+    cb = null;
   });
-  const fireBounds = (yMin: number, yMax: number, latestT: number) => cb?.(yMin, yMax, latestT);
+  const onBoundsChange = vi.fn(
+    (listener: (yMin: number, yMax: number, latestT: number) => void) => {
+      cb = listener;
+      return unsubscribe;
+    },
+  );
+  const fireBounds = (yMin: number, yMax: number, latestT: number) =>
+    cb?.(yMin, yMax, latestT);
   return {
     host: { onBoundsChange } as unknown as FluxionHost,
     fireBounds,
@@ -28,9 +33,7 @@ describe("useFluxionGauge", () => {
   });
 
   it("defaults initialValue to 0 when not provided", () => {
-    const { result } = renderHook(() =>
-      useFluxionGauge({ host: null }),
-    );
+    const { result } = renderHook(() => useFluxionGauge({ host: null }));
     expect(result.current.value).toBe(0);
     expect(result.current.latestT).toBe(0);
   });
@@ -63,11 +66,15 @@ describe("useFluxionGauge", () => {
     const { host, fireBounds } = makeMockHost();
     const { result } = renderHook(() => useFluxionGauge({ host }));
 
-    act(() => { fireBounds(0, 10, 100); });
+    act(() => {
+      fireBounds(0, 10, 100);
+    });
     expect(result.current.value).toBe(10);
     expect(result.current.latestT).toBe(100);
 
-    act(() => { fireBounds(0, 20, 200); });
+    act(() => {
+      fireBounds(0, 20, 200);
+    });
     expect(result.current.value).toBe(20);
     expect(result.current.latestT).toBe(200);
   });
@@ -81,9 +88,7 @@ describe("useFluxionGauge", () => {
 
   it("value stays at initialValue if host never fires", () => {
     const { host } = makeMockHost();
-    const { result } = renderHook(() =>
-      useFluxionGauge({ host, initialValue: 7 }),
-    );
+    const { result } = renderHook(() => useFluxionGauge({ host, initialValue: 7 }));
     expect(result.current.value).toBe(7);
     expect(host.onBoundsChange).toHaveBeenCalledTimes(1);
   });
@@ -99,7 +104,9 @@ describe("useFluxionGauge", () => {
 
     rerender({ host });
 
-    act(() => { fireBounds(-1, 55, 999); });
+    act(() => {
+      fireBounds(-1, 55, 999);
+    });
 
     expect(result.current.value).toBe(55);
     expect(result.current.latestT).toBe(999);

@@ -24,12 +24,16 @@ describe("useLiveTimeRange", () => {
     const session = new ReplaySession({ channels: [] });
     await session.open();
 
-    const spy = vi.spyOn(session, "getTimeRange").mockResolvedValue({ earliest: 100, latest: 500 });
+    const spy = vi
+      .spyOn(session, "getTimeRange")
+      .mockResolvedValue({ earliest: 100, latest: 500 });
 
     const { result } = renderHook(() => useLiveTimeRange(session, { intervalMs: 200 }));
 
     // Initial poll
-    await act(async () => { await Promise.resolve(); });
+    await act(async () => {
+      await Promise.resolve();
+    });
     expect(result.current.timeRange).toEqual({ earliest: 100, latest: 500 });
 
     // Subsequent poll after interval
@@ -50,7 +54,9 @@ describe("useLiveTimeRange", () => {
     vi.spyOn(session, "getTimeRange").mockRejectedValue(new Error("not open"));
 
     const { result } = renderHook(() => useLiveTimeRange(session, { intervalMs: 100 }));
-    await act(async () => { await Promise.resolve(); });
+    await act(async () => {
+      await Promise.resolve();
+    });
 
     // Should not throw and timeRange stays null
     expect(result.current.timeRange).toBeNull();
@@ -128,12 +134,16 @@ describe("useLiveTimeRange", () => {
 
     // First polls return null (empty store); later polls return real range.
     let pollResult: { earliest: number; latest: number } | null = null;
-    const spy = vi.spyOn(session, "getTimeRange").mockImplementation(async () => pollResult);
+    const spy = vi
+      .spyOn(session, "getTimeRange")
+      .mockImplementation(async () => pollResult);
 
     const { result } = renderHook(() => useLiveTimeRange(session, { intervalMs: 200 }));
 
     // First poll resolves to null → timeRange stays null.
-    await act(async () => { await Promise.resolve(); });
+    await act(async () => {
+      await Promise.resolve();
+    });
     expect(result.current.timeRange).toBeNull();
 
     // App seeds right after startRecording — scrubber becomes live IMMEDIATELY.
@@ -150,7 +160,10 @@ describe("useLiveTimeRange", () => {
       vi.advanceTimersByTime(200);
       await Promise.resolve();
     });
-    expect(result.current.timeRange).toEqual({ earliest: seedNow, latest: seedNow + 1_500 });
+    expect(result.current.timeRange).toEqual({
+      earliest: seedNow,
+      latest: seedNow + 1_500,
+    });
 
     session.dispose();
     spy.mockRestore();

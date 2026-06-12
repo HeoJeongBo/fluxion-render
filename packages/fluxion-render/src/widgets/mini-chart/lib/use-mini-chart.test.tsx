@@ -56,7 +56,9 @@ describe("useMiniChart", () => {
         capacity: 1024,
       }),
     );
-    expect((result.current.layers[1]?.config as { capacity: number }).capacity).toBe(1024);
+    expect((result.current.layers[1]?.config as { capacity: number }).capacity).toBe(
+      1024,
+    );
   });
 
   it("axis override extends the default config (xMode kept)", () => {

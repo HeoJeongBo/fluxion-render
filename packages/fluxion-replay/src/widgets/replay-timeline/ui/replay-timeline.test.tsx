@@ -1,9 +1,11 @@
 import { cleanup, fireEvent, render } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { ReplayTimeline } from "./replay-timeline";
 import type { UseReplayTimelineResult } from "../lib/use-replay-timeline";
+import { ReplayTimeline } from "./replay-timeline";
 
-function makeTimeline(overrides: Partial<UseReplayTimelineResult> = {}): UseReplayTimelineResult {
+function makeTimeline(
+  overrides: Partial<UseReplayTimelineResult> = {},
+): UseReplayTimelineResult {
   return {
     currentT: 0,
     durationMs: 10_000,
@@ -40,14 +42,18 @@ describe("ReplayTimeline", () => {
   });
 
   it("range input value reflects fraction", () => {
-    const { getByLabelText } = render(<ReplayTimeline timeline={makeTimeline({ fraction: 0.5 })} />);
+    const { getByLabelText } = render(
+      <ReplayTimeline timeline={makeTimeline({ fraction: 0.5 })} />,
+    );
     const slider = getByLabelText("Replay timeline") as HTMLInputElement;
     expect(Number(slider.value)).toBe(5000);
   });
 
   it("calls seekTo when slider changes", () => {
     const seekTo = vi.fn();
-    const { getByLabelText } = render(<ReplayTimeline timeline={makeTimeline({ seekTo })} />);
+    const { getByLabelText } = render(
+      <ReplayTimeline timeline={makeTimeline({ seekTo })} />,
+    );
     const slider = getByLabelText("Replay timeline");
     fireEvent.change(slider, { target: { value: "2500" } });
     expect(seekTo).toHaveBeenCalledWith(0.25);
@@ -55,14 +61,14 @@ describe("ReplayTimeline", () => {
 
   it("displays current time label", () => {
     const { getByText } = render(
-      <ReplayTimeline timeline={makeTimeline({ currentT: 65_000, earliest: 0 })} />
+      <ReplayTimeline timeline={makeTimeline({ currentT: 65_000, earliest: 0 })} />,
     );
     expect(getByText("01:05")).toBeTruthy();
   });
 
   it("displays total time label", () => {
     const { getByText } = render(
-      <ReplayTimeline timeline={makeTimeline({ latest: 120_000, earliest: 0 })} />
+      <ReplayTimeline timeline={makeTimeline({ latest: 120_000, earliest: 0 })} />,
     );
     expect(getByText("02:00")).toBeTruthy();
   });
@@ -70,7 +76,7 @@ describe("ReplayTimeline", () => {
   it("uses custom formatTime function", () => {
     const formatTime = vi.fn().mockReturnValue("X:XX");
     const { getAllByText } = render(
-      <ReplayTimeline timeline={makeTimeline()} formatTime={formatTime} />
+      <ReplayTimeline timeline={makeTimeline()} formatTime={formatTime} />,
     );
     expect(formatTime).toHaveBeenCalled();
     expect(getAllByText("X:XX").length).toBeGreaterThan(0);
@@ -82,7 +88,7 @@ describe("ReplayTimeline", () => {
         timeline={makeTimeline()}
         className="my-class"
         style={{ background: "red" }}
-      />
+      />,
     );
     const el = container.firstChild as HTMLElement;
     expect(el.className).toContain("my-class");
@@ -98,7 +104,7 @@ describe("ReplayTimeline", () => {
       <ReplayTimeline
         timeline={makeTimeline({ earliest: 0, latest: 10_000 })}
         segments={segments}
-      />
+      />,
     );
     // The overlay div (aria-hidden) should be present
     const overlay = container.querySelector("[aria-hidden='true']");
@@ -118,7 +124,7 @@ describe("ReplayTimeline", () => {
       <ReplayTimeline
         timeline={makeTimeline({ earliest: 0, latest: 10_000 })}
         segments={segments}
-      />
+      />,
     );
     const overlay = container.querySelector("[aria-hidden='true']");
     expect(overlay).toBeTruthy();
@@ -129,10 +135,7 @@ describe("ReplayTimeline", () => {
 
   it("does not render overlay when segments is empty and timeline.segments is empty", () => {
     const { container } = render(
-      <ReplayTimeline
-        timeline={makeTimeline({ segments: [] })}
-        segments={[]}
-      />
+      <ReplayTimeline timeline={makeTimeline({ segments: [] })} segments={[]} />,
     );
     const overlay = container.querySelector("[aria-hidden='true']");
     expect(overlay).toBeNull();
@@ -142,8 +145,12 @@ describe("ReplayTimeline", () => {
     const timelineSegments = [{ start: 0, end: 5_000 }];
     const { container } = render(
       <ReplayTimeline
-        timeline={makeTimeline({ segments: timelineSegments, earliest: 0, latest: 10_000 })}
-      />
+        timeline={makeTimeline({
+          segments: timelineSegments,
+          earliest: 0,
+          latest: 10_000,
+        })}
+      />,
     );
     const overlay = container.querySelector("[aria-hidden='true']");
     expect(overlay).toBeTruthy();
@@ -156,7 +163,7 @@ describe("ReplayTimeline", () => {
         timeline={makeTimeline({ earliest: 0, latest: 10_000 })}
         segments={segments}
         segmentColor="rgb(255, 0, 0)"
-      />
+      />,
     );
     const overlay = container.querySelector("[aria-hidden='true']");
     const segBar = overlay!.querySelector("div") as HTMLElement;
@@ -173,7 +180,7 @@ describe("ReplayTimeline", () => {
         timeline={makeTimeline({ earliest: 0, latest: 10_000 })}
         segments={segments}
         gapStyle={{ background: "red" }}
-      />
+      />,
     );
     const overlay = container.querySelector("[aria-hidden='true']");
     // Gap div is after the 2 segment divs — find it by checking for red background
@@ -191,7 +198,7 @@ describe("ReplayTimeline", () => {
       <ReplayTimeline
         timeline={makeTimeline({ earliest: 0, latest: 10_000 })}
         segments={segments}
-      />
+      />,
     );
     const overlay = container.querySelector("[aria-hidden='true']");
     // Only 1 visible segment bar (second one) — zero-width returns null
@@ -205,7 +212,7 @@ describe("ReplayTimeline", () => {
       <ReplayTimeline
         timeline={makeTimeline({ earliest: 0, latest: 10_000 })}
         segments={segments}
-      />
+      />,
     );
     const overlay = container.querySelector("[aria-hidden='true']");
     expect(overlay).toBeTruthy();

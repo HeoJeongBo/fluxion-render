@@ -104,9 +104,15 @@ describe("Scenario 09-A: 5-minute multi-channel recording", () => {
     const s1: { t: number; value: number }[] = [];
     const s2: { t: number; value: number }[] = [];
 
-    player.onFrame(ch5_0, ({ t, data }) => { if (data.value >= 0) s0.push({ t, value: data.value }); });
-    player.onFrame(ch5_1, ({ t, data }) => { if (data.value >= 0) s1.push({ t, value: data.value }); });
-    player.onFrame(ch5_2, ({ t, data }) => { if (data.value >= 0) s2.push({ t, value: data.value }); });
+    player.onFrame(ch5_0, ({ t, data }) => {
+      if (data.value >= 0) s0.push({ t, value: data.value });
+    });
+    player.onFrame(ch5_1, ({ t, data }) => {
+      if (data.value >= 0) s1.push({ t, value: data.value });
+    });
+    player.onFrame(ch5_2, ({ t, data }) => {
+      if (data.value >= 0) s2.push({ t, value: data.value });
+    });
 
     player.play();
     await vi.advanceTimersByTimeAsync(30_000);
@@ -142,9 +148,15 @@ describe("Scenario 09-A: 5-minute multi-channel recording", () => {
     const s1Frames: { t: number; value: number }[] = [];
     const s2Frames: { t: number; value: number }[] = [];
 
-    player.onFrame(ch5_0, ({ t, data }) => { if (data.value >= 0) s0Frames.push({ t, value: data.value }); });
-    player.onFrame(ch5_1, ({ t, data }) => { if (data.value >= 0) s1Frames.push({ t, value: data.value }); });
-    player.onFrame(ch5_2, ({ t, data }) => { if (data.value >= 0) s2Frames.push({ t, value: data.value }); });
+    player.onFrame(ch5_0, ({ t, data }) => {
+      if (data.value >= 0) s0Frames.push({ t, value: data.value });
+    });
+    player.onFrame(ch5_1, ({ t, data }) => {
+      if (data.value >= 0) s1Frames.push({ t, value: data.value });
+    });
+    player.onFrame(ch5_2, ({ t, data }) => {
+      if (data.value >= 0) s2Frames.push({ t, value: data.value });
+    });
 
     player.play();
     await vi.advanceTimersByTimeAsync(30_000);
@@ -193,7 +205,9 @@ describe("Scenario 09-A: 5-minute multi-channel recording", () => {
     player.seek(30_000);
     await drain();
     const phase2Frames: { t: number; value: number }[] = [];
-    player.onFrame(ch5_0, ({ t, data }) => { if (data.value >= 0) phase2Frames.push({ t, value: data.value }); });
+    player.onFrame(ch5_0, ({ t, data }) => {
+      if (data.value >= 0) phase2Frames.push({ t, value: data.value });
+    });
     player.play();
     await vi.advanceTimersByTimeAsync(5_000);
     player.pause();
@@ -209,7 +223,9 @@ describe("Scenario 09-A: 5-minute multi-channel recording", () => {
     player.seek(250_000);
     await drain();
     const phase3Frames: { t: number; value: number }[] = [];
-    player.onFrame(ch5_0, ({ t, data }) => { if (data.value >= 0) phase3Frames.push({ t, value: data.value }); });
+    player.onFrame(ch5_0, ({ t, data }) => {
+      if (data.value >= 0) phase3Frames.push({ t, value: data.value });
+    });
     player.play();
     await vi.advanceTimersByTimeAsync(10_000);
     session.exitReplay();
@@ -239,7 +255,9 @@ describe("Scenario 09-A: 5-minute multi-channel recording", () => {
     expect(player.currentT).toBe(280_000);
 
     const frames: { t: number; value: number }[] = [];
-    player.onFrame(ch5_0, ({ t, data }) => { if (data.value >= 0) frames.push({ t, value: data.value }); });
+    player.onFrame(ch5_0, ({ t, data }) => {
+      if (data.value >= 0) frames.push({ t, value: data.value });
+    });
 
     player.play();
     await vi.advanceTimersByTimeAsync(10_000);
@@ -263,7 +281,9 @@ describe("Scenario 09-A: 5-minute multi-channel recording", () => {
     const player = await session.enterReplay(SEEK_T);
 
     const preFrames: { t: number; value: number }[] = [];
-    player.onFrame(ch5_0, ({ t, data }) => { if (data.value >= 0) preFrames.push({ t, value: data.value }); });
+    player.onFrame(ch5_0, ({ t, data }) => {
+      if (data.value >= 0) preFrames.push({ t, value: data.value });
+    });
 
     player.play();
     await vi.advanceTimersByTimeAsync(5_000); // play ~5s → currentT ≈ 105k
@@ -366,9 +386,15 @@ describe("Scenario 09-B: 10-minute multi-channel recording", () => {
       const m1Frames: { t: number; value: number }[] = [];
       const m2Frames: { t: number; value: number }[] = [];
 
-      player.onFrame(ch10_0, ({ t, data }) => { if (data.value >= 0) m0Frames.push({ t, value: data.value }); });
-      player.onFrame(ch10_1, ({ t, data }) => { if (data.value >= 0) m1Frames.push({ t, value: data.value }); });
-      player.onFrame(ch10_2, ({ t, data }) => { if (data.value >= 0) m2Frames.push({ t, value: data.value }); });
+      player.onFrame(ch10_0, ({ t, data }) => {
+        if (data.value >= 0) m0Frames.push({ t, value: data.value });
+      });
+      player.onFrame(ch10_1, ({ t, data }) => {
+        if (data.value >= 0) m1Frames.push({ t, value: data.value });
+      });
+      player.onFrame(ch10_2, ({ t, data }) => {
+        if (data.value >= 0) m2Frames.push({ t, value: data.value });
+      });
 
       player.play();
       await vi.advanceTimersByTimeAsync(5_000);
@@ -406,8 +432,12 @@ describe("Scenario 09-B: 10-minute multi-channel recording", () => {
     const frames: { t: number; value: number }[] = [];
     let endCount = 0;
 
-    player.onFrame(ch10_0, ({ t, data }) => { if (data.value >= 0) frames.push({ t, value: data.value }); });
-    player.onEnd(() => { endCount++; });
+    player.onFrame(ch10_0, ({ t, data }) => {
+      if (data.value >= 0) frames.push({ t, value: data.value });
+    });
+    player.onEnd(() => {
+      endCount++;
+    });
 
     player.play();
     // sentinel is 30 000 ms past LAST_REAL_10MIN; need enough time to reach it
@@ -449,7 +479,9 @@ describe("Scenario 09-B: 10-minute multi-channel recording", () => {
     await drain();
 
     const afterSeek: { t: number; value: number }[] = [];
-    player.onFrame(ch10_0, ({ t, data }) => { if (data.value >= 0) afterSeek.push({ t, value: data.value }); });
+    player.onFrame(ch10_0, ({ t, data }) => {
+      if (data.value >= 0) afterSeek.push({ t, value: data.value });
+    });
 
     player.play();
     await vi.advanceTimersByTimeAsync(10_000);
@@ -482,9 +514,24 @@ describe("Scenario 09-B: 10-minute multi-channel recording", () => {
     const m1Values: number[] = [];
     const m2Values: number[] = [];
 
-    player.onFrame(ch10_0, ({ t, data }) => { if (data.value >= 0) { m0Ts.push(t); m0Values.push(data.value); } });
-    player.onFrame(ch10_1, ({ t, data }) => { if (data.value >= 0) { m1Ts.push(t); m1Values.push(data.value); } });
-    player.onFrame(ch10_2, ({ t, data }) => { if (data.value >= 0) { m2Ts.push(t); m2Values.push(data.value); } });
+    player.onFrame(ch10_0, ({ t, data }) => {
+      if (data.value >= 0) {
+        m0Ts.push(t);
+        m0Values.push(data.value);
+      }
+    });
+    player.onFrame(ch10_1, ({ t, data }) => {
+      if (data.value >= 0) {
+        m1Ts.push(t);
+        m1Values.push(data.value);
+      }
+    });
+    player.onFrame(ch10_2, ({ t, data }) => {
+      if (data.value >= 0) {
+        m2Ts.push(t);
+        m2Values.push(data.value);
+      }
+    });
 
     // First window: seek to 300k
     player.seek(300_000);
@@ -510,8 +557,12 @@ describe("Scenario 09-B: 10-minute multi-channel recording", () => {
     expect(player.currentT).toBe(100_000);
 
     // Clear collected frames
-    m0Ts.length = 0; m1Ts.length = 0; m2Ts.length = 0;
-    m0Values.length = 0; m1Values.length = 0; m2Values.length = 0;
+    m0Ts.length = 0;
+    m1Ts.length = 0;
+    m2Ts.length = 0;
+    m0Values.length = 0;
+    m1Values.length = 0;
+    m2Values.length = 0;
 
     player.play();
     await vi.advanceTimersByTimeAsync(5_000);

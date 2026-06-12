@@ -140,9 +140,15 @@ export function StepDemoPage() {
         }}
       >
         <div style={{ pointerEvents: "auto" }}>
-          <WindowSelector value={localWindowMs} onChange={setLocalWindowMs} options={WINDOW_OPTIONS} />
+          <WindowSelector
+            value={localWindowMs}
+            onChange={setLocalWindowMs}
+            options={WINDOW_OPTIONS}
+          />
         </div>
-        <span>{hz} Hz · {localWindowMs / 1000}s window · discrete state [0-4]</span>
+        <span>
+          {hz} Hz · {localWindowMs / 1000}s window · discrete state [0-4]
+        </span>
       </div>
     </div>
   );

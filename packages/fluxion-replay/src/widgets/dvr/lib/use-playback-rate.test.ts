@@ -31,7 +31,9 @@ describe("usePlaybackRate", () => {
     // Provide a minimal player-like object whose state IS "playing".
     const playingPlayer = {
       ...player,
-      get state() { return "playing" as const; },
+      get state() {
+        return "playing" as const;
+      },
     };
 
     const { result } = renderHook(() =>
@@ -65,8 +67,12 @@ describe("usePlaybackRate", () => {
     const player2 = makeFakePlayer(0);
 
     // Wrap in playing-state proxy so setRate actually calls play()
-    const playing = (p: ReturnType<typeof makeFakePlayer>) =>
-      ({ ...p, get state() { return "playing" as const; } });
+    const playing = (p: ReturnType<typeof makeFakePlayer>) => ({
+      ...p,
+      get state() {
+        return "playing" as const;
+      },
+    });
 
     const { result, rerender } = renderHook(
       (p: ReturnType<typeof makeFakePlayer>) =>

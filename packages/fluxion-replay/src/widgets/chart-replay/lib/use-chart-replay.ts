@@ -1,7 +1,17 @@
+import type {
+  FluxionHost,
+  LineLayerHandle,
+  LineSample,
+} from "@heojeongbo/fluxion-render";
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { FluxionHost, LineLayerHandle, LineSample } from "@heojeongbo/fluxion-render";
-import type { ReplayPlayer, ReplayPlayerFrame } from "../../../features/player/model/replay-player";
-import type { DecodedFrame, ReplayStore } from "../../../features/store/model/replay-store";
+import type {
+  ReplayPlayer,
+  ReplayPlayerFrame,
+} from "../../../features/player/model/replay-player";
+import type {
+  DecodedFrame,
+  ReplayStore,
+} from "../../../features/store/model/replay-store";
 import type { BaseChannel } from "../../../shared/model/base-channel";
 
 /** Default ms fetched + cached on each side of the visible window. */
@@ -76,9 +86,7 @@ export interface UseChartReplayResult {
  * Pair with an `axisGridLayer({ xMode: "time", timeWindowMs })` whose
  * `timeWindowMs` matches `windowMs` to keep the chart axis in lockstep.
  */
-export function useChartReplay<T>(
-  opts: UseChartReplayOptions<T>,
-): UseChartReplayResult {
+export function useChartReplay<T>(opts: UseChartReplayOptions<T>): UseChartReplayResult {
   const { host, player, store, channel, windowMs, pickValue } = opts;
   const layerId = opts.layerId ?? channel.channelId;
   const timeOrigin = opts.timeOrigin ?? 0;
@@ -262,7 +270,10 @@ export function useChartReplay<T>(
         return;
       }
       // Fix 3: accumulate into buffer; onTick flushes as a single pushBatch.
-      liveBufferRef.current.push({ t: frame.t - timeOrigin, y: pickRef.current(frame.data) });
+      liveBufferRef.current.push({
+        t: frame.t - timeOrigin,
+        y: pickRef.current(frame.data),
+      });
     });
 
     // Fix 3: drain the live buffer once per tick with a single pushBatch call

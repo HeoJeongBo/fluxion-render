@@ -57,7 +57,12 @@ export interface FluxionPieChartProps {
    * - `"value"`: raw numeric value
    * - function: custom string
    */
-  label?: boolean | "name" | "percent" | "value" | ((slice: PieSlice, percent: number) => string);
+  label?:
+    | boolean
+    | "name"
+    | "percent"
+    | "value"
+    | ((slice: PieSlice, percent: number) => string);
   /** Draw a connector line from slice edge to label. Default true when label is set. */
   labelLine?: boolean;
   /** Text shown in the center of a donut chart. */
@@ -227,7 +232,10 @@ function usePieAnimation(
       const t = easeOutCubic(Math.min(elapsed / duration, 1));
 
       animRef.current = to.map((target, i) => {
-        const f = from[i] ?? { sliceStart: target.sliceStart, sliceEnd: target.sliceStart };
+        const f = from[i] ?? {
+          sliceStart: target.sliceStart,
+          sliceEnd: target.sliceStart,
+        };
         return {
           sliceStart: f.sliceStart + (target.sliceStart - f.sliceStart) * t,
           sliceEnd: f.sliceEnd + (target.sliceEnd - f.sliceEnd) * t,
@@ -257,7 +265,10 @@ function usePieAnimation(
       forceRender((n) => n + 1);
       return;
     }
-    const collapsed = targets.map(() => ({ sliceStart: startAngle, sliceEnd: startAngle }));
+    const collapsed = targets.map(() => ({
+      sliceStart: startAngle,
+      sliceEnd: startAngle,
+    }));
     animRef.current = collapsed;
     prevKeyRef.current = targetKey;
     runAnimation(collapsed, targets);
@@ -280,7 +291,10 @@ function usePieAnimation(
       return;
     }
 
-    runAnimation(animRef.current.map((r) => ({ ...r })), targets);
+    runAnimation(
+      animRef.current.map((r) => ({ ...r })),
+      targets,
+    );
     return () => {
       if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
     };
@@ -335,10 +349,24 @@ function Tooltip({
     return (
       <div
         className={className}
-        style={{ position: "fixed", left: state.x + 12, top: state.y - 10, pointerEvents: "none", zIndex: 9999 }}
+        style={{
+          position: "fixed",
+          left: state.x + 12,
+          top: state.y - 10,
+          pointerEvents: "none",
+          zIndex: 9999,
+        }}
       >
         <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 2 }}>
-          <div style={{ width: 8, height: 8, borderRadius: "50%", background: fill, flexShrink: 0 }} />
+          <div
+            style={{
+              width: 8,
+              height: 8,
+              borderRadius: "50%",
+              background: fill,
+              flexShrink: 0,
+            }}
+          />
           <span style={{ fontWeight: 600 }}>{slice.name}</span>
         </div>
         <div style={{ paddingLeft: 14 }}>
@@ -366,7 +394,15 @@ function Tooltip({
       }}
     >
       <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 2 }}>
-        <div style={{ width: 8, height: 8, borderRadius: "50%", background: fill, flexShrink: 0 }} />
+        <div
+          style={{
+            width: 8,
+            height: 8,
+            borderRadius: "50%",
+            background: fill,
+            flexShrink: 0,
+          }}
+        />
         <span style={{ fontWeight: 600 }}>{slice.name}</span>
       </div>
       <div style={{ color: "rgba(255,255,255,0.75)", paddingLeft: 14 }}>
@@ -411,10 +447,26 @@ function Legend({
           <div
             key={slice.name}
             className={itemClassName}
-            style={itemClassName ? undefined : { display: "flex", alignItems: "center", gap: 5 }}
+            style={
+              itemClassName
+                ? undefined
+                : { display: "flex", alignItems: "center", gap: 5 }
+            }
           >
-            <div style={{ width: 10, height: 10, borderRadius: 2, background: fill, flexShrink: 0 }} />
-            <span style={itemClassName ? undefined : { color: "#444", whiteSpace: "nowrap" }}>{slice.name}</span>
+            <div
+              style={{
+                width: 10,
+                height: 10,
+                borderRadius: 2,
+                background: fill,
+                flexShrink: 0,
+              }}
+            />
+            <span
+              style={itemClassName ? undefined : { color: "#444", whiteSpace: "nowrap" }}
+            >
+              {slice.name}
+            </span>
           </div>
         );
       })}
@@ -496,7 +548,12 @@ export function FluxionPieChart({
   const containerStyle: CSSProperties =
     legendPosition === "right"
       ? { display: "inline-flex", alignItems: "center", ...style }
-      : { display: "inline-flex", flexDirection: "column", alignItems: "center", ...style };
+      : {
+          display: "inline-flex",
+          flexDirection: "column",
+          alignItems: "center",
+          ...style,
+        };
 
   return (
     <div className={classNames.root ?? className} style={containerStyle}>
@@ -509,10 +566,21 @@ export function FluxionPieChart({
         >
           {/* Slices */}
           {targetRanges.map(({ slice, idx, fraction }, i) => {
-            const animated = animatedRanges[i] ?? { sliceStart: startAngle, sliceEnd: startAngle };
+            const animated = animatedRanges[i] ?? {
+              sliceStart: startAngle,
+              sliceEnd: startAngle,
+            };
             const fill = slice.fill ?? colors[idx % colors.length] ?? colors[0];
             const isHovered = hovered?.idx === idx;
-            const d = describeSlice(svgCx, svgCy, innerRadius, outerRadius, animated.sliceStart, animated.sliceEnd, cornerRadius);
+            const d = describeSlice(
+              svgCx,
+              svgCy,
+              innerRadius,
+              outerRadius,
+              animated.sliceStart,
+              animated.sliceEnd,
+              cornerRadius,
+            );
             if (!d) return null;
 
             const midAngle = (animated.sliceStart + animated.sliceEnd) / 2;
@@ -532,12 +600,16 @@ export function FluxionPieChart({
                   stroke="#fff"
                   strokeWidth={1}
                   className={classNames.slice}
-                  style={{ cursor: tooltip ? "pointer" : "default", transition: "opacity 0.15s" }}
+                  style={{
+                    cursor: tooltip ? "pointer" : "default",
+                    transition: "opacity 0.15s",
+                  }}
                   onMouseEnter={(e: MouseEvent) => {
                     if (tooltip) setHovered({ idx, x: e.clientX, y: e.clientY });
                   }}
                   onMouseMove={(e: MouseEvent) => {
-                    if (tooltip && hovered) setHovered({ idx, x: e.clientX, y: e.clientY });
+                    if (tooltip && hovered)
+                      setHovered({ idx, x: e.clientX, y: e.clientY });
                   }}
                   onMouseLeave={() => setHovered(null)}
                 />
@@ -557,7 +629,9 @@ export function FluxionPieChart({
                   <text
                     x={lp.x}
                     y={lp.y}
-                    textAnchor={lp.x < svgCx - 2 ? "end" : lp.x > svgCx + 2 ? "start" : "middle"}
+                    textAnchor={
+                      lp.x < svgCx - 2 ? "end" : lp.x > svgCx + 2 ? "start" : "middle"
+                    }
                     dominantBaseline="middle"
                     fontSize={11}
                     fill={classNames.labelText ? undefined : "#333"}

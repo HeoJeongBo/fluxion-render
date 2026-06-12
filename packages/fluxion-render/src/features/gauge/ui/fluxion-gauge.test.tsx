@@ -81,7 +81,9 @@ describe("FluxionGauge — type=circle", () => {
   });
 
   it("renders only track circle for zero value", () => {
-    const { container } = render(<FluxionGauge value={0} type="circle" min={0} max={100} />);
+    const { container } = render(
+      <FluxionGauge value={0} type="circle" min={0} max={100} />,
+    );
     const circles = container.querySelectorAll("circle");
     expect(circles.length).toBe(1);
   });
@@ -93,7 +95,9 @@ describe("FluxionGauge — type=circle", () => {
   });
 
   it("respects showValue=false for circle type", () => {
-    const { container } = render(<FluxionGauge value={50} type="circle" showValue={false} />);
+    const { container } = render(
+      <FluxionGauge value={50} type="circle" showValue={false} />,
+    );
     const texts = getTextContents(container);
     expect(texts.some((t) => t.includes("50.0"))).toBe(false);
   });
@@ -130,7 +134,9 @@ describe("FluxionGauge — type=bar", () => {
   });
 
   it("respects showValue=false for bar type", () => {
-    const { container } = render(<FluxionGauge value={50} type="bar" showValue={false} />);
+    const { container } = render(
+      <FluxionGauge value={50} type="bar" showValue={false} />,
+    );
     const texts = getTextContents(container);
     expect(texts.some((t) => t.includes("50.0"))).toBe(false);
   });
@@ -208,17 +214,13 @@ describe("FluxionGauge — threshold coloring", () => {
 
 describe("FluxionGauge — min/max clamping", () => {
   it("clamps value above max to full arc", () => {
-    const { container } = render(
-      <FluxionGauge value={200} min={0} max={100} />,
-    );
+    const { container } = render(<FluxionGauge value={200} min={0} max={100} />);
     const circles = container.querySelectorAll("circle");
     expect(circles.length).toBe(2);
   });
 
   it("clamps value below min to empty arc", () => {
-    const { container } = render(
-      <FluxionGauge value={-50} min={0} max={100} />,
-    );
+    const { container } = render(<FluxionGauge value={-50} min={0} max={100} />);
     const circles = container.querySelectorAll("circle");
     expect(circles.length).toBe(1);
   });
@@ -230,9 +232,7 @@ describe("FluxionGauge — min/max clamping", () => {
   });
 
   it("respects custom min value — value at min shows no arc", () => {
-    const { container } = render(
-      <FluxionGauge value={10} min={10} max={100} />,
-    );
+    const { container } = render(<FluxionGauge value={10} min={10} max={100} />);
     const circles = container.querySelectorAll("circle");
     expect(circles.length).toBe(1);
   });
@@ -256,17 +256,13 @@ describe("FluxionGauge — valueFormat", () => {
 
 describe("FluxionGauge — className and style props", () => {
   it("applies className to wrapper div", () => {
-    const { container } = render(
-      <FluxionGauge value={50} className="gauge-wrapper" />,
-    );
+    const { container } = render(<FluxionGauge value={50} className="gauge-wrapper" />);
     const wrapper = container.firstChild as HTMLElement;
     expect(wrapper.classList.contains("gauge-wrapper")).toBe(true);
   });
 
   it("applies custom style to wrapper div", () => {
-    const { container } = render(
-      <FluxionGauge value={50} style={{ margin: "10px" }} />,
-    );
+    const { container } = render(<FluxionGauge value={50} style={{ margin: "10px" }} />);
     const wrapper = container.firstChild as HTMLElement;
     expect(wrapper.style.margin).toBe("10px");
   });

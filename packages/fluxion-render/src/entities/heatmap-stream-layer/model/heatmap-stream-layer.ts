@@ -45,8 +45,8 @@ export class HeatmapStreamLayer implements Layer {
   private visible = true;
 
   // Ring buffer of columns: circular array of Float32Array(yBins) + timestamp Float32Array.
-  private colData: Float32Array;  // flat [col0_v0..v_{yBins-1}, col1_v0..., ...]
-  private colTs: Float32Array;    // timestamps per column
+  private colData: Float32Array; // flat [col0_v0..v_{yBins-1}, col1_v0..., ...]
+  private colTs: Float32Array; // timestamps per column
   private head = 0;
   private count = 0;
 
@@ -66,16 +66,30 @@ export class HeatmapStreamLayer implements Layer {
   setConfig(config: unknown): void {
     const c = config as HeatmapStreamConfig;
     let needRealloc = false;
-    if (c.yBins !== undefined && c.yBins !== this.yBins) { this.yBins = Math.max(1, c.yBins); needRealloc = true; }
-    if (c.maxCols !== undefined && c.maxCols !== this.maxCols) { this.maxCols = Math.max(4, c.maxCols); needRealloc = true; }
+    if (c.yBins !== undefined && c.yBins !== this.yBins) {
+      this.yBins = Math.max(1, c.yBins);
+      needRealloc = true;
+    }
+    if (c.maxCols !== undefined && c.maxCols !== this.maxCols) {
+      this.maxCols = Math.max(4, c.maxCols);
+      needRealloc = true;
+    }
     if (needRealloc) this.allocBuffers();
-    if (c.yRange !== undefined) { this.yMin = c.yRange[0]; this.yMax = c.yRange[1]; }
+    if (c.yRange !== undefined) {
+      this.yMin = c.yRange[0];
+      this.yMax = c.yRange[1];
+    }
     if (c.minValue !== undefined) this.minValue = c.minValue;
     if (c.maxValue !== undefined) this.maxValue = c.maxValue;
     if (c.visible !== undefined) this.visible = c.visible;
     if (c.colormap !== undefined) {
       this.colormap = c.colormap;
-      this.lut = c.colormap === "plasma" ? PLASMA_LUT : c.colormap === "hot" ? HOT_LUT : VIRIDIS_LUT;
+      this.lut =
+        c.colormap === "plasma"
+          ? PLASMA_LUT
+          : c.colormap === "hot"
+            ? HOT_LUT
+            : VIRIDIS_LUT;
     }
   }
 
@@ -133,7 +147,7 @@ export class HeatmapStreamLayer implements Layer {
       if (vMin === undefined) vMin = autoMin;
       if (vMax === undefined) vMax = autoMax;
     }
-    const range = (vMax - vMin) || 1;
+    const range = vMax - vMin || 1;
 
     // Compute cell pixel dimensions.
     const cellH = viewport.heightPx / bins;
@@ -193,22 +207,22 @@ function buildLut(stops: [number, number, number, number][]): Uint8Array {
 }
 
 const VIRIDIS_LUT = buildLut([
-  [0.0,   68,   1,  84],
-  [0.25,  59,  82, 139],
-  [0.5,   33, 145, 140],
-  [0.75,  94, 201,  98],
-  [1.0,  253, 231,  37],
+  [0.0, 68, 1, 84],
+  [0.25, 59, 82, 139],
+  [0.5, 33, 145, 140],
+  [0.75, 94, 201, 98],
+  [1.0, 253, 231, 37],
 ]);
 const PLASMA_LUT = buildLut([
-  [0.0,   13,   8, 135],
-  [0.25, 126,   3, 168],
-  [0.5,  204,  71, 120],
-  [0.75, 248, 149,  64],
-  [1.0,  240, 249,  33],
+  [0.0, 13, 8, 135],
+  [0.25, 126, 3, 168],
+  [0.5, 204, 71, 120],
+  [0.75, 248, 149, 64],
+  [1.0, 240, 249, 33],
 ]);
 const HOT_LUT = buildLut([
-  [0.0,    0,   0,   0],
-  [0.333, 255,   0,   0],
-  [0.667, 255, 255,   0],
-  [1.0,  255, 255, 255],
+  [0.0, 0, 0, 0],
+  [0.333, 255, 0, 0],
+  [0.667, 255, 255, 0],
+  [1.0, 255, 255, 255],
 ]);

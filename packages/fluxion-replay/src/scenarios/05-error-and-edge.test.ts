@@ -147,9 +147,7 @@ describe("Scenario 05: error handling and edge cases", () => {
     expect(session.recorder.isRecording).toBe(false);
 
     // record() when stopped must be a no-op, not throw
-    expect(() =>
-      session.record("cpu", { name: "cpu", value: 77 }, 9_000),
-    ).not.toThrow();
+    expect(() => session.record("cpu", { name: "cpu", value: 77 }, 9_000)).not.toThrow();
 
     await session.startRecording();
     expect(session.recorder.isRecording).toBe(true);

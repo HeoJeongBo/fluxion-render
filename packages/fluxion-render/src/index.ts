@@ -1,6 +1,4 @@
 export { createFluxionWorkerFactory } from "./app/worker/create-worker-factory";
-export { HoverDataCache } from "./features/crosshair";
-export type { CachedLayerOptions } from "./features/crosshair";
 export type { AreaChartConfig } from "./entities/area-chart-layer";
 export type { AxisGridConfig } from "./entities/axis-grid-layer";
 export type { BarChartConfig } from "./entities/bar-chart-layer";
@@ -11,11 +9,35 @@ export type { HeatmapStreamConfig } from "./entities/heatmap-stream-layer";
 export type { LidarScatterConfig } from "./entities/lidar-scatter-layer";
 export type { LineChartConfig } from "./entities/line-chart-layer";
 export type { LineChartStaticConfig } from "./entities/line-chart-static-layer";
+export type { PoseArrowConfig } from "./entities/pose-arrow-layer";
+export type { ReferenceLineConfig } from "./entities/reference-line-layer";
 export type { ScatterChartConfig } from "./entities/scatter-chart-layer";
 export type { ScatterColoredConfig } from "./entities/scatter-colored-layer";
 export type { StepChartConfig } from "./entities/step-chart-layer";
-export type { ReferenceLineConfig } from "./entities/reference-line-layer";
-export type { PoseArrowConfig } from "./entities/pose-arrow-layer";
+export {
+  type BrushSelection,
+  FluxionBrush,
+  type FluxionBrushProps,
+  type UseFluxionBrushOptions,
+  type UseFluxionBrushResult,
+  useFluxionBrush,
+} from "./features/brush";
+export type { CachedLayerOptions } from "./features/crosshair";
+export { HoverDataCache } from "./features/crosshair";
+export {
+  type UseFluxionExportOptions,
+  type UseFluxionExportResult,
+  useFluxionExport,
+} from "./features/export";
+export {
+  FluxionGauge,
+  type FluxionGaugeClassNames,
+  type FluxionGaugeProps,
+  type GaugeThreshold,
+  type UseFluxionGaugeOptions,
+  type UseFluxionGaugeResult,
+  useFluxionGauge,
+} from "./features/gauge";
 export type {
   CandlestickSample,
   EventSeverity,
@@ -28,10 +50,10 @@ export type {
   LidarStride,
   LineSample,
   MarkerEvent,
+  PoseArrowSample,
   ScatterColoredSample,
   ScatterSample,
   XyPoint,
-  PoseArrowSample,
 } from "./features/host";
 export {
   AreaLayerHandle,
@@ -47,12 +69,22 @@ export {
   LidarLayerHandle,
   LineLayerHandle,
   LineStaticLayerHandle,
+  PoseArrowHandle,
+  ReferenceLineHandle,
   ScatterColoredHandle,
   ScatterLayerHandle,
   StepLayerHandle,
-  PoseArrowHandle,
-  ReferenceLineHandle,
 } from "./features/host";
+export {
+  FluxionPieChart,
+  type FluxionPieChartClassNames,
+  type FluxionPieChartProps,
+  type PieSlice,
+} from "./features/pie";
+export {
+  type UseSyncedTimeWindowResult,
+  useSyncedTimeWindow,
+} from "./features/synced-time";
 export type {
   AxisTick,
   AxisTickSet,
@@ -80,35 +112,3 @@ export {
   stepLayer,
 } from "./widgets/fluxion-canvas/lib/layer-specs";
 export type { FluxionLayerSpec } from "./widgets/fluxion-canvas/lib/use-fluxion-canvas";
-export {
-  FluxionGauge,
-  useFluxionGauge,
-  type FluxionGaugeClassNames,
-  type FluxionGaugeProps,
-  type GaugeThreshold,
-  type UseFluxionGaugeOptions,
-  type UseFluxionGaugeResult,
-} from "./features/gauge";
-export {
-  FluxionPieChart,
-  type FluxionPieChartClassNames,
-  type FluxionPieChartProps,
-  type PieSlice,
-} from "./features/pie";
-export {
-  useSyncedTimeWindow,
-  type UseSyncedTimeWindowResult,
-} from "./features/synced-time";
-export {
-  FluxionBrush,
-  useFluxionBrush,
-  type BrushSelection,
-  type FluxionBrushProps,
-  type UseFluxionBrushOptions,
-  type UseFluxionBrushResult,
-} from "./features/brush";
-export {
-  useFluxionExport,
-  type UseFluxionExportOptions,
-  type UseFluxionExportResult,
-} from "./features/export";

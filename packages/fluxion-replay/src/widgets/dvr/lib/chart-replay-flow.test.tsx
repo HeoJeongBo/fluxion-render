@@ -44,7 +44,9 @@ function useChartReplayDemoFlow() {
       if (cancelled) return;
       seedTimeRange({ earliest: Date.now(), latest: Date.now() });
     })();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [session, isReady, seedTimeRange]);
 
   const dvr = useReplayDvr({
@@ -73,7 +75,9 @@ describe("chart-replay full hook chain (Phase 11 sticky-cursor + frozen-edge e2e
 
   it("on mount: live mode, useReplaySession ready, liveTimeRange seeded", async () => {
     const { result } = renderHook(() => useChartReplayDemoFlow());
-    await act(async () => { await settle(50); });
+    await act(async () => {
+      await settle(50);
+    });
 
     expect(result.current.isReady).toBe(true);
     expect(result.current.dvr.isDvr).toBe(false);
@@ -82,7 +86,9 @@ describe("chart-replay full hook chain (Phase 11 sticky-cursor + frozen-edge e2e
 
   it("DVR entry: replayPlayer.currentT starts at enterT and advances forward (NOT stuck)", async () => {
     const { result } = renderHook(() => useChartReplayDemoFlow());
-    await act(async () => { await settle(50); });
+    await act(async () => {
+      await settle(50);
+    });
 
     // Synthesise a wider liveTimeRange so enter has room to land.
     const baseT = Date.now();
@@ -114,7 +120,9 @@ describe("chart-replay full hook chain (Phase 11 sticky-cursor + frozen-edge e2e
     // Let real time pass — the cursor must MOVE FORWARD MORE.
     // Phase 14: cursor only updates every 1s wall (1-second snap), so wait
     // generously past the boundary to catch a guaranteed tick.
-    await act(async () => { await settle(1_200); });
+    await act(async () => {
+      await settle(1_200);
+    });
     const after = result.current.replayPlayer.currentT;
     expect(after).toBeGreaterThan(tAtEntry);
 
@@ -123,7 +131,9 @@ describe("chart-replay full hook chain (Phase 11 sticky-cursor + frozen-edge e2e
 
   it("DVR cursor keeps advancing across forced parent re-renders", async () => {
     const { result, rerender } = renderHook(() => useChartReplayDemoFlow());
-    await act(async () => { await settle(50); });
+    await act(async () => {
+      await settle(50);
+    });
 
     const baseT = Date.now();
     const session = result.current.session!;
@@ -149,7 +159,9 @@ describe("chart-replay full hook chain (Phase 11 sticky-cursor + frozen-edge e2e
     expect(result.current.replayPlayer.currentT).toBeGreaterThanOrEqual(t1);
 
     // And keeps progressing — wait another full snap interval.
-    await act(async () => { await settle(1_200); });
+    await act(async () => {
+      await settle(1_200);
+    });
     expect(result.current.replayPlayer.currentT).toBeGreaterThan(t1);
 
     result.current.dvr.exit();
@@ -157,7 +169,9 @@ describe("chart-replay full hook chain (Phase 11 sticky-cursor + frozen-edge e2e
 
   it("dvr.player reference is stable across re-renders (no spurious setPlayer)", async () => {
     const { result, rerender } = renderHook(() => useChartReplayDemoFlow());
-    await act(async () => { await settle(50); });
+    await act(async () => {
+      await settle(50);
+    });
 
     const baseT = Date.now();
     const session = result.current.session!;
@@ -190,7 +204,9 @@ describe("chart-replay full hook chain (Phase 11 sticky-cursor + frozen-edge e2e
 
   it("exit from DVR snaps back to live mode", async () => {
     const { result } = renderHook(() => useChartReplayDemoFlow());
-    await act(async () => { await settle(50); });
+    await act(async () => {
+      await settle(50);
+    });
 
     const baseT = Date.now();
     const session = result.current.session!;
@@ -202,7 +218,9 @@ describe("chart-replay full hook chain (Phase 11 sticky-cursor + frozen-edge e2e
       await settle(50);
     });
     await act(async () => {
-      await result.current.dvr.enter((result.current.liveTimeRange?.latest ?? baseT) - 1_000);
+      await result.current.dvr.enter(
+        (result.current.liveTimeRange?.latest ?? baseT) - 1_000,
+      );
       await settle(10);
     });
     expect(result.current.dvr.isDvr).toBe(true);
@@ -223,7 +241,9 @@ describe("chart-replay full hook chain (Phase 11 sticky-cursor + frozen-edge e2e
 
   it("DVR mode: record() called during DVR adds frames to the store (no live freeze)", async () => {
     const { result } = renderHook(() => useChartReplayDemoFlow());
-    await act(async () => { await settle(50); });
+    await act(async () => {
+      await settle(50);
+    });
 
     const session = result.current.session!;
     const baseT = Date.now();
@@ -249,7 +269,11 @@ describe("chart-replay full hook chain (Phase 11 sticky-cursor + frozen-edge e2e
     // isLive). The store should keep growing.
     const newBaseT = liveLatestBefore + 100;
     for (let i = 0; i < 40; i++) {
-      result.current.record(CHANNEL_ID, { name: CHANNEL_ID, value: 100 + i }, newBaseT + i * 50);
+      result.current.record(
+        CHANNEL_ID,
+        { name: CHANNEL_ID, value: 100 + i },
+        newBaseT + i * 50,
+      );
     }
     await act(async () => {
       await session.store.flush();
@@ -269,7 +293,9 @@ describe("chart-replay full hook chain (Phase 11 sticky-cursor + frozen-edge e2e
 
   it("DVR exit then re-enter: the new player's timeRange picks up frames recorded during the prior DVR", async () => {
     const { result } = renderHook(() => useChartReplayDemoFlow());
-    await act(async () => { await settle(50); });
+    await act(async () => {
+      await settle(50);
+    });
 
     const session = result.current.session!;
     const baseT = Date.now();
@@ -292,7 +318,11 @@ describe("chart-replay full hook chain (Phase 11 sticky-cursor + frozen-edge e2e
     // enter() must produce a player whose timeRange.latest reflects them.
     const extraBaseT = firstLive + 100;
     for (let i = 0; i < 50; i++) {
-      result.current.record(CHANNEL_ID, { name: CHANNEL_ID, value: 1000 + i }, extraBaseT + i * 50);
+      result.current.record(
+        CHANNEL_ID,
+        { name: CHANNEL_ID, value: 1000 + i },
+        extraBaseT + i * 50,
+      );
     }
     await act(async () => {
       await session.store.flush();
@@ -325,7 +355,9 @@ describe("chart-replay full hook chain (Phase 11 sticky-cursor + frozen-edge e2e
 
   it("DVR seek-during-drag: each player.seek() updates currentT without losing earlier seeks", async () => {
     const { result } = renderHook(() => useChartReplayDemoFlow());
-    await act(async () => { await settle(50); });
+    await act(async () => {
+      await settle(50);
+    });
 
     const session = result.current.session!;
     const baseT = Date.now();
@@ -374,7 +406,9 @@ describe("chart-replay full hook chain (Phase 11 sticky-cursor + frozen-edge e2e
   // ReplaySession, real ReplayPlayer.
   it("Phase 13: player.timeRange.latest === dvr.frozenLatest (matches what UI scrubber froze)", async () => {
     const { result } = renderHook(() => useChartReplayDemoFlow());
-    await act(async () => { await settle(50); });
+    await act(async () => {
+      await settle(50);
+    });
 
     const baseT = Date.now();
     const session = result.current.session!;
@@ -406,7 +440,9 @@ describe("chart-replay full hook chain (Phase 11 sticky-cursor + frozen-edge e2e
 
   it("Phase 13: cursor reaching frozenLatest triggers auto-exit-to-live", async () => {
     const { result } = renderHook(() => useChartReplayDemoFlow());
-    await act(async () => { await settle(50); });
+    await act(async () => {
+      await settle(50);
+    });
 
     const baseT = Date.now();
     const session = result.current.session!;
@@ -434,7 +470,9 @@ describe("chart-replay full hook chain (Phase 11 sticky-cursor + frozen-edge e2e
 
     // 1 second of wall clock easily covers the 200ms gap to frozenLatest.
     // onEnd should fire → useReplayDvr's auto-exit handler runs → isDvr=false.
-    await act(async () => { await settle(1_000); });
+    await act(async () => {
+      await settle(1_000);
+    });
     expect(result.current.dvr.isDvr).toBe(false);
     expect(result.current.dvr.player).toBeNull();
     expect(result.current.dvr.frozenLatest).toBeNull();
@@ -442,7 +480,9 @@ describe("chart-replay full hook chain (Phase 11 sticky-cursor + frozen-edge e2e
 
   it("Phase 13: enter() internally flushes so tail frames in store._pending are queryable", async () => {
     const { result } = renderHook(() => useChartReplayDemoFlow());
-    await act(async () => { await settle(50); });
+    await act(async () => {
+      await settle(50);
+    });
 
     const baseT = Date.now();
     const session = result.current.session!;
@@ -484,7 +524,9 @@ describe("chart-replay full hook chain (Phase 11 sticky-cursor + frozen-edge e2e
   // ─── Phase 14 — 1-second cursor snap + DVR→Live backfill (e2e) ────────
   it("Phase 14: replayPlayer.currentT advances in 1-second snaps after enter()", async () => {
     const { result } = renderHook(() => useChartReplayDemoFlow());
-    await act(async () => { await settle(50); });
+    await act(async () => {
+      await settle(50);
+    });
 
     const baseT = Date.now();
     const session = result.current.session!;
@@ -511,7 +553,9 @@ describe("chart-replay full hook chain (Phase 11 sticky-cursor + frozen-edge e2e
     expect(tEntry % 1000).toBe(0); // snapped to a second
 
     // Wait > 1 second of wall time so the snap boundary is crossed at rate=1.
-    await act(async () => { await settle(1_200); });
+    await act(async () => {
+      await settle(1_200);
+    });
     const tAfter = result.current.replayPlayer.currentT;
     expect(tAfter).toBeGreaterThan(tEntry);
     expect(tAfter % 1000).toBe(0);
@@ -565,7 +609,10 @@ describe("chart-replay full hook chain (Phase 11 sticky-cursor + frozen-edge e2e
     // Initial active=true → one backfill on mount.
     // Each backfill emits ONE reset (the atomic post-query reset+pushBatch);
     // there is no premature clear, so the chart never renders empty.
-    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
     expect(store.flush).toHaveBeenCalledTimes(1);
     expect(host.resets.length).toBe(1);
 

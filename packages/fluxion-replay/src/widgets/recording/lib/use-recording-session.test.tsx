@@ -28,14 +28,18 @@ describe("useRecordingSession", () => {
         useRecordingSession({ session, enabled }),
       { initialProps: { session: null as ReplaySession | null, enabled: true } },
     );
-    await act(async () => { await Promise.resolve(); });
+    await act(async () => {
+      await Promise.resolve();
+    });
     expect(result.current.isRecording).toBe(false);
     expect(result.current.error).toBeNull();
 
     // enabled=false with a real session — still idle.
     const stub = makeSessionStub();
     rerender({ session: stubAsSession(stub), enabled: false });
-    await act(async () => { await Promise.resolve(); });
+    await act(async () => {
+      await Promise.resolve();
+    });
     expect(stub.startRecording).not.toHaveBeenCalled();
     expect(result.current.isRecording).toBe(false);
   });
@@ -45,7 +49,10 @@ describe("useRecordingSession", () => {
     const { result } = renderHook(() =>
       useRecordingSession({ session: stubAsSession(stub), enabled: true }),
     );
-    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
     expect(stub.clearRecording).toHaveBeenCalledTimes(1);
     expect(stub.startRecording).toHaveBeenCalledTimes(1);
     expect(result.current.isRecording).toBe(true);
@@ -59,10 +66,9 @@ describe("useRecordingSession", () => {
     // The startedSessionRef guard makes the second mount a no-op (exercises the
     // `startedSessionRef.current === session` early return). startRecording is
     // therefore never called more than once.
-    const { result } = renderHook(
-      () => useRecordingSession({ session, enabled: true }),
-      { wrapper: StrictMode },
-    );
+    const { result } = renderHook(() => useRecordingSession({ session, enabled: true }), {
+      wrapper: StrictMode,
+    });
     await act(async () => {
       await Promise.resolve();
       await Promise.resolve();
@@ -80,7 +86,10 @@ describe("useRecordingSession", () => {
         clearOnStart: false,
       }),
     );
-    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
     expect(stub.clearRecording).not.toHaveBeenCalled();
     expect(stub.startRecording).toHaveBeenCalledTimes(1);
   });
@@ -97,7 +106,10 @@ describe("useRecordingSession", () => {
         seedTimeRange: seed,
       }),
     );
-    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
     expect(seed).toHaveBeenCalledWith({ earliest: fixedNow, latest: fixedNow });
     vi.restoreAllMocks();
   });
@@ -116,10 +128,15 @@ describe("useRecordingSession", () => {
         ],
       }),
     );
-    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
 
     // Advance ~250ms — cpu should fire ~2 times, mem ~1.
-    act(() => { vi.advanceTimersByTime(250); });
+    act(() => {
+      vi.advanceTimersByTime(250);
+    });
 
     expect(cpuProduce).toHaveBeenCalled();
     expect(memProduce).toHaveBeenCalled();
@@ -146,14 +163,21 @@ describe("useRecordingSession", () => {
         channels: [{ channelId: "x", intervalMs: 100, produce }],
       }),
     );
-    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
 
-    act(() => { vi.advanceTimersByTime(150); });
+    act(() => {
+      vi.advanceTimersByTime(150);
+    });
     const recordsBefore = stub.record.mock.calls.length;
     expect(recordsBefore).toBeGreaterThan(0);
 
     unmount();
-    act(() => { vi.advanceTimersByTime(500); });
+    act(() => {
+      vi.advanceTimersByTime(500);
+    });
     // No new ticks fired after unmount.
     expect(stub.record.mock.calls.length).toBe(recordsBefore);
   });
@@ -181,9 +205,14 @@ describe("useRecordingSession", () => {
         useRecordingSession({ session, enabled: true }),
       { initialProps: { session: stubAsSession(stub) } },
     );
-    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
     rerender({ session: stubAsSession(stub) }); // same instance
-    await act(async () => { await Promise.resolve(); });
+    await act(async () => {
+      await Promise.resolve();
+    });
     expect(stub.clearRecording).toHaveBeenCalledTimes(1);
     expect(stub.startRecording).toHaveBeenCalledTimes(1);
   });
@@ -192,7 +221,10 @@ describe("useRecordingSession", () => {
     const stub = makeSessionStub();
     let resolveClear!: () => void;
     stub.clearRecording.mockImplementation(
-      () => new Promise<void>((res) => { resolveClear = res; }),
+      () =>
+        new Promise<void>((res) => {
+          resolveClear = res;
+        }),
     );
 
     const { unmount } = renderHook(() =>
@@ -215,13 +247,19 @@ describe("useRecordingSession", () => {
     const stub = makeSessionStub();
     let resolveStart!: () => void;
     stub.startRecording.mockImplementation(
-      () => new Promise<void>((res) => { resolveStart = res; }),
+      () =>
+        new Promise<void>((res) => {
+          resolveStart = res;
+        }),
     );
 
     const { result, unmount } = renderHook(() =>
       useRecordingSession({ session: stubAsSession(stub), enabled: true }),
     );
-    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
 
     // clearRecording done, startRecording is hanging — unmount
     unmount();
@@ -253,13 +291,19 @@ describe("useRecordingSession", () => {
     const stub = makeSessionStub();
     let rejectStart!: (e: Error) => void;
     stub.startRecording.mockImplementation(
-      () => new Promise<void>((_res, rej) => { rejectStart = rej; }),
+      () =>
+        new Promise<void>((_res, rej) => {
+          rejectStart = rej;
+        }),
     );
 
     const { result, unmount } = renderHook(() =>
       useRecordingSession({ session: stubAsSession(stub), enabled: true }),
     );
-    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
 
     unmount(); // sets cancelled=true
     rejectStart(new Error("post-cancel error"));

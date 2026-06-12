@@ -83,12 +83,30 @@ export function ScatterColoredDemoPage() {
   });
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", width: "100%", height: "100%", background: THEME.page.background }}>
-      <div style={{ padding: "8px 12px", display: "flex", gap: 12, alignItems: "center", borderBottom: `1px solid ${THEME.page.border}` }}>
+    <div
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        width: "100%",
+        height: "100%",
+        background: THEME.page.background,
+      }}
+    >
+      <div
+        style={{
+          padding: "8px 12px",
+          display: "flex",
+          gap: 12,
+          alignItems: "center",
+          borderBottom: `1px solid ${THEME.page.border}`,
+        }}
+      >
         <span style={{ fontSize: 12, color: THEME.page.textSecondary }}>
           Color encodes speed · size encodes magnitude · {hz} Hz
         </span>
-        <div style={{ marginLeft: "auto", display: "flex", gap: 8, alignItems: "center" }}>
+        <div
+          style={{ marginLeft: "auto", display: "flex", gap: 8, alignItems: "center" }}
+        >
           <span style={{ fontSize: 12, color: THEME.page.textSecondary }}>Colormap:</span>
           {COLORMAPS.map((cm) => (
             <button
@@ -97,7 +115,10 @@ export function ScatterColoredDemoPage() {
               style={{
                 padding: "3px 10px",
                 fontSize: 11,
-                background: cm === colormap ? THEME.button.background : THEME.button.inactiveBackground,
+                background:
+                  cm === colormap
+                    ? THEME.button.background
+                    : THEME.button.inactiveBackground,
                 color: cm === colormap ? THEME.button.text : THEME.button.inactiveText,
                 border: `1px solid ${cm === colormap ? THEME.button.border : THEME.button.inactiveBorder}`,
                 borderRadius: 4,
@@ -107,7 +128,11 @@ export function ScatterColoredDemoPage() {
               {cm}
             </button>
           ))}
-          <WindowSelector value={windowMs} onChange={setWindowMs} options={WINDOW_OPTIONS} />
+          <WindowSelector
+            value={windowMs}
+            onChange={setWindowMs}
+            options={WINDOW_OPTIONS}
+          />
         </div>
       </div>
       <div style={{ flex: 1, position: "relative", minHeight: 0 }}>

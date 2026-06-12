@@ -1,6 +1,5 @@
-import { useMemo, useEffect } from "react";
-import type { FluxionHost } from "../../../features/host";
-import type { XyPoint } from "../../../features/host";
+import { useEffect, useMemo } from "react";
+import type { FluxionHost, XyPoint } from "../../../features/host";
 
 export interface UseFluxionHistoricalOptions {
   /** Host returned by `onReady` / `useFluxionCanvas`. No-op while null. */
@@ -39,10 +38,7 @@ export function useFluxionHistorical({
   data,
   layout = "xy",
 }: UseFluxionHistoricalOptions): void {
-  const handle = useMemo(
-    () => (host ? host.lineStatic(layerId) : null),
-    [host, layerId],
-  );
+  const handle = useMemo(() => (host ? host.lineStatic(layerId) : null), [host, layerId]);
 
   useEffect(() => {
     if (!handle || !data || data.length === 0) return;

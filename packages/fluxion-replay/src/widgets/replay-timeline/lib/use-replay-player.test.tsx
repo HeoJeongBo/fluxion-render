@@ -1,4 +1,4 @@
-import { renderHook, act } from "@testing-library/react";
+import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ReplayPlayer } from "../../../features/player/model/replay-player";
 import { ReplayStore } from "../../../features/store/model/replay-store";
@@ -29,13 +29,19 @@ describe("useReplayPlayer", () => {
     const player = makePlayer();
     const { result } = renderHook(() => useReplayPlayer(player));
 
-    act(() => { player.play(); });
+    act(() => {
+      player.play();
+    });
     expect(result.current.state).toBe("playing");
 
-    act(() => { player.pause(); });
+    act(() => {
+      player.pause();
+    });
     expect(result.current.state).toBe("paused");
 
-    act(() => { player.stop(); });
+    act(() => {
+      player.stop();
+    });
     expect(result.current.state).toBe("stopped");
 
     player.dispose();
@@ -59,13 +65,19 @@ describe("useReplayPlayer", () => {
     const player = makePlayer();
     const { result } = renderHook(() => useReplayPlayer(player));
 
-    act(() => { result.current.play(); });
+    act(() => {
+      result.current.play();
+    });
     expect(player.state).toBe("playing");
 
-    act(() => { result.current.pause(); });
+    act(() => {
+      result.current.pause();
+    });
     expect(player.state).toBe("paused");
 
-    act(() => { result.current.stop(); });
+    act(() => {
+      result.current.stop();
+    });
     expect(player.state).toBe("stopped");
 
     player.dispose();
@@ -98,7 +110,9 @@ describe("useReplayPlayer", () => {
     const player = makePlayer();
     const seekSpy = vi.spyOn(player, "seek");
     const { result } = renderHook(() => useReplayPlayer(player));
-    act(() => { result.current.seek(3000); });
+    act(() => {
+      result.current.seek(3000);
+    });
     expect(seekSpy).toHaveBeenCalledWith(3000);
     player.dispose();
   });
@@ -107,10 +121,16 @@ describe("useReplayPlayer", () => {
     const player = makePlayer();
     const { result } = renderHook(() => useReplayPlayer(player));
     // Start and pause so the player has a known state
-    act(() => { player.play(); });
-    act(() => { player.pause(); });
+    act(() => {
+      player.play();
+    });
+    act(() => {
+      player.pause();
+    });
     // Seek to a specific position — currentT must update without waiting for a tick
-    act(() => { result.current.seek(7000); });
+    act(() => {
+      result.current.seek(7000);
+    });
     expect(result.current.currentT).toBe(7000);
     player.dispose();
   });
@@ -130,18 +150,26 @@ describe("useReplayPlayer", () => {
       // Use the hook's seek so setCurrentT is updated synchronously (the API
       // contract — outside players calling player.seek directly won't reflect
       // until the next onTick).
-      act(() => { result.current.seek(3_000); });
+      act(() => {
+        result.current.seek(3_000);
+      });
       expect(result.current.currentT).toBe(3_000);
 
-      act(() => { result.current.play(1); });
+      act(() => {
+        result.current.play(1);
+      });
       expect(result.current.currentT).toBeGreaterThanOrEqual(3_000);
 
       // Phase 14: currentT only ticks when the second boundary is crossed.
       // Advance well past 1s so the boundary at 4000ms triggers.
-      act(() => { vi.advanceTimersByTime(1_200); });
+      act(() => {
+        vi.advanceTimersByTime(1_200);
+      });
       expect(result.current.currentT).toBeGreaterThan(3_000);
 
-      act(() => { vi.advanceTimersByTime(1_200); });
+      act(() => {
+        vi.advanceTimersByTime(1_200);
+      });
       expect(result.current.currentT).toBeGreaterThan(4_000);
 
       player.stop();
@@ -152,10 +180,16 @@ describe("useReplayPlayer", () => {
       const player = makePlayer();
       const { result, rerender } = renderHook(() => useReplayPlayer(player));
 
-      act(() => { result.current.seek(2_000); });
-      act(() => { result.current.play(1); });
+      act(() => {
+        result.current.seek(2_000);
+      });
+      act(() => {
+        result.current.play(1);
+      });
       // Phase 14: need to cross the 1s boundary so currentT actually moves.
-      act(() => { vi.advanceTimersByTime(1_200); });
+      act(() => {
+        vi.advanceTimersByTime(1_200);
+      });
 
       const tBeforeRerenders = result.current.currentT;
       expect(tBeforeRerenders).toBeGreaterThan(2_000);
@@ -171,7 +205,9 @@ describe("useReplayPlayer", () => {
       expect(result.current.currentT).toBeGreaterThanOrEqual(tBeforeRerenders);
 
       // And continues to advance after the re-renders.
-      act(() => { vi.advanceTimersByTime(1_200); });
+      act(() => {
+        vi.advanceTimersByTime(1_200);
+      });
       expect(result.current.currentT).toBeGreaterThan(tBeforeRerenders);
 
       player.stop();
@@ -182,8 +218,12 @@ describe("useReplayPlayer", () => {
       const player = makePlayer();
       const { result, rerender } = renderHook(() => useReplayPlayer(player));
 
-      act(() => { result.current.seek(4_000); });
-      act(() => { result.current.play(1); });
+      act(() => {
+        result.current.seek(4_000);
+      });
+      act(() => {
+        result.current.play(1);
+      });
 
       // Tick → rerender → tick → rerender pattern. Catches "effect re-mount
       // unsubscribes the live onTick listener and the next tick is lost".
@@ -191,7 +231,9 @@ describe("useReplayPlayer", () => {
       // the 10-sample window (10×300=3s of virtual time = 3 boundary hits).
       const samples: number[] = [];
       for (let i = 0; i < 10; i++) {
-        act(() => { vi.advanceTimersByTime(300); });
+        act(() => {
+          vi.advanceTimersByTime(300);
+        });
         rerender();
         samples.push(result.current.currentT);
       }
@@ -231,19 +273,27 @@ describe("useReplayPlayer", () => {
       const player = makePlayer();
       const { result } = renderHook(() => useReplayPlayer(player));
 
-      act(() => { result.current.seek(1_000); });
-      act(() => { result.current.play(1); });
+      act(() => {
+        result.current.seek(1_000);
+      });
+      act(() => {
+        result.current.play(1);
+      });
       const t0 = result.current.currentT;
 
       // Phase 14 snap: each 1s of wall time crosses exactly one second
       // boundary, advancing currentT by 1000ms. Use 2s so we're well past
       // the boundary regardless of when the first tick within the window
       // happens to fire.
-      act(() => { vi.advanceTimersByTime(2_000); });
+      act(() => {
+        vi.advanceTimersByTime(2_000);
+      });
       expect(result.current.currentT).toBeGreaterThanOrEqual(t0 + 1_000);
 
       const t1 = result.current.currentT;
-      act(() => { vi.advanceTimersByTime(2_000); });
+      act(() => {
+        vi.advanceTimersByTime(2_000);
+      });
       expect(result.current.currentT).toBeGreaterThanOrEqual(t1 + 1_000);
 
       player.stop();
@@ -259,7 +309,12 @@ describe("useReplayPlayer", () => {
       timeRange: { earliest: 0, latest: 1000 },
     });
     const { result, rerender } = renderHook(() => useReplayPlayer(player));
-    const r0 = { play: result.current.play, pause: result.current.pause, stop: result.current.stop, seek: result.current.seek };
+    const r0 = {
+      play: result.current.play,
+      pause: result.current.pause,
+      stop: result.current.stop,
+      seek: result.current.seek,
+    };
     rerender();
     rerender();
     expect(result.current.play).toBe(r0.play);
@@ -279,9 +334,13 @@ describe("useReplayPlayer", () => {
         timeRange: { earliest: 0, latest: 30_000 },
       });
       const { result } = renderHook(() => useReplayPlayer(player));
-      act(() => { result.current.seek(3_217); });
+      act(() => {
+        result.current.seek(3_217);
+      });
       expect(result.current.currentT).toBe(3_000);
-      act(() => { result.current.seek(7_999); });
+      act(() => {
+        result.current.seek(7_999);
+      });
       expect(result.current.currentT).toBe(7_000);
       player.dispose();
     });
@@ -289,11 +348,17 @@ describe("useReplayPlayer", () => {
     it("a sub-second tick does NOT change currentT (boundary not crossed)", () => {
       const player = makePlayer();
       const { result } = renderHook(() => useReplayPlayer(player));
-      act(() => { result.current.seek(5_000); });
-      act(() => { result.current.play(1); });
+      act(() => {
+        result.current.seek(5_000);
+      });
+      act(() => {
+        result.current.play(1);
+      });
       const before = result.current.currentT;
       // 900ms < 1000ms — boundary not crossed, no update.
-      act(() => { vi.advanceTimersByTime(900); });
+      act(() => {
+        vi.advanceTimersByTime(900);
+      });
       expect(result.current.currentT).toBe(before);
       player.stop();
       player.dispose();
@@ -302,17 +367,25 @@ describe("useReplayPlayer", () => {
     it("crossing a second boundary updates currentT in 1-second increments", () => {
       const player = makePlayer();
       const { result } = renderHook(() => useReplayPlayer(player));
-      act(() => { result.current.seek(4_000); });
-      act(() => { result.current.play(1); });
+      act(() => {
+        result.current.seek(4_000);
+      });
+      act(() => {
+        result.current.play(1);
+      });
       // 1500ms wall ≈ 1500ms virtual → at least one boundary crossed. The
       // exact landing depends on when the 250ms poll fires relative to the
       // boundary, so check the value lands on a 1s grid and moved forward.
-      act(() => { vi.advanceTimersByTime(1_500); });
+      act(() => {
+        vi.advanceTimersByTime(1_500);
+      });
       const t1 = result.current.currentT;
       expect(t1).toBeGreaterThanOrEqual(5_000);
       expect(t1 % 1000).toBe(0);
       // Another 1500ms guarantees a further boundary cross.
-      act(() => { vi.advanceTimersByTime(1_500); });
+      act(() => {
+        vi.advanceTimersByTime(1_500);
+      });
       const t2 = result.current.currentT;
       expect(t2).toBeGreaterThan(t1);
       expect(t2 % 1000).toBe(0);
@@ -323,12 +396,18 @@ describe("useReplayPlayer", () => {
     it("rate=2 accelerates how often the boundary is crossed", () => {
       const player = makePlayer();
       const { result } = renderHook(() => useReplayPlayer(player));
-      act(() => { result.current.seek(2_000); });
-      act(() => { result.current.play(2); });
+      act(() => {
+        result.current.seek(2_000);
+      });
+      act(() => {
+        result.current.play(2);
+      });
       // 600ms wall × rate 2 = 1200ms virtual → 1 boundary crossed.
       // Poll fires every 250ms — within 600ms wall, polls at 250 / 500 fire
       // before our assertion. The 500ms poll sees clock at 3000 → snapped.
-      act(() => { vi.advanceTimersByTime(600); });
+      act(() => {
+        vi.advanceTimersByTime(600);
+      });
       expect(result.current.currentT).toBe(3_000);
       player.stop();
       player.dispose();
@@ -346,11 +425,17 @@ describe("useReplayPlayer", () => {
       // The hook MUST NOT have subscribed to onTick (Phase 15 change).
       expect(onTickSpy).not.toHaveBeenCalled();
 
-      act(() => { result.current.seek(5_000); });
-      act(() => { result.current.play(1); });
+      act(() => {
+        result.current.seek(5_000);
+      });
+      act(() => {
+        result.current.play(1);
+      });
       // 1.2s wall — interval at 250ms fires ~4 times. The 1000ms poll lands
       // on a fresh boundary and lifts currentT to 6000.
-      act(() => { vi.advanceTimersByTime(1_200); });
+      act(() => {
+        vi.advanceTimersByTime(1_200);
+      });
       expect(result.current.currentT).toBeGreaterThanOrEqual(6_000);
       expect(result.current.currentT % 1000).toBe(0);
 
@@ -366,7 +451,9 @@ describe("useReplayPlayer", () => {
     it("snapMs: 0 disables snapping — currentT mirrors raw player.currentT", () => {
       const player = makePlayer();
       const { result } = renderHook(() => useReplayPlayer(player, { snapMs: 0 }));
-      act(() => { result.current.seek(3_217); });
+      act(() => {
+        result.current.seek(3_217);
+      });
       // No snap → React-state value is the exact seek target.
       expect(result.current.currentT).toBe(3_217);
       player.dispose();
@@ -375,9 +462,13 @@ describe("useReplayPlayer", () => {
     it("snapMs: 100 snaps to 100 ms boundaries", () => {
       const player = makePlayer();
       const { result } = renderHook(() => useReplayPlayer(player, { snapMs: 100 }));
-      act(() => { result.current.seek(3_217); });
+      act(() => {
+        result.current.seek(3_217);
+      });
       expect(result.current.currentT).toBe(3_200); // floor(3217 / 100) * 100
-      act(() => { result.current.seek(7_999); });
+      act(() => {
+        result.current.seek(7_999);
+      });
       expect(result.current.currentT).toBe(7_900);
       player.dispose();
     });
@@ -385,9 +476,13 @@ describe("useReplayPlayer", () => {
     it("snapMs: 5000 snaps to 5-second boundaries", () => {
       const player = makePlayer(0, 30_000);
       const { result } = renderHook(() => useReplayPlayer(player, { snapMs: 5_000 }));
-      act(() => { result.current.seek(12_345); });
+      act(() => {
+        result.current.seek(12_345);
+      });
       expect(result.current.currentT).toBe(10_000);
-      act(() => { result.current.seek(17_999); });
+      act(() => {
+        result.current.seek(17_999);
+      });
       expect(result.current.currentT).toBe(15_000);
       player.dispose();
     });
@@ -397,11 +492,17 @@ describe("useReplayPlayer", () => {
       const { result } = renderHook(() =>
         useReplayPlayer(player, { snapMs: 1000, pollMs: 50 }),
       );
-      act(() => { result.current.seek(4_000); });
-      act(() => { result.current.play(1); });
+      act(() => {
+        result.current.seek(4_000);
+      });
+      act(() => {
+        result.current.play(1);
+      });
       // 1100 ms wall → at pollMs=50 we get ~22 polls; one of them sees the
       // 5000 boundary cross.
-      act(() => { vi.advanceTimersByTime(1_100); });
+      act(() => {
+        vi.advanceTimersByTime(1_100);
+      });
       expect(result.current.currentT).toBeGreaterThanOrEqual(5_000);
       player.stop();
       player.dispose();
@@ -410,7 +511,9 @@ describe("useReplayPlayer", () => {
     it("default options stay backwards-compatible (snapMs=1000, pollMs=250)", () => {
       const player = makePlayer();
       const { result } = renderHook(() => useReplayPlayer(player));
-      act(() => { result.current.seek(3_217); });
+      act(() => {
+        result.current.seek(3_217);
+      });
       // Default snap → 3000.
       expect(result.current.currentT).toBe(3_000);
       player.dispose();
@@ -419,6 +522,10 @@ describe("useReplayPlayer", () => {
 
   it("seek() is a no-op when player is null", () => {
     const { result } = renderHook(() => useReplayPlayer(null));
-    expect(() => act(() => { result.current.seek(5_000); })).not.toThrow();
+    expect(() =>
+      act(() => {
+        result.current.seek(5_000);
+      }),
+    ).not.toThrow();
   });
 });

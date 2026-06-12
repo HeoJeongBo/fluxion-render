@@ -46,7 +46,11 @@ export class PoseArrowLayer implements Layer {
     if (c.color !== undefined) this.color = c.color;
     if (c.visible !== undefined) this.visible = c.visible;
     let newCapacity: number | undefined = c.capacity;
-    if (newCapacity === undefined && c.retentionMs !== undefined && c.maxHz !== undefined) {
+    if (
+      newCapacity === undefined &&
+      c.retentionMs !== undefined &&
+      c.maxHz !== undefined
+    ) {
       newCapacity = Math.ceil((c.retentionMs / 1000) * c.maxHz * 1.1);
     }
     if (newCapacity !== undefined && newCapacity !== this.ring.capacity) {

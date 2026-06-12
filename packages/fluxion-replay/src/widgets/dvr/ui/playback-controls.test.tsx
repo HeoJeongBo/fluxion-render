@@ -49,8 +49,8 @@ describe("PlaybackControls", () => {
   it("calls onRateChange with the correct rate when a rate button is clicked", () => {
     const props = make();
     const { container } = render(<PlaybackControls {...props} />);
-    const rateButtons = Array.from(container.querySelectorAll("button")).filter(
-      (b) => b.textContent?.includes("×"),
+    const rateButtons = Array.from(container.querySelectorAll("button")).filter((b) =>
+      b.textContent?.includes("×"),
     );
     const twoX = rateButtons.find((b) => b.textContent === "2×")!;
     fireEvent.click(twoX);
@@ -60,7 +60,9 @@ describe("PlaybackControls", () => {
   it("renders custom rates", () => {
     const props = make({ rates: [1, 2, 8] });
     const { container } = render(<PlaybackControls {...props} />);
-    const labels = Array.from(container.querySelectorAll("button")).map((b) => b.textContent);
+    const labels = Array.from(container.querySelectorAll("button")).map(
+      (b) => b.textContent,
+    );
     expect(labels).toContain("8×");
     expect(labels).not.toContain("0.5×");
   });

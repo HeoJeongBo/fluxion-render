@@ -1,5 +1,4 @@
-import type { FluxionHost } from "@heojeongbo/fluxion-render";
-import type { HeatmapPoint } from "@heojeongbo/fluxion-render";
+import type { FluxionHost, HeatmapPoint } from "@heojeongbo/fluxion-render";
 import {
   axisGridLayer,
   FluxionCanvas,
@@ -110,7 +109,10 @@ export function HeatmapDemoPage() {
               fontSize: 11,
               border: `1px solid ${cm === colormap ? THEME.button.border : THEME.page.border}`,
               borderRadius: 4,
-              background: cm === colormap ? THEME.button.background : THEME.button.inactiveBackground,
+              background:
+                cm === colormap
+                  ? THEME.button.background
+                  : THEME.button.inactiveBackground,
               color: cm === colormap ? THEME.button.text : THEME.button.inactiveText,
               cursor: "pointer",
             }}
@@ -118,7 +120,9 @@ export function HeatmapDemoPage() {
             {cm}
           </button>
         ))}
-        <span>· {COLS}×{ROWS} sine wave</span>
+        <span>
+          · {COLS}×{ROWS} sine wave
+        </span>
       </div>
     </div>
   );

@@ -20,11 +20,15 @@ function makeHostStub(): FluxionHost & {
         if (i >= 0) listeners.splice(i, 1);
       };
     },
-    onBoundsChange() { return () => {}; },
+    onBoundsChange() {
+      return () => {};
+    },
     _fireTickUpdate(x: SerializedTick[], y: SerializedTick[]) {
       for (const fn of listeners) fn(x, y);
     },
-  } as unknown as FluxionHost & { _fireTickUpdate: (x: SerializedTick[], y: SerializedTick[]) => void };
+  } as unknown as FluxionHost & {
+    _fireTickUpdate: (x: SerializedTick[], y: SerializedTick[]) => void;
+  };
 }
 
 // Capture ticks from the hook inside a test component.
@@ -125,13 +129,7 @@ describe("useAxisTicks", () => {
 
     it("does not start a setInterval in fixed mode", () => {
       const spy = vi.spyOn(globalThis, "setInterval");
-      render(
-        <Harness
-          layers={FIXED_LAYERS}
-          axisLayerId="axis"
-          onTicks={() => {}}
-        />,
-      );
+      render(<Harness layers={FIXED_LAYERS} axisLayerId="axis" onTicks={() => {}} />);
       expect(spy).not.toHaveBeenCalled();
       spy.mockRestore();
     });
@@ -164,13 +162,7 @@ describe("useAxisTicks", () => {
 
     it("does not install setInterval timers in time mode (worker-driven)", () => {
       const spy = vi.spyOn(globalThis, "setInterval");
-      render(
-        <Harness
-          layers={TIME_LAYERS}
-          axisLayerId="axis"
-          onTicks={() => {}}
-        />,
-      );
+      render(<Harness layers={TIME_LAYERS} axisLayerId="axis" onTicks={() => {}} />);
       expect(spy).not.toHaveBeenCalled();
       spy.mockRestore();
     });
@@ -187,7 +179,9 @@ describe("useAxisTicks", () => {
         />,
       );
       const countAfterMount = received.length;
-      act(() => { host._fireTickUpdate(SAMPLE_X, SAMPLE_Y); });
+      act(() => {
+        host._fireTickUpdate(SAMPLE_X, SAMPLE_Y);
+      });
       expect(received.length).toBeGreaterThan(countAfterMount);
       const last = received[received.length - 1]!;
       expect(last.xTicks).toEqual(SAMPLE_X);
@@ -205,10 +199,14 @@ describe("useAxisTicks", () => {
           onTicks={(t) => received.push(t)}
         />,
       );
-      act(() => { host._fireTickUpdate(SAMPLE_X, SAMPLE_Y); });
+      act(() => {
+        host._fireTickUpdate(SAMPLE_X, SAMPLE_Y);
+      });
       const countAfterFirst = received.length;
       // Fire again with identical data — state should not change
-      act(() => { host._fireTickUpdate(SAMPLE_X, SAMPLE_Y); });
+      act(() => {
+        host._fireTickUpdate(SAMPLE_X, SAMPLE_Y);
+      });
       expect(received.length).toBe(countAfterFirst);
     });
 
@@ -223,13 +221,17 @@ describe("useAxisTicks", () => {
           onTicks={(t) => received.push(t)}
         />,
       );
-      act(() => { host._fireTickUpdate(SAMPLE_X, SAMPLE_Y); });
+      act(() => {
+        host._fireTickUpdate(SAMPLE_X, SAMPLE_Y);
+      });
       const countAfterFirst = received.length;
       const updatedX: SerializedTick[] = [
         { value: 1000, label: "00:00:01", fraction: 0 },
         { value: 2000, label: "00:00:02", fraction: 0.2 },
       ];
-      act(() => { host._fireTickUpdate(updatedX, SAMPLE_Y); });
+      act(() => {
+        host._fireTickUpdate(updatedX, SAMPLE_Y);
+      });
       expect(received.length).toBeGreaterThan(countAfterFirst);
       expect(received[received.length - 1]!.xTicks).toEqual(updatedX);
     });
@@ -264,7 +266,9 @@ describe("useAxisTicks", () => {
         { value: 0, label: "", fraction: 0 },
         { value: 1000, label: "", fraction: 0.2 },
       ];
-      act(() => { host._fireTickUpdate(rawX, SAMPLE_Y); });
+      act(() => {
+        host._fireTickUpdate(rawX, SAMPLE_Y);
+      });
       const last = received[received.length - 1]!;
       expect(last.xTicks[0]!.label).toBe("0ms");
       expect(last.xTicks[1]!.label).toBe("1000ms");
@@ -281,11 +285,18 @@ describe("useAxisTicks", () => {
           onTicks={(t) => received.push(t)}
         />,
       );
-      act(() => { host._fireTickUpdate(SAMPLE_X, SAMPLE_Y); });
+      act(() => {
+        host._fireTickUpdate(SAMPLE_X, SAMPLE_Y);
+      });
       const countAfterFirst = received.length;
       // Same labels, different fraction
-      const shiftedX: SerializedTick[] = SAMPLE_X.map((t) => ({ ...t, fraction: t.fraction + 0.1 }));
-      act(() => { host._fireTickUpdate(shiftedX, SAMPLE_Y); });
+      const shiftedX: SerializedTick[] = SAMPLE_X.map((t) => ({
+        ...t,
+        fraction: t.fraction + 0.1,
+      }));
+      act(() => {
+        host._fireTickUpdate(shiftedX, SAMPLE_Y);
+      });
       expect(received.length).toBeGreaterThan(countAfterFirst);
     });
 
@@ -300,13 +311,17 @@ describe("useAxisTicks", () => {
           onTicks={(t) => received.push(t)}
         />,
       );
-      act(() => { host._fireTickUpdate(SAMPLE_X, SAMPLE_Y); });
+      act(() => {
+        host._fireTickUpdate(SAMPLE_X, SAMPLE_Y);
+      });
       const countAfterFirst = received.length;
       const newY: SerializedTick[] = [
         { value: -2, label: "-2", fraction: 0 },
         { value: 2, label: "2", fraction: 1 },
       ];
-      act(() => { host._fireTickUpdate(SAMPLE_X, newY); });
+      act(() => {
+        host._fireTickUpdate(SAMPLE_X, newY);
+      });
       expect(received.length).toBeGreaterThan(countAfterFirst);
       expect(received[received.length - 1]!.yTicks).toEqual(newY);
     });
@@ -338,7 +353,9 @@ describe("useAxisTicks", () => {
           onTicks={(t) => received.push(t)}
         />,
       );
-      act(() => { host._fireTickUpdate(SAMPLE_X, SAMPLE_Y); });
+      act(() => {
+        host._fireTickUpdate(SAMPLE_X, SAMPLE_Y);
+      });
       expect(received[received.length - 1]!.xTicks).toEqual(SAMPLE_X);
 
       act(() => {
@@ -368,7 +385,9 @@ describe("useAxisTicks", () => {
           onTicks={(t) => received.push(t)}
         />,
       );
-      act(() => { host1._fireTickUpdate(SAMPLE_X, SAMPLE_Y); });
+      act(() => {
+        host1._fireTickUpdate(SAMPLE_X, SAMPLE_Y);
+      });
 
       act(() => {
         rerender(
@@ -384,14 +403,18 @@ describe("useAxisTicks", () => {
       const countAfterSwitch = received.length;
 
       // Firing old host after switch must NOT update state
-      act(() => { host1._fireTickUpdate(SAMPLE_X, SAMPLE_Y); });
+      act(() => {
+        host1._fireTickUpdate(SAMPLE_X, SAMPLE_Y);
+      });
       expect(received.length).toBe(countAfterSwitch);
 
       // But new host2 should still work
       const updatedX: SerializedTick[] = [
         { value: 2000, label: "00:00:02", fraction: 0 },
       ];
-      act(() => { host2._fireTickUpdate(updatedX, SAMPLE_Y); });
+      act(() => {
+        host2._fireTickUpdate(updatedX, SAMPLE_Y);
+      });
       expect(received.length).toBeGreaterThan(countAfterSwitch);
     });
 
@@ -406,10 +429,14 @@ describe("useAxisTicks", () => {
           onTicks={(t) => received.push(t)}
         />,
       );
-      act(() => { unmount(); });
+      act(() => {
+        unmount();
+      });
       const countAfterUnmount = received.length;
       // Should not throw or update state after unmount
-      act(() => { host._fireTickUpdate(SAMPLE_X, SAMPLE_Y); });
+      act(() => {
+        host._fireTickUpdate(SAMPLE_X, SAMPLE_Y);
+      });
       expect(received.length).toBe(countAfterUnmount);
     });
 
@@ -424,7 +451,9 @@ describe("useAxisTicks", () => {
           onTicks={(t) => received.push(t)}
         />,
       );
-      act(() => { host._fireTickUpdate(SAMPLE_X, SAMPLE_Y); });
+      act(() => {
+        host._fireTickUpdate(SAMPLE_X, SAMPLE_Y);
+      });
       const countAfterFirst = received.length;
       // Same length but different label at index 0 — yTicksEqual returns false mid-loop
       const differentLabel: SerializedTick[] = [
@@ -432,7 +461,9 @@ describe("useAxisTicks", () => {
         { value: 0, label: "0", fraction: 0.5 },
         { value: 1, label: "1", fraction: 1 },
       ];
-      act(() => { host._fireTickUpdate(SAMPLE_X, differentLabel); });
+      act(() => {
+        host._fireTickUpdate(SAMPLE_X, differentLabel);
+      });
       expect(received.length).toBeGreaterThan(countAfterFirst);
     });
 
@@ -446,7 +477,9 @@ describe("useAxisTicks", () => {
           // unsub is a no-op — listener stays registered
           return () => {};
         },
-        onBoundsChange() { return () => {}; },
+        onBoundsChange() {
+          return () => {};
+        },
       } as unknown as FluxionHost;
 
       const received: (AxisTickSet | null)[] = [];
@@ -460,11 +493,15 @@ describe("useAxisTicks", () => {
       );
 
       // Unmount: cleanup runs → active = false (unsub is no-op so listener stays)
-      act(() => { unmount(); });
+      act(() => {
+        unmount();
+      });
       const countAfterUnmount = received.length;
 
       // Stale callback fires after active=false — must be ignored by the guard
-      act(() => { storedCb!(SAMPLE_X, SAMPLE_Y); });
+      act(() => {
+        storedCb!(SAMPLE_X, SAMPLE_Y);
+      });
       expect(received.length).toBe(countAfterUnmount);
     });
 
@@ -526,7 +563,9 @@ describe("useAxisTicks", () => {
           onTicks={(t) => received.push(t)}
         />,
       );
-      act(() => { host._fireTickUpdate(SAMPLE_X, SAMPLE_Y); });
+      act(() => {
+        host._fireTickUpdate(SAMPLE_X, SAMPLE_Y);
+      });
       expect(received[received.length - 1]!.xTicks).toEqual(SAMPLE_X);
 
       act(() => {

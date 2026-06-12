@@ -5,17 +5,17 @@ import type { LineChartStaticConfig } from "../../../entities/line-chart-static-
 import type { FluxionWorkerPool } from "../../../features/worker-pool";
 import { getDefaultPool } from "../../../features/worker-pool";
 import {
-  Op,
-  WorkerOp,
   type AxisStyle,
   type BoundsUpdateMsg,
   type DType,
   type FluxionPoolStreamMsg,
   type HostMsg,
   type LayerKind,
+  Op,
   type SerializedTick,
   type TickUpdateMsg,
   type WorkerMsg,
+  WorkerOp,
 } from "../../../shared/protocol";
 import {
   AreaLayerHandle,
@@ -108,7 +108,10 @@ function dtypeOf(arr: FluxionTypedArray): DType {
 export type BoundsChangeListener = (yMin: number, yMax: number, latestT: number) => void;
 
 /** Callback shape for `onTickUpdate`. Receives serialized tick arrays from the worker. */
-export type TickUpdateListener = (xTicks: SerializedTick[], yTicks: SerializedTick[]) => void;
+export type TickUpdateListener = (
+  xTicks: SerializedTick[],
+  yTicks: SerializedTick[],
+) => void;
 
 export class FluxionHost {
   private worker: {

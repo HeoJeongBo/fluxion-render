@@ -10,11 +10,7 @@ import type {
 import { Op } from "../../../shared/protocol";
 
 export class FluxionWorkerHandle extends WorkerHandle<HostMsg> {
-  constructor(
-    worker: Worker,
-    hostId: string,
-    onRelease?: () => void,
-  ) {
+  constructor(worker: Worker, hostId: string, onRelease?: () => void) {
     super(worker, hostId, onRelease);
   }
 

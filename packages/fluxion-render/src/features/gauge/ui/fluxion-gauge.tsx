@@ -72,7 +72,6 @@ function activeColor(value: number, thresholds: GaugeThreshold[]): string {
   return color;
 }
 
-
 // ── Arc gauge (225° → -45°, 270° sweep) ─────────────────────────────────────
 //
 // SVG angle convention: 0° = right, 90° = bottom, 180° = left, 270° = top.
@@ -80,9 +79,17 @@ function activeColor(value: number, thresholds: GaugeThreshold[]): string {
 // which draws the arc across the top — the classic dashboard gauge shape.
 
 function ArcGauge({
-  value, min = 0, max = 100, thresholds = DEFAULT_THRESHOLDS,
-  trackWidth = 10, trackColor = "rgba(0,0,0,0.08)",
-  size = 120, showValue = true, valueFormat, label, classNames = {},
+  value,
+  min = 0,
+  max = 100,
+  thresholds = DEFAULT_THRESHOLDS,
+  trackWidth = 10,
+  trackColor = "rgba(0,0,0,0.08)",
+  size = 120,
+  showValue = true,
+  valueFormat,
+  label,
+  classNames = {},
 }: FluxionGaugeProps) {
   const fmt = valueFormat ?? ((v) => v.toFixed(1));
   const fraction = clamp((value - min) / (max - min), 0, 1);
@@ -103,7 +110,9 @@ function ArcGauge({
   return (
     <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
       <circle
-        cx={cx} cy={cy} r={r}
+        cx={cx}
+        cy={cy}
+        r={r}
         fill="none"
         stroke={trackColor}
         strokeWidth={trackWidth}
@@ -114,7 +123,9 @@ function ArcGauge({
       />
       {fraction > 0 && (
         <circle
-          cx={cx} cy={cy} r={r}
+          cx={cx}
+          cy={cy}
+          r={r}
           fill="none"
           stroke={color}
           strokeWidth={trackWidth}
@@ -126,10 +137,14 @@ function ArcGauge({
       )}
       {showValue && (
         <text
-          x={cx} y={cy + (label ? 0 : size * 0.07)}
-          textAnchor="middle" dominantBaseline="middle"
+          x={cx}
+          y={cy + (label ? 0 : size * 0.07)}
+          textAnchor="middle"
+          dominantBaseline="middle"
           fill={classNames.valueText ? undefined : "#333"}
-          fontSize={size * 0.18} fontFamily="monospace" fontWeight="600"
+          fontSize={size * 0.18}
+          fontFamily="monospace"
+          fontWeight="600"
           className={classNames.valueText}
         >
           {fmt(value)}
@@ -137,10 +152,13 @@ function ArcGauge({
       )}
       {label && (
         <text
-          x={cx} y={cy + size * 0.16}
-          textAnchor="middle" dominantBaseline="middle"
+          x={cx}
+          y={cy + size * 0.16}
+          textAnchor="middle"
+          dominantBaseline="middle"
           fill={classNames.label ? undefined : "#888"}
-          fontSize={size * 0.10} fontFamily="sans-serif"
+          fontSize={size * 0.1}
+          fontFamily="sans-serif"
           className={classNames.label}
         >
           {label}
@@ -153,9 +171,17 @@ function ArcGauge({
 // ── Circle gauge (0–360°, full ring) ────────────────────────────────────────
 
 function CircleGauge({
-  value, min = 0, max = 100, thresholds = DEFAULT_THRESHOLDS,
-  trackWidth = 10, trackColor = "rgba(255,255,255,0.1)",
-  size = 120, showValue = true, valueFormat, label, classNames = {},
+  value,
+  min = 0,
+  max = 100,
+  thresholds = DEFAULT_THRESHOLDS,
+  trackWidth = 10,
+  trackColor = "rgba(255,255,255,0.1)",
+  size = 120,
+  showValue = true,
+  valueFormat,
+  label,
+  classNames = {},
 }: FluxionGaugeProps) {
   const fmt = valueFormat ?? ((v) => v.toFixed(1));
   const fraction = clamp((value - min) / (max - min), 0, 1);
@@ -170,13 +196,19 @@ function CircleGauge({
   return (
     <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
       <circle
-        cx={cx} cy={cy} r={r}
-        fill="none" stroke={trackColor} strokeWidth={trackWidth}
+        cx={cx}
+        cy={cy}
+        r={r}
+        fill="none"
+        stroke={trackColor}
+        strokeWidth={trackWidth}
         className={classNames.track}
       />
       {fraction > 0 && (
         <circle
-          cx={cx} cy={cy} r={r}
+          cx={cx}
+          cy={cy}
+          r={r}
           fill="none"
           stroke={color}
           strokeWidth={trackWidth}
@@ -188,10 +220,12 @@ function CircleGauge({
       )}
       {showValue && (
         <text
-          x={cx} y={cy + 5}
+          x={cx}
+          y={cy + 5}
           textAnchor="middle"
           fill={classNames.valueText ? undefined : "#e2e8f0"}
-          fontSize={size * 0.18} fontFamily="monospace"
+          fontSize={size * 0.18}
+          fontFamily="monospace"
           className={classNames.valueText}
         >
           {fmt(value)}
@@ -199,10 +233,12 @@ function CircleGauge({
       )}
       {label && (
         <text
-          x={cx} y={cy + size * 0.18}
+          x={cx}
+          y={cy + size * 0.18}
           textAnchor="middle"
           fill={classNames.label ? undefined : "rgba(255,255,255,0.5)"}
-          fontSize={size * 0.10} fontFamily="sans-serif"
+          fontSize={size * 0.1}
+          fontFamily="sans-serif"
           className={classNames.label}
         >
           {label}
@@ -215,9 +251,17 @@ function CircleGauge({
 // ── Bar gauge (horizontal) ───────────────────────────────────────────────────
 
 function BarGauge({
-  value, min = 0, max = 100, thresholds = DEFAULT_THRESHOLDS,
+  value,
+  min = 0,
+  max = 100,
+  thresholds = DEFAULT_THRESHOLDS,
   trackColor = "rgba(255,255,255,0.1)",
-  size = 200, barHeight = 20, showValue = true, valueFormat, label, classNames = {},
+  size = 200,
+  barHeight = 20,
+  showValue = true,
+  valueFormat,
+  label,
+  classNames = {},
 }: FluxionGaugeProps) {
   const fmt = valueFormat ?? ((v) => v.toFixed(1));
   const fraction = clamp((value - min) / (max - min), 0, 1);
@@ -228,23 +272,35 @@ function BarGauge({
   return (
     <svg width={size} height={totalH} viewBox={`0 0 ${size} ${totalH}`}>
       <rect
-        x={0} y={0} width={size} height={barHeight} rx={r} ry={r}
+        x={0}
+        y={0}
+        width={size}
+        height={barHeight}
+        rx={r}
+        ry={r}
         fill={trackColor}
         className={classNames.track}
       />
       {fraction > 0 && (
         <rect
-          x={0} y={0} width={fraction * size} height={barHeight} rx={r} ry={r}
+          x={0}
+          y={0}
+          width={fraction * size}
+          height={barHeight}
+          rx={r}
+          ry={r}
           fill={color}
           className={classNames.arc}
         />
       )}
       {showValue && (
         <text
-          x={size / 2} y={barHeight + 14}
+          x={size / 2}
+          y={barHeight + 14}
           textAnchor="middle"
           fill={classNames.valueText ? undefined : "#e2e8f0"}
-          fontSize={12} fontFamily="monospace"
+          fontSize={12}
+          fontFamily="monospace"
           className={classNames.valueText}
         >
           {fmt(value)}
@@ -252,10 +308,12 @@ function BarGauge({
       )}
       {label && (
         <text
-          x={size / 2} y={barHeight + (showValue ? 28 : 14)}
+          x={size / 2}
+          y={barHeight + (showValue ? 28 : 14)}
           textAnchor="middle"
           fill={classNames.label ? undefined : "rgba(255,255,255,0.5)"}
-          fontSize={10} fontFamily="sans-serif"
+          fontSize={10}
+          fontFamily="sans-serif"
           className={classNames.label}
         >
           {label}

@@ -11,10 +11,7 @@ import {
   useTimeOrigin,
 } from "@heojeongbo/fluxion-render/react";
 import { useMemo, useState } from "react";
-import {
-  stampToMs,
-  generateFloat32StampedMessage,
-} from "../../../shared/lib/test-data";
+import { generateFloat32StampedMessage, stampToMs } from "../../../shared/lib/test-data";
 import { THEME } from "../../../shared/ui/theme";
 import { WindowSelector } from "../../../shared/ui/window-selector";
 

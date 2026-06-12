@@ -40,9 +40,9 @@ export function useStorageInfo(
         if (logToConsole) {
           console.log(
             `[useStorageInfo] ${result.percentUsed.toFixed(1)}% used` +
-            ` (${(result.usedBytes / 1024 / 1024).toFixed(1)} MB /` +
-            ` ${(result.quotaBytes / 1024 / 1024).toFixed(1)} MB),` +
-            ` ${result.idbFrameCount} frames`,
+              ` (${(result.usedBytes / 1024 / 1024).toFixed(1)} MB /` +
+              ` ${(result.quotaBytes / 1024 / 1024).toFixed(1)} MB),` +
+              ` ${result.idbFrameCount} frames`,
           );
         }
       } catch {

@@ -79,7 +79,9 @@ describe("useScrubberControls", () => {
       expect(result.current.scrubT).toBeNull(); // early return before setScrubT
       expect(enter).not.toHaveBeenCalled();
       // commit is also a no-op with no range.
-      await act(async () => { result.current.commitScrub(); });
+      await act(async () => {
+        result.current.commitScrub();
+      });
       expect(fakeDvr.exit).not.toHaveBeenCalled();
     });
 
@@ -135,7 +137,9 @@ describe("useScrubberControls", () => {
       expect(enter).toHaveBeenCalledTimes(1); // still blocked
 
       // pointer-down resets the guard → the next drag enters again.
-      act(() => { result.current.beginScrub(); });
+      act(() => {
+        result.current.beginScrub();
+      });
       await act(async () => {
         result.current.onScrubChange(fakeChange(1_020_000));
         for (let i = 0; i < 5; i++) await Promise.resolve();
@@ -198,7 +202,9 @@ describe("useScrubberControls", () => {
       await act(async () => {
         result.current.controls.onScrubChange(fakeChange(LIVE.latest - 4_999));
       });
-      await act(async () => { result.current.controls.commitScrub(); });
+      await act(async () => {
+        result.current.controls.commitScrub();
+      });
       expect(ses.enterReplay).not.toHaveBeenCalled();
 
       // 5001ms from edge → outside eps → commit enters DVR (exactly once).
@@ -278,7 +284,9 @@ describe("useScrubberControls", () => {
       });
       expect(player.seek).not.toHaveBeenCalled(); // deferred to rAF
 
-      await act(async () => { vi.advanceTimersByTime(20); }); // flush the frame
+      await act(async () => {
+        vi.advanceTimersByTime(20);
+      }); // flush the frame
       expect(player.seek).toHaveBeenCalledTimes(1);
       expect(player.seek).toHaveBeenCalledWith(1_030_000); // latest target
     });
@@ -431,7 +439,9 @@ describe("useScrubberControls", () => {
       await act(async () => {
         result.current.onScrubChange(fakeChange(LIVE.latest - EPS + 1)); // within eps of edge
       });
-      await act(async () => { result.current.commitScrub(); });
+      await act(async () => {
+        result.current.commitScrub();
+      });
       expect(exit).toHaveBeenCalled();
     });
 

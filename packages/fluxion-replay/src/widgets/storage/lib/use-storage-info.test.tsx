@@ -17,7 +17,9 @@ describe("useStorageInfo", () => {
     await session.open();
 
     const { result } = renderHook(() => useStorageInfo(session, { intervalMs: 10_000 }));
-    await act(async () => { await Promise.resolve(); });
+    await act(async () => {
+      await Promise.resolve();
+    });
 
     expect(result.current).not.toBeNull();
     expect(typeof result.current?.usedBytes).toBe("number");
@@ -32,11 +34,18 @@ describe("useStorageInfo", () => {
     let callCount = 0;
     vi.spyOn(session, "getStorageInfo").mockImplementation(async () => {
       callCount++;
-      return { usedBytes: callCount * 1000, quotaBytes: 1_000_000_000, percentUsed: 0.001 * callCount, idbFrameCount: callCount };
+      return {
+        usedBytes: callCount * 1000,
+        quotaBytes: 1_000_000_000,
+        percentUsed: 0.001 * callCount,
+        idbFrameCount: callCount,
+      };
     });
 
     const { result } = renderHook(() => useStorageInfo(session, { intervalMs: 500 }));
-    await act(async () => { await Promise.resolve(); });
+    await act(async () => {
+      await Promise.resolve();
+    });
     const firstCount = result.current?.idbFrameCount ?? 0;
 
     await act(async () => {
@@ -44,7 +53,7 @@ describe("useStorageInfo", () => {
       await Promise.resolve();
     });
 
-    expect((result.current?.idbFrameCount ?? 0)).toBeGreaterThan(firstCount);
+    expect(result.current?.idbFrameCount ?? 0).toBeGreaterThan(firstCount);
     session.dispose();
   });
 
@@ -66,7 +75,9 @@ describe("useStorageInfo", () => {
     vi.spyOn(session, "getStorageInfo").mockRejectedValue(new Error("quota error"));
 
     const { result } = renderHook(() => useStorageInfo(session));
-    await act(async () => { await Promise.resolve(); });
+    await act(async () => {
+      await Promise.resolve();
+    });
 
     expect(result.current).toBeNull();
     session.dispose();
@@ -86,7 +97,9 @@ describe("useStorageInfo", () => {
     const { unmount } = renderHook(() =>
       useStorageInfo(session, { intervalMs: 5000, logToConsole: true }),
     );
-    await act(async () => { await Promise.resolve(); });
+    await act(async () => {
+      await Promise.resolve();
+    });
 
     expect(logSpy).toHaveBeenCalledWith(expect.stringContaining("[useStorageInfo]"));
     expect(logSpy).toHaveBeenCalledWith(expect.stringContaining("10.0% used"));
@@ -114,7 +127,9 @@ describe("useStorageInfo", () => {
     const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
 
     const { unmount } = renderHook(() => useStorageInfo(session, { intervalMs: 5000 }));
-    await act(async () => { await Promise.resolve(); });
+    await act(async () => {
+      await Promise.resolve();
+    });
 
     expect(logSpy).not.toHaveBeenCalled();
 

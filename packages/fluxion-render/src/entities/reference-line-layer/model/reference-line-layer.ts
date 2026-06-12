@@ -51,7 +51,8 @@ export class ReferenceLineLayer implements Layer {
     if (c.color !== undefined) this.color = c.color;
     if (c.lineWidth !== undefined) this.lineWidth = Math.max(0.5, c.lineWidth);
     if (c.label !== undefined) this.label = c.label;
-    if (c.bandOpacity !== undefined) this.bandOpacity = Math.max(0, Math.min(1, c.bandOpacity));
+    if (c.bandOpacity !== undefined)
+      this.bandOpacity = Math.max(0, Math.min(1, c.bandOpacity));
     if (c.visible !== undefined) this.visible = c.visible;
   }
 

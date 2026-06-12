@@ -2,7 +2,11 @@ import type { BaseChannel } from "../../../shared/model/base-channel";
 import { ReplayPlayer } from "../../player/model/replay-player";
 import { ReplayRecorder } from "../../recorder/model/replay-recorder";
 import type { RecordingSegment } from "../../store/model/replay-store";
-import { ReplayStore, type ReplayStoreOptions, type StorageInfo } from "../../store/model/replay-store";
+import {
+  ReplayStore,
+  type ReplayStoreOptions,
+  type StorageInfo,
+} from "../../store/model/replay-store";
 
 export type ReplaySessionMode = "live" | "replay";
 
@@ -88,7 +92,7 @@ export class ReplaySession {
 
     const idbRange = await this._store.getTimeRange();
     const fallback = idbRange ?? {
-      earliest: Date.now() - (10 * 60 * 1000),
+      earliest: Date.now() - 10 * 60 * 1000,
       latest: Date.now(),
     };
 

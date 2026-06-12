@@ -49,7 +49,11 @@ const transformBatch = (msgs: Float32StampedMessage[]): LineSample[] =>
   msgs.map((m) => ({ t: stampToMs(m.header), y: m.data }));
 
 const cache = new HoverDataCache();
-cache.registerLayer("line", { capacity: RING_CAPACITY, label: "signal", color: "#4fc3f7" });
+cache.registerLayer("line", {
+  capacity: RING_CAPACITY,
+  label: "signal",
+  color: "#4fc3f7",
+});
 
 export interface HighRateDemoPageProps {
   windowMs?: number;

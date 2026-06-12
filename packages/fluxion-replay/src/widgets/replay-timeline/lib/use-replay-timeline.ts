@@ -53,7 +53,8 @@ export function useReplayTimeline(
   const latest = timeRange?.latest ?? 0;
   const durationMs = Math.max(0, latest - earliest);
 
-  const fraction = durationMs > 0 ? Math.min(1, Math.max(0, (currentT - earliest) / durationMs)) : 0;
+  const fraction =
+    durationMs > 0 ? Math.min(1, Math.max(0, (currentT - earliest) / durationMs)) : 0;
 
   const currentMs = Math.max(0, currentT - earliest);
   const remainingMs = Math.max(0, latest - currentT);
@@ -71,9 +72,8 @@ export function useReplayTimeline(
       if (!timeRange) return;
       const clamped = Math.min(1, Math.max(0, f));
       const raw = timeRange.earliest + clamped * durationMs;
-      const snapped = segments.length > 0
-        ? snapTimeToSegment(raw, segments, timeRange.latest)
-        : raw;
+      const snapped =
+        segments.length > 0 ? snapTimeToSegment(raw, segments, timeRange.latest) : raw;
       seek(snapped);
     },
     [seek, timeRange, durationMs, segments],
@@ -81,9 +81,7 @@ export function useReplayTimeline(
 
   const seekToMs = useCallback(
     (t: number) => {
-      const snapped = segments.length > 0
-        ? snapTimeToSegment(t, segments, latest)
-        : t;
+      const snapped = segments.length > 0 ? snapTimeToSegment(t, segments, latest) : t;
       seek(snapped);
     },
     [seek, segments, latest],
@@ -92,9 +90,8 @@ export function useReplayTimeline(
   const seekForward = useCallback(
     (ms: number) => {
       const raw = currentT + ms;
-      const snapped = segments.length > 0
-        ? snapTimeToSegment(raw, segments, latest)
-        : raw;
+      const snapped =
+        segments.length > 0 ? snapTimeToSegment(raw, segments, latest) : raw;
       seek(snapped);
     },
     [seek, currentT, segments, latest],

@@ -80,10 +80,7 @@ export class WorkerHandle<TMsg extends object> implements WorkerLike {
   private _terminated = false;
   private readonly _ownsWorker: boolean;
   // Map<type, Map<original listener, wrapper listener>> for O(1) remove
-  private readonly _listenerMap = new Map<
-    string,
-    Map<EventListener, EventListener>
-  >();
+  private readonly _listenerMap = new Map<string, Map<EventListener, EventListener>>();
   // Abort callbacks registered by pending request() calls
   private readonly _abortCallbacks = new Set<() => void>();
 
@@ -142,7 +139,13 @@ export class WorkerHandle<TMsg extends object> implements WorkerLike {
   addEventListener(type: string, listener: EventListener): void {
     const id = this.hostId;
     const wrapper: EventListener = (evt: Event) => {
-      const msg = (evt as MessageEvent<{ hostId?: string; __fluxionError?: true; __fluxionStream?: true }>).data;
+      const msg = (
+        evt as MessageEvent<{
+          hostId?: string;
+          __fluxionError?: true;
+          __fluxionStream?: true;
+        }>
+      ).data;
       if (
         msg !== null &&
         typeof msg === "object" &&
@@ -350,7 +353,11 @@ export class WorkerHandle<TMsg extends object> implements WorkerLike {
         (data as { __fluxionStream?: boolean }).__fluxionStream === true &&
         (data as { hostId?: string }).hostId === id
       ) {
-        const { hostId: _h, __fluxionStream: _s, ...msg } = data as Record<string, unknown>;
+        const {
+          hostId: _h,
+          __fluxionStream: _s,
+          ...msg
+        } = data as Record<string, unknown>;
         callback(msg as Omit<TResult, "hostId" | "__fluxionStream">);
       }
     };
@@ -480,10 +487,7 @@ export class WorkerHandle<TMsg extends object> implements WorkerLike {
  * error is already propagated as a rejected Promise — but the pool-level
  * handler fires as well, so avoid double-logging by checking context.
  */
-export type WorkerPoolErrorCallback = (
-  err: WorkerErrorMsg,
-  workerIndex: number,
-) => void;
+export type WorkerPoolErrorCallback = (err: WorkerErrorMsg, workerIndex: number) => void;
 
 export class WorkerPool<TMsg extends object> {
   private readonly workers: Worker[];

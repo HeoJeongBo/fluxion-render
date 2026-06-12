@@ -32,7 +32,9 @@ describe("ScatterChartLayer", () => {
     const vp = makeViewport();
     layer.setData(new Float32Array([100, 3]).buffer, 2, vp);
     const ctx = createFakeCtx();
-    expect(() => layer.draw(ctx as unknown as OffscreenCanvasRenderingContext2D, vp)).not.toThrow();
+    expect(() =>
+      layer.draw(ctx as unknown as OffscreenCanvasRenderingContext2D, vp),
+    ).not.toThrow();
   });
 
   it("setConfig updates capacity via explicit value", () => {
@@ -53,7 +55,10 @@ describe("ScatterChartLayer", () => {
     layer.setConfig({ retentionMs: 5_000, maxHz: 10 });
     const vp = makeViewport();
     const buf = new Float32Array(56 * 2);
-    for (let i = 0; i < 56; i++) { buf[i * 2] = i; buf[i * 2 + 1] = i; }
+    for (let i = 0; i < 56; i++) {
+      buf[i * 2] = i;
+      buf[i * 2 + 1] = i;
+    }
     layer.setData(buf.buffer, buf.length, vp);
     layer.setData(new Float32Array([200, 99]).buffer, 2, vp);
     vp.setBounds({ xMin: 0, xMax: 10000, yMin: -1, yMax: 200 });
@@ -259,7 +264,11 @@ describe("ScatterChartLayer", () => {
     const layer = new ScatterChartLayer("sc1");
     layer.setConfig({ capacity: 3 });
     const vp = makeViewport();
-    layer.setData(new Float32Array([0, 0, 100, 1, 200, 2, 300, 3, 400, 4]).buffer, 10, vp);
+    layer.setData(
+      new Float32Array([0, 0, 100, 1, 200, 2, 300, 3, 400, 4]).buffer,
+      10,
+      vp,
+    );
     vp.setBounds({ xMin: 0, xMax: 10000, yMin: -1, yMax: 10 });
     vp.beginScan();
     layer.scan(vp);

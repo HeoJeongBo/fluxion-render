@@ -59,5 +59,4 @@ export function buildMetricRecording(opts: {
 }
 
 /** Drain microtask queue twice (enough for Promise chains). */
-export const drain = (): Promise<void> =>
-  Promise.resolve().then(() => Promise.resolve());
+export const drain = (): Promise<void> => Promise.resolve().then(() => Promise.resolve());

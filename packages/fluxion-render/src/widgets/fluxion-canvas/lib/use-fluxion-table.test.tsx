@@ -44,7 +44,14 @@ function Probe<T>({
   onRows?: (rows: Row[]) => void;
   onRate?: (r: number) => void;
 }) {
-  const { rows, rate } = useFluxionTable({ host, intervalMs, updateHz, maxRows, setup, tick });
+  const { rows, rate } = useFluxionTable({
+    host,
+    intervalMs,
+    updateHz,
+    maxRows,
+    setup,
+    tick,
+  });
   onRows?.(rows);
   onRate?.(rate);
   return <div data-testid="count">{rows.length}</div>;
@@ -53,7 +60,14 @@ function Probe<T>({
 describe("useFluxionTable", () => {
   beforeEach(() => {
     vi.useFakeTimers({
-      toFake: ["setInterval", "clearInterval", "requestAnimationFrame", "cancelAnimationFrame", "Date", "performance"],
+      toFake: [
+        "setInterval",
+        "clearInterval",
+        "requestAnimationFrame",
+        "cancelAnimationFrame",
+        "Date",
+        "performance",
+      ],
     });
   });
   afterEach(() => {
@@ -64,7 +78,9 @@ describe("useFluxionTable", () => {
     const setup = vi.fn();
     const tick = vi.fn(() => ({ value: 1, t: 0 }));
     render(<Probe host={null} intervalMs={10} setup={setup} tick={tick} />);
-    act(() => { vi.advanceTimersByTime(1000); });
+    act(() => {
+      vi.advanceTimersByTime(1000);
+    });
     expect(setup).not.toHaveBeenCalled();
     expect(tick).not.toHaveBeenCalled();
     expect(screen.getByTestId("count").textContent).toBe("0");
@@ -91,14 +107,18 @@ describe("useFluxionTable", () => {
         updateHz={1}
         setup={() => null}
         tick={(_t) => ({ value: _t, t: _t })}
-        onRows={(r) => { capturedRows = r; }}
+        onRows={(r) => {
+          capturedRows = r;
+        }}
       />,
     );
     // Advance 500ms: tick fires ~50 times but flush interval hasn't fired yet
     vi.advanceTimersByTime(500);
     expect(capturedRows.length).toBe(0);
     // Flush fires at 1000ms
-    act(() => { vi.advanceTimersByTime(500); });
+    act(() => {
+      vi.advanceTimersByTime(500);
+    });
     expect(capturedRows.length).toBeGreaterThan(0);
     host.dispose();
   });
@@ -114,7 +134,9 @@ describe("useFluxionTable", () => {
         updateHz={1}
         setup={() => null}
         tick={tick}
-        onRows={(r) => { capturedRows = r; }}
+        onRows={(r) => {
+          capturedRows = r;
+        }}
       />,
     );
     // 600ms: tick fires ~75 times, but flush interval (1Hz) hasn't fired yet
@@ -135,10 +157,14 @@ describe("useFluxionTable", () => {
         maxRows={5}
         setup={() => null}
         tick={(_t) => ({ value: _t, t: _t })}
-        onRows={(r) => { capturedRows = r; }}
+        onRows={(r) => {
+          capturedRows = r;
+        }}
       />,
     );
-    act(() => { vi.advanceTimersByTime(2000); });
+    act(() => {
+      vi.advanceTimersByTime(2000);
+    });
     expect(capturedRows.length).toBeLessThanOrEqual(5);
     host.dispose();
   });
@@ -153,11 +179,18 @@ describe("useFluxionTable", () => {
         intervalMs={10}
         updateHz={1}
         setup={() => null}
-        tick={() => { callCount++; return null; }}
-        onRows={(r) => { capturedRows = r; }}
+        tick={() => {
+          callCount++;
+          return null;
+        }}
+        onRows={(r) => {
+          capturedRows = r;
+        }}
       />,
     );
-    act(() => { vi.advanceTimersByTime(1100); });
+    act(() => {
+      vi.advanceTimersByTime(1100);
+    });
     expect(callCount).toBeGreaterThan(0);
     expect(capturedRows.length).toBe(0);
     host.dispose();
@@ -173,10 +206,14 @@ describe("useFluxionTable", () => {
         updateHz={1}
         setup={() => null}
         tick={(_t) => ({ value: _t, t: _t })}
-        onRate={(r) => { latestRate = r; }}
+        onRate={(r) => {
+          latestRate = r;
+        }}
       />,
     );
-    act(() => { vi.advanceTimersByTime(510); });
+    act(() => {
+      vi.advanceTimersByTime(510);
+    });
     expect(latestRate).toBeGreaterThan(50);
     host.dispose();
   });
@@ -190,7 +227,10 @@ describe("useFluxionTable", () => {
         host={host}
         intervalMs={10}
         setup={() => null}
-        tick={() => { calls++; throw new Error("boom"); }}
+        tick={() => {
+          calls++;
+          throw new Error("boom");
+        }}
       />,
     );
     vi.advanceTimersByTime(55);
@@ -229,9 +269,13 @@ describe("useFluxionTable", () => {
       return <div>{rows.length}</div>;
     }
     const { rerender } = render(<Harness h={host} />);
-    act(() => { vi.advanceTimersByTime(1100); });
+    act(() => {
+      vi.advanceTimersByTime(1100);
+    });
     expect(capturedRows.length).toBeGreaterThan(0);
-    act(() => { rerender(<Harness h={null} />); });
+    act(() => {
+      rerender(<Harness h={null} />);
+    });
     expect(capturedRows.length).toBe(0);
     host.dispose();
   });
@@ -259,12 +303,16 @@ describe("useFluxionTable", () => {
         updateHz={0}
         setup={() => null}
         tick={(_t) => ({ value: _t, t: _t })}
-        onRows={(r) => { capturedRows = r; }}
+        onRows={(r) => {
+          capturedRows = r;
+        }}
       />,
     );
     // advance data ticks then trigger a rAF frame
     vi.advanceTimersByTime(50);
-    act(() => { vi.advanceTimersByTime(16); });
+    act(() => {
+      vi.advanceTimersByTime(16);
+    });
     expect(capturedRows.length).toBeGreaterThan(0);
     host.dispose();
   });

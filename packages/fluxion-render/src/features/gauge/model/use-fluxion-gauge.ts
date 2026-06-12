@@ -29,9 +29,7 @@ export interface UseFluxionGaugeResult {
  * For multi-series charts, use `cache.getLatestT()` + `cache.findNearest()`
  * instead and drive the gauge value manually.
  */
-export function useFluxionGauge(
-  opts: UseFluxionGaugeOptions,
-): UseFluxionGaugeResult {
+export function useFluxionGauge(opts: UseFluxionGaugeOptions): UseFluxionGaugeResult {
   const { host, initialValue = 0 } = opts;
   const [result, setResult] = useState<UseFluxionGaugeResult>({
     value: initialValue,

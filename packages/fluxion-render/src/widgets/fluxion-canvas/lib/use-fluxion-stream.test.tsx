@@ -159,7 +159,9 @@ describe("useFluxionStream", () => {
   });
 
   it("logs a console.warn when host stays null beyond 2s", () => {
-    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval", "setTimeout", "clearTimeout", "Date"] });
+    vi.useFakeTimers({
+      toFake: ["setInterval", "clearInterval", "setTimeout", "clearTimeout", "Date"],
+    });
     const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
     render(<Probe host={null} intervalMs={10} setup={() => null} tick={() => 0} />);
     vi.advanceTimersByTime(2001);
@@ -168,7 +170,9 @@ describe("useFluxionStream", () => {
   });
 
   it("cancels the null-host warning when host becomes ready before 2s", () => {
-    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval", "setTimeout", "clearTimeout", "Date"] });
+    vi.useFakeTimers({
+      toFake: ["setInterval", "clearInterval", "setTimeout", "clearTimeout", "Date"],
+    });
     const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
     const host = makeHost();
     render(<Probe host={host} intervalMs={10} setup={() => null} tick={() => 0} />);

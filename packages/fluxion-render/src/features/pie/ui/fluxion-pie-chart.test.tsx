@@ -105,17 +105,38 @@ const SINGLE: PieSlice[] = [{ name: "Alpha", value: 100 }];
 
 describe("FluxionPieChart label variants", () => {
   it('label="name" renders slice name', () => {
-    render(<FluxionPieChart data={SINGLE} label="name" tooltip={false} animationDuration={0} />);
+    render(
+      <FluxionPieChart
+        data={SINGLE}
+        label="name"
+        tooltip={false}
+        animationDuration={0}
+      />,
+    );
     expect(screen.queryByText("Alpha")).toBeTruthy();
   });
 
   it('label="percent" renders 100.0%', () => {
-    render(<FluxionPieChart data={SINGLE} label="percent" tooltip={false} animationDuration={0} />);
+    render(
+      <FluxionPieChart
+        data={SINGLE}
+        label="percent"
+        tooltip={false}
+        animationDuration={0}
+      />,
+    );
     expect(screen.queryByText("100.0%")).toBeTruthy();
   });
 
   it('label="value" renders raw value', () => {
-    render(<FluxionPieChart data={SINGLE} label="value" tooltip={false} animationDuration={0} />);
+    render(
+      <FluxionPieChart
+        data={SINGLE}
+        label="value"
+        tooltip={false}
+        animationDuration={0}
+      />,
+    );
     expect(screen.queryByText("100")).toBeTruthy();
   });
 
@@ -147,7 +168,14 @@ describe("FluxionPieChart legend", () => {
   });
 
   it("does not render legend when legend=false", () => {
-    const { container } = render(<FluxionPieChart data={DATA} legend={false} tooltip={false} animationDuration={0} />);
+    const { container } = render(
+      <FluxionPieChart
+        data={DATA}
+        legend={false}
+        tooltip={false}
+        animationDuration={0}
+      />,
+    );
     const htmlText = Array.from(container.querySelectorAll("*"))
       .filter((el) => el.children.length === 0)
       .map((el) => el.textContent ?? "");
@@ -170,7 +198,9 @@ describe("FluxionPieChart donut center", () => {
         animationDuration={0}
       />,
     );
-    const texts = Array.from(container.querySelectorAll("text")).map((t) => t.textContent);
+    const texts = Array.from(container.querySelectorAll("text")).map(
+      (t) => t.textContent,
+    );
     expect(texts).toContain("42");
     expect(texts).toContain("Total");
   });
@@ -186,7 +216,9 @@ describe("FluxionPieChart donut center", () => {
         animationDuration={0}
       />,
     );
-    const texts = Array.from(container.querySelectorAll("text")).map((t) => t.textContent);
+    const texts = Array.from(container.querySelectorAll("text")).map(
+      (t) => t.textContent,
+    );
     expect(texts).not.toContain("42");
     expect(texts).not.toContain("Total");
   });

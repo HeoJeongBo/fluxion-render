@@ -59,7 +59,9 @@ describe("FluxionTable", () => {
     expect(container.querySelector(".my-tbody")).toBeTruthy();
     expect(container.querySelectorAll(".my-tr").length).toBeGreaterThan(0);
     expect(container.querySelectorAll(".my-th").length).toBe(COLUMNS.length);
-    expect(container.querySelectorAll(".my-td").length).toBe(ROWS.length * COLUMNS.length);
+    expect(container.querySelectorAll(".my-td").length).toBe(
+      ROWS.length * COLUMNS.length,
+    );
   });
 
   it("uses render function when provided", () => {
@@ -75,7 +77,12 @@ describe("FluxionTable", () => {
   });
 
   it("falls back to String() for non-string cell values", () => {
-    render(<FluxionTable columns={[{ key: "value" as const, header: "V" }]} rows={[{ id: "x", value: 0, label: "" }]} />);
+    render(
+      <FluxionTable
+        columns={[{ key: "value" as const, header: "V" }]}
+        rows={[{ id: "x", value: 0, label: "" }]}
+      />,
+    );
     expect(screen.getByText("0")).toBeTruthy();
   });
 

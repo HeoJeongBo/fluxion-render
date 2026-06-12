@@ -142,7 +142,9 @@ describe("ReplaySession", () => {
     await session.startRecording();
     await session.enterReplay();
     // record() should still forward to the recorder, not crash
-    expect(() => session.record("logs", { level: "info" as const, message: "hello" })).not.toThrow();
+    expect(() =>
+      session.record("logs", { level: "info" as const, message: "hello" }),
+    ).not.toThrow();
     session.dispose();
   });
 

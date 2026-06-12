@@ -42,7 +42,7 @@ describe("mulberry32", () => {
 
   it("32-bit seed wrap is supported (negative seed equivalent to seed >>> 0)", () => {
     const a = mulberry32(-1); // becomes 0xFFFFFFFF after >>> 0
-    const b = mulberry32(0xFFFFFFFF);
+    const b = mulberry32(0xffffffff);
     expect(a()).toBe(b());
   });
 });

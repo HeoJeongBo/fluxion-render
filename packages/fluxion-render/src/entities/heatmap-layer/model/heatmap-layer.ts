@@ -45,7 +45,12 @@ export class HeatmapLayer implements Layer {
     if (c.visible !== undefined) this.visible = c.visible;
     if (c.colormap !== undefined) {
       this.colormap = c.colormap;
-      this.lut = c.colormap === "plasma" ? PLASMA_LUT : c.colormap === "hot" ? HOT_LUT : VIRIDIS_LUT;
+      this.lut =
+        c.colormap === "plasma"
+          ? PLASMA_LUT
+          : c.colormap === "hot"
+            ? HOT_LUT
+            : VIRIDIS_LUT;
     }
   }
 
@@ -131,24 +136,24 @@ function buildLut(stops: [number, number, number, number][]): Uint8Array {
 }
 
 const VIRIDIS_LUT = buildLut([
-  [0.0,   68,   1,  84],
-  [0.25,  59,  82, 139],
-  [0.5,   33, 145, 140],
-  [0.75,  94, 201,  98],
-  [1.0,  253, 231,  37],
+  [0.0, 68, 1, 84],
+  [0.25, 59, 82, 139],
+  [0.5, 33, 145, 140],
+  [0.75, 94, 201, 98],
+  [1.0, 253, 231, 37],
 ]);
 
 const PLASMA_LUT = buildLut([
-  [0.0,   13,   8, 135],
-  [0.25, 126,   3, 168],
-  [0.5,  204,  71, 120],
-  [0.75, 248, 149,  64],
-  [1.0,  240, 249,  33],
+  [0.0, 13, 8, 135],
+  [0.25, 126, 3, 168],
+  [0.5, 204, 71, 120],
+  [0.75, 248, 149, 64],
+  [1.0, 240, 249, 33],
 ]);
 
 const HOT_LUT = buildLut([
-  [0.0,    0,   0,   0],
-  [0.333, 255,   0,   0],
-  [0.667, 255, 255,   0],
-  [1.0,  255, 255, 255],
+  [0.0, 0, 0, 0],
+  [0.333, 255, 0, 0],
+  [0.667, 255, 255, 0],
+  [1.0, 255, 255, 255],
 ]);

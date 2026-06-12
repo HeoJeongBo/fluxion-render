@@ -10,7 +10,8 @@ interface PoseMsg {
 const jsonEncode = (data: PoseMsg): ArrayBuffer =>
   new TextEncoder().encode(JSON.stringify(data)).buffer as ArrayBuffer;
 
-const jsonDecode = (buf: ArrayBuffer): PoseMsg => JSON.parse(new TextDecoder().decode(buf)) as PoseMsg;
+const jsonDecode = (buf: ArrayBuffer): PoseMsg =>
+  JSON.parse(new TextDecoder().decode(buf)) as PoseMsg;
 
 describe("RosChannel", () => {
   const channel = new RosChannel<PoseMsg>({
@@ -32,7 +33,11 @@ describe("RosChannel", () => {
 
   it("delegates encode to the provided function", () => {
     const encodeFn = vi.fn(jsonEncode);
-    const ch = new RosChannel<PoseMsg>({ channelId: "test", encode: encodeFn, decode: jsonDecode });
+    const ch = new RosChannel<PoseMsg>({
+      channelId: "test",
+      encode: encodeFn,
+      decode: jsonDecode,
+    });
     const msg = { x: 0, y: 0, theta: 0 };
     ch.encode(msg);
     expect(encodeFn).toHaveBeenCalledWith(msg);
@@ -40,7 +45,11 @@ describe("RosChannel", () => {
 
   it("delegates decode to the provided function", () => {
     const decodeFn = vi.fn(jsonDecode);
-    const ch = new RosChannel<PoseMsg>({ channelId: "test", encode: jsonEncode, decode: decodeFn });
+    const ch = new RosChannel<PoseMsg>({
+      channelId: "test",
+      encode: jsonEncode,
+      decode: decodeFn,
+    });
     const buf = jsonEncode({ x: 1, y: 2, theta: 3 });
     ch.decode(buf);
     expect(decodeFn).toHaveBeenCalledWith(buf);

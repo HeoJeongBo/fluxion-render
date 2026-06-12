@@ -14,9 +14,15 @@ import {
 type ROCallback = (entries: ResizeObserverEntry[]) => void;
 class FiringResizeObserver {
   private cb: ROCallback;
-  constructor(cb: ROCallback) { this.cb = cb; }
+  constructor(cb: ROCallback) {
+    this.cb = cb;
+  }
   observe(el: Element): void {
-    this.cb([{ contentRect: { width: el.clientWidth || 200, height: el.clientHeight || 100 } } as ResizeObserverEntry]);
+    this.cb([
+      {
+        contentRect: { width: el.clientWidth || 200, height: el.clientHeight || 100 },
+      } as ResizeObserverEntry,
+    ]);
   }
   unobserve(): void {}
   disconnect(): void {}
@@ -79,14 +85,25 @@ function stubRect(el: Element, rect: Partial<DOMRect> = {}) {
     toJSON: () => {},
     ...rect,
   } as DOMRect);
-  Object.defineProperty(el, "clientWidth", { value: rect.width ?? 200, configurable: true });
-  Object.defineProperty(el, "clientHeight", { value: rect.height ?? 100, configurable: true });
+  Object.defineProperty(el, "clientWidth", {
+    value: rect.width ?? 200,
+    configurable: true,
+  });
+  Object.defineProperty(el, "clientHeight", {
+    value: rect.height ?? 100,
+    configurable: true,
+  });
 }
 
 function firePointerMove(el: Element, clientX: number, clientY: number) {
   act(() => {
     el.dispatchEvent(
-      new MouseEvent("pointermove", { bubbles: true, cancelable: true, clientX, clientY }),
+      new MouseEvent("pointermove", {
+        bubbles: true,
+        cancelable: true,
+        clientX,
+        clientY,
+      }),
     );
   });
 }
@@ -103,9 +120,7 @@ describe("mount behavior", () => {
   it("mounts without throwing when host is null", () => {
     const cache = makeCache();
     expect(() =>
-      render(
-        <Harness host={null} cache={cache} xMode="fixed" xRange={[0, 100]} />,
-      ),
+      render(<Harness host={null} cache={cache} xMode="fixed" xRange={[0, 100]} />),
     ).not.toThrow();
   });
 
@@ -113,9 +128,17 @@ describe("mount behavior", () => {
     const cache = makeCache();
     const onState = vi.fn();
     render(
-      <Harness host={null} cache={cache} xMode="fixed" xRange={[0, 100]} onState={onState} />,
+      <Harness
+        host={null}
+        cache={cache}
+        xMode="fixed"
+        xRange={[0, 100]}
+        onState={onState}
+      />,
     );
-    const lastState = onState.mock.calls[onState.mock.calls.length - 1][0] as CrosshairState;
+    const lastState = onState.mock.calls[
+      onState.mock.calls.length - 1
+    ][0] as CrosshairState;
     expect(lastState.position).toBeNull();
     expect(lastState.points).toHaveLength(0);
   });
@@ -145,14 +168,22 @@ describe("pointermove", () => {
     const cache = makeCache();
     const onState = vi.fn();
     const { container } = render(
-      <Harness host={null} cache={cache} xMode="fixed" xRange={[0, 200]} onState={onState} />,
+      <Harness
+        host={null}
+        cache={cache}
+        xMode="fixed"
+        xRange={[0, 200]}
+        onState={onState}
+      />,
     );
     const el = container.firstChild as HTMLElement;
     stubRect(el, { left: 0, top: 0, width: 200, height: 100 });
 
     firePointerMove(el, 80, 40);
 
-    const lastState = onState.mock.calls[onState.mock.calls.length - 1][0] as CrosshairState;
+    const lastState = onState.mock.calls[
+      onState.mock.calls.length - 1
+    ][0] as CrosshairState;
     expect(lastState.position).toEqual({ pxX: 80, pxY: 40 });
   });
 
@@ -160,14 +191,22 @@ describe("pointermove", () => {
     const cache = makeCache();
     const onState = vi.fn();
     const { container } = render(
-      <Harness host={null} cache={cache} xMode="fixed" xRange={[0, 200]} onState={onState} />,
+      <Harness
+        host={null}
+        cache={cache}
+        xMode="fixed"
+        xRange={[0, 200]}
+        onState={onState}
+      />,
     );
     const el = container.firstChild as HTMLElement;
     stubRect(el, { left: 50, top: 20, width: 200, height: 100 });
 
     firePointerMove(el, 150, 70);
 
-    const lastState = onState.mock.calls[onState.mock.calls.length - 1][0] as CrosshairState;
+    const lastState = onState.mock.calls[
+      onState.mock.calls.length - 1
+    ][0] as CrosshairState;
     // pxX = 150 - 50 = 100, pxY = 70 - 20 = 50
     expect(lastState.position).toEqual({ pxX: 100, pxY: 50 });
   });
@@ -176,7 +215,13 @@ describe("pointermove", () => {
     const cache = makeCache();
     const onState = vi.fn();
     const { container } = render(
-      <Harness host={null} cache={cache} xMode="fixed" xRange={[0, 200]} onState={onState} />,
+      <Harness
+        host={null}
+        cache={cache}
+        xMode="fixed"
+        xRange={[0, 200]}
+        onState={onState}
+      />,
     );
     const el = container.firstChild as HTMLElement;
     stubRect(el);
@@ -184,7 +229,9 @@ describe("pointermove", () => {
     firePointerMove(el, 100, 50);
     firePointerLeave(el);
 
-    const lastState = onState.mock.calls[onState.mock.calls.length - 1][0] as CrosshairState;
+    const lastState = onState.mock.calls[
+      onState.mock.calls.length - 1
+    ][0] as CrosshairState;
     expect(lastState.position).toBeNull();
     expect(lastState.points).toHaveLength(0);
   });
@@ -213,7 +260,9 @@ describe('xMode="fixed"', () => {
     // pxX=100 with xRange=[0,200] and width=200 → dataT = 0 + (100/200)*200 = 100
     firePointerMove(el, 100, 50);
 
-    const lastState = onState.mock.calls[onState.mock.calls.length - 1][0] as CrosshairState;
+    const lastState = onState.mock.calls[
+      onState.mock.calls.length - 1
+    ][0] as CrosshairState;
     expect(lastState.points).toHaveLength(1);
     expect(lastState.points[0]!.t).toBe(100);
     expect(lastState.points[0]!.y).toBe(42);
@@ -235,14 +284,18 @@ describe('xMode="fixed"', () => {
         onState={onState}
       />,
     );
-    act(() => { fireBounds(-1, 1, 0); }); // triggers boundsRef.xMin = xRange[0] = 50
+    act(() => {
+      fireBounds(-1, 1, 0);
+    }); // triggers boundsRef.xMin = xRange[0] = 50
 
     const el = container.firstChild as HTMLElement;
     stubRect(el, { left: 0, top: 0, width: 200, height: 100 });
 
     firePointerMove(el, 100, 50);
 
-    const lastState = onState.mock.calls[onState.mock.calls.length - 1][0] as CrosshairState;
+    const lastState = onState.mock.calls[
+      onState.mock.calls.length - 1
+    ][0] as CrosshairState;
     expect(lastState.points).toHaveLength(0);
   });
 
@@ -260,7 +313,9 @@ describe('xMode="fixed"', () => {
 
     firePointerMove(el, 100, 50);
 
-    const lastState = onState.mock.calls[onState.mock.calls.length - 1][0] as CrosshairState;
+    const lastState = onState.mock.calls[
+      onState.mock.calls.length - 1
+    ][0] as CrosshairState;
     expect(lastState.points[0]!.label).toBe("Beta");
     expect(lastState.points[0]!.color).toBe("#0f0");
   });
@@ -290,7 +345,9 @@ describe('xMode="time"', () => {
     // pxX=200 (rightmost) → dataT = 800 + (200/200)*200 = 1000
     firePointerMove(el, 200, 50);
 
-    const lastState = onState.mock.calls[onState.mock.calls.length - 1][0] as CrosshairState;
+    const lastState = onState.mock.calls[
+      onState.mock.calls.length - 1
+    ][0] as CrosshairState;
     expect(lastState.points).toHaveLength(1);
     expect(lastState.points[0]!.t).toBe(1000);
   });
@@ -313,7 +370,9 @@ describe('xMode="time"', () => {
 
     firePointerMove(el, 100, 50);
 
-    const lastState = onState.mock.calls[onState.mock.calls.length - 1][0] as CrosshairState;
+    const lastState = onState.mock.calls[
+      onState.mock.calls.length - 1
+    ][0] as CrosshairState;
     expect(lastState.points).toHaveLength(0);
   });
 });
@@ -342,7 +401,9 @@ describe("custom xFormat / yFormat", () => {
 
     firePointerMove(el, 100, 50);
 
-    const lastState = onState.mock.calls[onState.mock.calls.length - 1][0] as CrosshairState;
+    const lastState = onState.mock.calls[
+      onState.mock.calls.length - 1
+    ][0] as CrosshairState;
     expect(lastState.points[0]!.xLabel).toBe("x:100");
     expect(xFormat).toHaveBeenCalledWith(100);
   });
@@ -368,7 +429,9 @@ describe("custom xFormat / yFormat", () => {
 
     firePointerMove(el, 100, 50);
 
-    const lastState = onState.mock.calls[onState.mock.calls.length - 1][0] as CrosshairState;
+    const lastState = onState.mock.calls[
+      onState.mock.calls.length - 1
+    ][0] as CrosshairState;
     expect(lastState.points[0]!.yLabel).toBe("y:2.50");
     expect(yFormat).toHaveBeenCalledWith(2.5);
   });
@@ -423,7 +486,9 @@ describe("multiple layers", () => {
 
     firePointerMove(el, 100, 50);
 
-    const lastState = onState.mock.calls[onState.mock.calls.length - 1][0] as CrosshairState;
+    const lastState = onState.mock.calls[
+      onState.mock.calls.length - 1
+    ][0] as CrosshairState;
     expect(lastState.points).toHaveLength(2);
     expect(lastState.points.map((p) => p.layerId)).toEqual(["x", "y"]);
   });
@@ -444,7 +509,9 @@ describe("multiple layers", () => {
 
     firePointerMove(el, 100, 50);
 
-    const lastState = onState.mock.calls[onState.mock.calls.length - 1][0] as CrosshairState;
+    const lastState = onState.mock.calls[
+      onState.mock.calls.length - 1
+    ][0] as CrosshairState;
     expect(lastState.points).toHaveLength(1);
     expect(lastState.points[0]!.layerId).toBe("x");
   });

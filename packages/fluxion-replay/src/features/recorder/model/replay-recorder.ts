@@ -60,7 +60,9 @@ export class ReplayRecorder {
     this._store = opts.store;
     this._retentionMs = opts.retentionMs ?? DEFAULT_RETENTION_MS;
     this._indexIntervalMs = opts.indexIntervalMs ?? DEFAULT_INDEX_INTERVAL_MS;
-    this._memoryBuffer = new GenericRingBuffer<SerializedFrame>(opts.memoryCapacity ?? DEFAULT_MEMORY_CAPACITY);
+    this._memoryBuffer = new GenericRingBuffer<SerializedFrame>(
+      opts.memoryCapacity ?? DEFAULT_MEMORY_CAPACITY,
+    );
     this._index = new TimelineIndex();
 
     for (const ch of opts.channels) {

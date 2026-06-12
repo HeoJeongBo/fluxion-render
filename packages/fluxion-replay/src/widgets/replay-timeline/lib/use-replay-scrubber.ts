@@ -124,7 +124,7 @@ export function useReplayScrubber(
         : Math.min(effectiveTimeRange.earliest, rawMax - minSpanMs),
     );
     const resolved =
-      scrubT ?? (isDvr ? replayPlayerT : liveTimeRange?.latest ?? rawMax);
+      scrubT ?? (isDvr ? replayPlayerT : (liveTimeRange?.latest ?? rawMax));
     const value = snap(resolved);
     return { min, max, value, disabled: max <= min };
   }, [

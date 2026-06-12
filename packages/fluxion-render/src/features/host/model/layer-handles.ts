@@ -566,7 +566,6 @@ export class HeatmapStreamHandle {
 // ReferenceLine — config-only, no data streaming
 // ────────────────────────────────────────────────────────────────────────────
 
-
 /**
  * Handle for `kind: "reference-line"` layers.
  * Use `setReference` to move the line and band at runtime.

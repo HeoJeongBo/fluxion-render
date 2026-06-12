@@ -10,7 +10,13 @@ function makeViewport() {
   return v;
 }
 
-function makeOhlc(t: number, open: number, high: number, low: number, close: number): number[] {
+function makeOhlc(
+  t: number,
+  open: number,
+  high: number,
+  low: number,
+  close: number,
+): number[] {
   return [t, open, high, low, close];
 }
 
@@ -22,7 +28,12 @@ describe("CandlestickLayer", () => {
 
   it("setConfig updates upColor, downColor, bodyWidth, visible", () => {
     const layer = new CandlestickLayer("candle1");
-    layer.setConfig({ upColor: "#aabbcc", downColor: "#112233", bodyWidth: 10, visible: true });
+    layer.setConfig({
+      upColor: "#aabbcc",
+      downColor: "#112233",
+      bodyWidth: 10,
+      visible: true,
+    });
     const vp = makeViewport();
     const data = new Float32Array(makeOhlc(100, 50, 60, 40, 55));
     layer.setData(data.buffer, 5, vp);
@@ -37,7 +48,9 @@ describe("CandlestickLayer", () => {
     const vp = makeViewport();
     layer.setData(new Float32Array(makeOhlc(100, 50, 60, 40, 55)).buffer, 5, vp);
     const ctx = createFakeCtx();
-    expect(() => layer.draw(ctx as unknown as OffscreenCanvasRenderingContext2D, vp)).not.toThrow();
+    expect(() =>
+      layer.draw(ctx as unknown as OffscreenCanvasRenderingContext2D, vp),
+    ).not.toThrow();
   });
 
   it("setConfig auto-calculates capacity from retentionMs + maxHz", () => {

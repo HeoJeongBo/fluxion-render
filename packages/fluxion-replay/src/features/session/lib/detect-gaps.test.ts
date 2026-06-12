@@ -20,9 +20,9 @@ describe("detectGaps", () => {
 
   it("detects multiple gaps", () => {
     const gaps = detectGaps([
-      { start: 0,      end: 1_000 },
-      { start: 3_000,  end: 4_000 },
-      { start: 7_000,  end: 9_000 },
+      { start: 0, end: 1_000 },
+      { start: 3_000, end: 4_000 },
+      { start: 7_000, end: 9_000 },
     ]);
     expect(gaps).toEqual([
       { start: 1_000, end: 3_000, durationMs: 2_000 },
@@ -32,7 +32,7 @@ describe("detectGaps", () => {
 
   it("handles an open (still-recording) last segment — no gap emitted after it", () => {
     const gaps = detectGaps([
-      { start: 0,     end: 2_000 },
+      { start: 0, end: 2_000 },
       { start: 5_000, end: null },
     ]);
     expect(gaps).toEqual([{ start: 2_000, end: 5_000, durationMs: 3_000 }]);
@@ -40,7 +40,7 @@ describe("detectGaps", () => {
 
   it("returns [] when segments are contiguous (no gap)", () => {
     const gaps = detectGaps([
-      { start: 0,     end: 5_000 },
+      { start: 0, end: 5_000 },
       { start: 5_000, end: 10_000 },
     ]);
     expect(gaps).toEqual([]);

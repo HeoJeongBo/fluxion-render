@@ -90,7 +90,10 @@ class FakeIDBIndex {
     return Array.isArray(f) ? f.map((name) => r[name]) : r[f];
   }
 
-  openCursor(range?: FakeIDBKeyRange | null, direction?: IDBCursorDirection): FakeIDBRequest<FakeIDBCursorWithValue | null> {
+  openCursor(
+    range?: FakeIDBKeyRange | null,
+    direction?: IDBCursorDirection,
+  ): FakeIDBRequest<FakeIDBCursorWithValue | null> {
     let records = this._store._records.filter((r) => {
       if (!range) return true;
       return range.includes(this._keyOf(r));
@@ -187,7 +190,9 @@ class FakeIDBObjectStore {
   }
 
   getAll(range?: FakeIDBKeyRange): FakeIDBRequest<IDBRecord[]> {
-    const results = range ? this._records.filter((r) => range.includes(r._key)) : [...this._records];
+    const results = range
+      ? this._records.filter((r) => range.includes(r._key))
+      : [...this._records];
     return new FakeIDBRequest(results);
   }
 
@@ -238,7 +243,9 @@ class FakeIDBDatabase {
       length: names.length,
       contains: (name: string) => names.includes(name),
       item: (index: number) => names[index] ?? null,
-      [Symbol.iterator]: function* () { yield* names; },
+      [Symbol.iterator]: function* () {
+        yield* names;
+      },
     } as unknown as DOMStringList;
   }
 
@@ -379,7 +386,13 @@ class FakeFileSystemFileHandle {
   async getFile(): Promise<{ arrayBuffer(): Promise<ArrayBuffer> }> {
     const data = opfsFiles.get(this._path);
     return {
-      arrayBuffer: async () => (data ? data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength) as ArrayBuffer : new ArrayBuffer(0)),
+      arrayBuffer: async () =>
+        data
+          ? (data.buffer.slice(
+              data.byteOffset,
+              data.byteOffset + data.byteLength,
+            ) as ArrayBuffer)
+          : new ArrayBuffer(0),
     };
   }
 }
@@ -387,11 +400,17 @@ class FakeFileSystemFileHandle {
 class FakeFileSystemDirectoryHandle {
   constructor(private readonly _prefix: string) {}
 
-  async getDirectoryHandle(name: string, opts?: { create?: boolean }): Promise<FakeFileSystemDirectoryHandle> {
+  async getDirectoryHandle(
+    name: string,
+    opts?: { create?: boolean },
+  ): Promise<FakeFileSystemDirectoryHandle> {
     return new FakeFileSystemDirectoryHandle(`${this._prefix}/${name}`);
   }
 
-  async getFileHandle(name: string, opts?: { create?: boolean }): Promise<FakeFileSystemFileHandle> {
+  async getFileHandle(
+    name: string,
+    opts?: { create?: boolean },
+  ): Promise<FakeFileSystemFileHandle> {
     const path = `${this._prefix}/${name}`;
     if (!opts?.create && !opfsFiles.has(path)) {
       throw new DOMException("File not found", "NotFoundError");
@@ -421,8 +440,12 @@ Object.defineProperty(globalThis.navigator, "storage", {
 // ─── mediaDevices stub ────────────────────────────────────────────────────────
 
 const fakeMediaDevices = {
-  getDisplayMedia: async () => { throw new Error("getDisplayMedia not mocked"); },
-  getUserMedia: async () => { throw new Error("getUserMedia not mocked"); },
+  getDisplayMedia: async () => {
+    throw new Error("getDisplayMedia not mocked");
+  },
+  getUserMedia: async () => {
+    throw new Error("getUserMedia not mocked");
+  },
 };
 
 Object.defineProperty(globalThis.navigator, "mediaDevices", {
@@ -515,7 +538,12 @@ class FakeVideoFrame {
   duration: number | null;
   displayWidth: number;
   displayHeight: number;
-  constructor(init: { timestamp: number; duration?: number; displayWidth?: number; displayHeight?: number }) {
+  constructor(init: {
+    timestamp: number;
+    duration?: number;
+    displayWidth?: number;
+    displayHeight?: number;
+  }) {
     this.timestamp = init.timestamp;
     this.duration = init.duration ?? null;
     this.displayWidth = init.displayWidth ?? 640;

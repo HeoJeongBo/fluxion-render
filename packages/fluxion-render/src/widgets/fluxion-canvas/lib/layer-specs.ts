@@ -65,7 +65,10 @@ export function barLayer(id: string, config?: BarChartConfig): FluxionLayerSpec 
   return { id, kind: "bar", config };
 }
 
-export function candlestickLayer(id: string, config?: CandlestickConfig): FluxionLayerSpec {
+export function candlestickLayer(
+  id: string,
+  config?: CandlestickConfig,
+): FluxionLayerSpec {
   return { id, kind: "candlestick", config };
 }
 
@@ -73,19 +76,31 @@ export function heatmapLayer(id: string, config?: HeatmapConfig): FluxionLayerSp
   return { id, kind: "heatmap", config };
 }
 
-export function eventMarkerLayer(id: string, config?: EventMarkerConfig): FluxionLayerSpec {
+export function eventMarkerLayer(
+  id: string,
+  config?: EventMarkerConfig,
+): FluxionLayerSpec {
   return { id, kind: "event-marker", config };
 }
 
-export function scatterColoredLayer(id: string, config?: ScatterColoredConfig): FluxionLayerSpec {
+export function scatterColoredLayer(
+  id: string,
+  config?: ScatterColoredConfig,
+): FluxionLayerSpec {
   return { id, kind: "scatter-colored", config };
 }
 
-export function heatmapStreamLayer(id: string, config?: HeatmapStreamConfig): FluxionLayerSpec {
+export function heatmapStreamLayer(
+  id: string,
+  config?: HeatmapStreamConfig,
+): FluxionLayerSpec {
   return { id, kind: "heatmap-stream", config };
 }
 
-export function referenceLineLayer(id: string, config?: ReferenceLineConfig): FluxionLayerSpec {
+export function referenceLineLayer(
+  id: string,
+  config?: ReferenceLineConfig,
+): FluxionLayerSpec {
   return { id, kind: "reference-line", config };
 }
 

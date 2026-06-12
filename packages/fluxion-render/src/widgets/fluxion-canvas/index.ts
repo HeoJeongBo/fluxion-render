@@ -9,11 +9,11 @@ export {
   lidarLayer,
   lineLayer,
   lineStaticLayer,
+  poseArrowLayer,
+  referenceLineLayer,
   scatterColoredLayer,
   scatterLayer,
   stepLayer,
-  poseArrowLayer,
-  referenceLineLayer,
 } from "./lib/layer-specs";
 export { useXAxisCanvas, useYAxisCanvas } from "./lib/use-axis-canvas";
 export { useAxisTicks } from "./lib/use-axis-ticks";
@@ -41,7 +41,11 @@ export type { ResizeInfo } from "./lib/use-resize-observer";
 export { useResizeObserver } from "./lib/use-resize-observer";
 export type { FluxionCanvasHandle, FluxionCanvasProps } from "./ui/fluxion-canvas";
 export { FluxionCanvas } from "./ui/fluxion-canvas";
-export type { FluxionLegendClassNames, FluxionLegendProps, LegendItem } from "./ui/fluxion-legend";
+export type {
+  FluxionLegendClassNames,
+  FluxionLegendProps,
+  LegendItem,
+} from "./ui/fluxion-legend";
 export { FluxionLegend } from "./ui/fluxion-legend";
 export type {
   FluxionTableClassNames,

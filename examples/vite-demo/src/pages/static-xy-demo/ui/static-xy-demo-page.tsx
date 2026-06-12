@@ -139,7 +139,9 @@ export function StaticXyDemoPage({ compactHud = false }: StaticXyDemoPageProps =
           type="button"
           onClick={() => setCrosshairEnabled((v) => !v)}
           style={{
-            background: crosshairEnabled ? THEME.button.background : THEME.button.inactiveBackground,
+            background: crosshairEnabled
+              ? THEME.button.background
+              : THEME.button.inactiveBackground,
             color: crosshairEnabled ? THEME.button.text : THEME.button.inactiveText,
             border: `1px solid ${crosshairEnabled ? THEME.button.border : THEME.page.border}`,
             padding: compactHud ? "2px 6px" : "4px 10px",

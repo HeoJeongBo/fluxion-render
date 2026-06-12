@@ -71,7 +71,12 @@ export function LineDemoPage({
         showYLabels: false,
         yPadPx: Y_PAD_PX,
       }),
-      lineLayer("line", { color: "#4fc3f7", lineWidth: 1.5, retentionMs: 10_000, maxHz: TARGET_HZ }),
+      lineLayer("line", {
+        color: "#4fc3f7",
+        lineWidth: 1.5,
+        retentionMs: 10_000,
+        maxHz: TARGET_HZ,
+      }),
     ],
     [timeOrigin],
   );

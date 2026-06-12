@@ -1,13 +1,19 @@
-import path from "path";
 import react from "@vitejs/plugin-react";
+import path from "path";
 import { defineConfig } from "vitest/config";
 
 export default defineConfig({
   plugins: [react()],
   resolve: {
     alias: [
-      { find: "@heojeongbo/fluxion-render/react", replacement: path.resolve(__dirname, "../fluxion-render/src/react.ts") },
-      { find: "@heojeongbo/fluxion-render", replacement: path.resolve(__dirname, "../fluxion-render/src/index.ts") },
+      {
+        find: "@heojeongbo/fluxion-render/react",
+        replacement: path.resolve(__dirname, "../fluxion-render/src/react.ts"),
+      },
+      {
+        find: "@heojeongbo/fluxion-render",
+        replacement: path.resolve(__dirname, "../fluxion-render/src/index.ts"),
+      },
     ],
   },
   test: {

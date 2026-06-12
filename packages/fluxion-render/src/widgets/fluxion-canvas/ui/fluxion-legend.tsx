@@ -29,10 +29,13 @@ export interface FluxionLegendProps {
   classNames?: FluxionLegendClassNames;
 }
 
-const POSITION_STYLES: Record<NonNullable<FluxionLegendProps["position"]>, CSSProperties> = {
-  "top-left":     { top: 8,    left: 8  },
-  "top-right":    { top: 8,    right: 8 },
-  "bottom-left":  { bottom: 8, left: 8  },
+const POSITION_STYLES: Record<
+  NonNullable<FluxionLegendProps["position"]>,
+  CSSProperties
+> = {
+  "top-left": { top: 8, left: 8 },
+  "top-right": { top: 8, right: 8 },
+  "bottom-left": { bottom: 8, left: 8 },
   "bottom-right": { bottom: 8, right: 8 },
 };
 
@@ -92,18 +95,26 @@ export function FluxionLegend({
         <div
           key={item.label}
           className={classNames.item}
-          style={classNames.item ? undefined : { display: "flex", alignItems: "center", gap: 6, whiteSpace: "nowrap" }}
+          style={
+            classNames.item
+              ? undefined
+              : { display: "flex", alignItems: "center", gap: 6, whiteSpace: "nowrap" }
+          }
         >
           <span
             className={classNames.dot}
-            style={classNames.dot ? undefined : {
-              display: "inline-block",
-              width: 10,
-              height: 10,
-              borderRadius: "50%",
-              background: item.color,
-              flexShrink: 0,
-            }}
+            style={
+              classNames.dot
+                ? undefined
+                : {
+                    display: "inline-block",
+                    width: 10,
+                    height: 10,
+                    borderRadius: "50%",
+                    background: item.color,
+                    flexShrink: 0,
+                  }
+            }
           />
           <span
             className={classNames.label}

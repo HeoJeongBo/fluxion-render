@@ -1,5 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ReplayPlayer, type ReplayPlayerState } from "../../../features/player/model/replay-player";
+import {
+  ReplayPlayer,
+  type ReplayPlayerState,
+} from "../../../features/player/model/replay-player";
 
 export interface UseReplayPlayerOptions {
   /**
@@ -99,16 +102,19 @@ export function useReplayPlayer(
   const play = useCallback((rate?: number) => player?.play(rate), [player]);
   const pause = useCallback(() => player?.pause(), [player]);
   const stop = useCallback(() => player?.stop(), [player]);
-  const seek = useCallback((t: number) => {
-    if (!player) return;
-    player.seek(t);
-    // Mirror the seek in React state right away so the timeline scrubber
-    // moves even while paused. Snap to the same boundary used by tick
-    // updates so a subsequent tick doesn't undo it.
-    const snapped = snapRef.current(t);
-    lastSnappedRef.current = snapped;
-    setCurrentT(snapped);
-  }, [player]);
+  const seek = useCallback(
+    (t: number) => {
+      if (!player) return;
+      player.seek(t);
+      // Mirror the seek in React state right away so the timeline scrubber
+      // moves even while paused. Snap to the same boundary used by tick
+      // updates so a subsequent tick doesn't undo it.
+      const snapped = snapRef.current(t);
+      lastSnappedRef.current = snapped;
+      setCurrentT(snapped);
+    },
+    [player],
+  );
 
   return { player, state, currentT, play, pause, stop, seek };
 }

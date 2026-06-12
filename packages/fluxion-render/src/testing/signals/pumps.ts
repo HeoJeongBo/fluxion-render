@@ -37,9 +37,7 @@ export interface SineSynthOptions {
  * const sample = createSineSynth({ freqHz: 0.5, amplitude: 0.8 });
  * const y = sample(performance.now());
  */
-export function createSineSynth(
-  opts: SineSynthOptions = {},
-): (tMs: number) => number {
+export function createSineSynth(opts: SineSynthOptions = {}): (tMs: number) => number {
   const {
     freqHz = 0.8,
     amplitude = 1,
@@ -52,12 +50,9 @@ export function createSineSynth(
 
   return (tMs: number): number => {
     const ts = tMs / 1000;
-    const carrier =
-      Math.sin(2 * Math.PI * freqHz * ts + seriesOffset) * amplitude;
+    const carrier = Math.sin(2 * Math.PI * freqHz * ts + seriesOffset) * amplitude;
     const harmonic =
-      Math.sin(2 * Math.PI * freqHz * 2.7 * ts + seriesOffset) *
-      amplitude *
-      0.4;
+      Math.sin(2 * Math.PI * freqHz * 2.7 * ts + seriesOffset) * amplitude * 0.4;
     const driftTerm = drift
       ? Math.sin(2 * Math.PI * 0.07 * ts + seriesOffset * 0.5) * 0.3
       : 0;
@@ -85,9 +80,7 @@ export interface LinearRampOptions {
  * sample(Date.now()); // 0
  * sample(Date.now() + 1000); // 0.5
  */
-export function createLinearRamp(
-  opts: LinearRampOptions = {},
-): (tMs: number) => number {
+export function createLinearRamp(opts: LinearRampOptions = {}): (tMs: number) => number {
   const { slope = 1, intercept = 0, baseT = 0 } = opts;
   return (tMs: number): number => {
     const seconds = (tMs - baseT) / 1000;

@@ -38,13 +38,20 @@ function makeFakeWorker(): FakeWorker {
   };
 }
 
-interface TestMsg { op: string; hostId?: string }
-interface TestResult { result: number }
+interface TestMsg {
+  op: string;
+  hostId?: string;
+}
+interface TestResult {
+  result: number;
+}
 
 // ─── useWorkerHandle ──────────────────────────────────────────────────────────
 
 describe("useWorkerHandle", () => {
-  afterEach(() => { vi.restoreAllMocks(); });
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
 
   it("returns null on first render, then a WorkerHandle after mount", async () => {
     let fake!: FakeWorker;
@@ -293,7 +300,9 @@ describe("useWorkerRequest", () => {
     );
 
     await waitFor(() => expect(result.current.loading).toBe(true));
-    act(() => { fake._emit("message", { result: 1, hostId: handle.hostId }); });
+    act(() => {
+      fake._emit("message", { result: 1, hostId: handle.hostId });
+    });
     await waitFor(() => expect(result.current.data).toEqual({ result: 1 }));
 
     // Change msg reference — new request should fire.
@@ -301,7 +310,9 @@ describe("useWorkerRequest", () => {
     rerender();
     await waitFor(() => expect(result.current.loading).toBe(true));
 
-    act(() => { fake._emit("message", { result: 2, hostId: handle.hostId }); });
+    act(() => {
+      fake._emit("message", { result: 2, hostId: handle.hostId });
+    });
     await waitFor(() => expect(result.current.data).toEqual({ result: 2 }));
 
     handle.dispose();
@@ -311,7 +322,9 @@ describe("useWorkerRequest", () => {
 // ─── useWorkerStream ──────────────────────────────────────────────────────────
 
 describe("useWorkerStream", () => {
-  afterEach(() => { vi.restoreAllMocks(); });
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
 
   function makeHandleWithFake() {
     const fake = makeFakeWorker();
@@ -328,7 +341,9 @@ describe("useWorkerStream", () => {
 
     await waitFor(() => {
       const calls = fake.postMessage.mock.calls;
-      expect(calls.some((c) => (c[0] as Record<string, unknown>).mode === "stream")).toBe(true);
+      expect(calls.some((c) => (c[0] as Record<string, unknown>).mode === "stream")).toBe(
+        true,
+      );
     });
 
     handle.dispose();
@@ -346,7 +361,9 @@ describe("useWorkerStream", () => {
     );
 
     await waitFor(() =>
-      fake.postMessage.mock.calls.some((c) => (c[0] as Record<string, unknown>).mode === "stream"),
+      fake.postMessage.mock.calls.some(
+        (c) => (c[0] as Record<string, unknown>).mode === "stream",
+      ),
     );
 
     act(() => {
@@ -365,7 +382,9 @@ describe("useWorkerStream", () => {
     renderHook(() => useWorkerStream<TestMsg, TestResult>(handle, msg, onData));
 
     await waitFor(() =>
-      fake.postMessage.mock.calls.some((c) => (c[0] as Record<string, unknown>).mode === "stream"),
+      fake.postMessage.mock.calls.some(
+        (c) => (c[0] as Record<string, unknown>).mode === "stream",
+      ),
     );
 
     act(() => {
@@ -387,7 +406,9 @@ describe("useWorkerStream", () => {
     );
 
     await waitFor(() =>
-      fake.postMessage.mock.calls.some((c) => (c[0] as Record<string, unknown>).mode === "stream"),
+      fake.postMessage.mock.calls.some(
+        (c) => (c[0] as Record<string, unknown>).mode === "stream",
+      ),
     );
 
     unmount();
@@ -403,9 +424,7 @@ describe("useWorkerStream", () => {
   it("does nothing when handle is null", () => {
     const onData = vi.fn();
     expect(() => {
-      renderHook(() =>
-        useWorkerStream<TestMsg, TestResult>(null, { op: "x" }, onData),
-      );
+      renderHook(() => useWorkerStream<TestMsg, TestResult>(null, { op: "x" }, onData));
     }).not.toThrow();
     expect(onData).not.toHaveBeenCalled();
   });

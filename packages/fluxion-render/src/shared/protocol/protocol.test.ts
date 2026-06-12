@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { Op, type HostMsg } from "./protocol";
+import { type HostMsg, Op } from "./protocol";
 
 describe("Op", () => {
   it("exposes stable numeric opcodes", () => {

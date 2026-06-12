@@ -78,8 +78,7 @@ export function useMiniChart(opts: UseMiniChartOptions): UseMiniChartResult {
   } = opts;
 
   const layers = useMemo<FluxionLayerSpec[]>(() => {
-    const ringCapacity =
-      capacity ?? Math.ceil((timeWindowMs / 1000) * sampleHz * 1.5);
+    const ringCapacity = capacity ?? Math.ceil((timeWindowMs / 1000) * sampleHz * 1.5);
     return [
       axisGridLayer(axisLayerId, {
         xMode: "time",

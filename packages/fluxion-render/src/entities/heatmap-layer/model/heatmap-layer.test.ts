@@ -4,11 +4,19 @@ import { HeatmapLayer } from "./heatmap-layer";
 
 function makeCtx() {
   return {
-    save: vi.fn(), restore: vi.fn(),
-    clearRect: vi.fn(), fillRect: vi.fn(),
-    beginPath: vi.fn(), fill: vi.fn(), stroke: vi.fn(),
-    moveTo: vi.fn(), lineTo: vi.fn(),
-    fillStyle: "", strokeStyle: "", lineWidth: 0, globalAlpha: 1,
+    save: vi.fn(),
+    restore: vi.fn(),
+    clearRect: vi.fn(),
+    fillRect: vi.fn(),
+    beginPath: vi.fn(),
+    fill: vi.fn(),
+    stroke: vi.fn(),
+    moveTo: vi.fn(),
+    lineTo: vi.fn(),
+    fillStyle: "",
+    strokeStyle: "",
+    lineWidth: 0,
+    globalAlpha: 1,
     createLinearGradient: vi.fn(() => ({ addColorStop: vi.fn() })),
     drawImage: vi.fn(),
   } as unknown as OffscreenCanvasRenderingContext2D;
@@ -19,13 +27,17 @@ function makeViewport(width = 800, height = 400) {
     bounds: { xMin: 0, xMax: 1000, yMin: 0, yMax: 100 },
     xToPx: vi.fn((x: number) => x * 0.8),
     yToPx: vi.fn((y: number) => height - y * 4),
-    width, height,
+    width,
+    height,
     observedYMin: Number.POSITIVE_INFINITY,
     observedYMax: Number.NEGATIVE_INFINITY,
   } as unknown as Viewport;
 }
 
-function makeData(...points: [number, number, number][]): { buffer: ArrayBuffer; length: number } {
+function makeData(...points: [number, number, number][]): {
+  buffer: ArrayBuffer;
+  length: number;
+} {
   const arr = new Float32Array(points.length * 3);
   points.forEach(([x, y, v], i) => {
     arr[i * 3] = x;

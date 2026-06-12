@@ -96,7 +96,8 @@ export function PoseArrowDemoPage() {
           Pose Arrow — Robot Heading Visualization
         </div>
         <div style={{ fontSize: 11, color: THEME.page.textMuted, marginTop: 2 }}>
-          Each arrow shows the robot's y-position and heading angle (θ) at that moment in time
+          Each arrow shows the robot's y-position and heading angle (θ) at that moment in
+          time
         </div>
       </div>
 
@@ -132,7 +133,9 @@ export function PoseArrowDemoPage() {
             <span>{label}</span>
           </div>
         ))}
-        <div style={{ marginLeft: "auto", color: THEME.page.textSecondary, fontSize: 11 }}>
+        <div
+          style={{ marginLeft: "auto", color: THEME.page.textSecondary, fontSize: 11 }}
+        >
           Rate: {TARGET_HZ} Hz · Window: {DEFAULT_WINDOW_MS / 1000}s
         </div>
       </div>

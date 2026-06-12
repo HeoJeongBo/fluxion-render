@@ -200,22 +200,42 @@ describe("useSyncedTimeWindow — bind", () => {
 describe("useSyncedTimeWindow — timeOrigin", () => {
   it("timeOrigin is a positive number (Date.now snapshot)", () => {
     let captured: ResultCapture | undefined;
-    render(<Harness onResult={(r) => { captured = r; }} />);
+    render(
+      <Harness
+        onResult={(r) => {
+          captured = r;
+        }}
+      />,
+    );
     expect(typeof captured!.timeOrigin).toBe("number");
     expect(captured!.timeOrigin).toBeGreaterThan(0);
   });
 
   it("timeOrigin is stable across re-renders caused by setWindowMs", () => {
     let captured: ResultCapture | undefined;
-    render(<Harness onResult={(r) => { captured = r; }} />);
+    render(
+      <Harness
+        onResult={(r) => {
+          captured = r;
+        }}
+      />,
+    );
     const origin = captured!.timeOrigin;
-    act(() => { captured!.setWindowMs(9000); });
+    act(() => {
+      captured!.setWindowMs(9000);
+    });
     expect(captured!.timeOrigin).toBe(origin);
   });
 
   it("timeOrigin matches the value returned by syncConfig", () => {
     let captured: ResultCapture | undefined;
-    render(<Harness onResult={(r) => { captured = r; }} />);
+    render(
+      <Harness
+        onResult={(r) => {
+          captured = r;
+        }}
+      />,
+    );
     expect(captured!.syncConfig().timeOrigin).toBe(captured!.timeOrigin);
   });
 });

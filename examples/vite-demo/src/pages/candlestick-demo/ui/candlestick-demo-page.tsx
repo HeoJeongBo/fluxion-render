@@ -98,8 +98,14 @@ export function CandlestickDemoPage() {
           color: THEME.page.textSecondary,
         }}
       >
-        <WindowSelector value={localWindowMs} onChange={setLocalWindowMs} options={WINDOW_OPTIONS} />
-        <span>{hz} Hz · {localWindowMs / 1000}s window · simulated price</span>
+        <WindowSelector
+          value={localWindowMs}
+          onChange={setLocalWindowMs}
+          options={WINDOW_OPTIONS}
+        />
+        <span>
+          {hz} Hz · {localWindowMs / 1000}s window · simulated price
+        </span>
       </div>
     </div>
   );

@@ -24,15 +24,17 @@ describe("DvrBadge", () => {
   it("uses a custom formatTime prop", () => {
     const format = (t: number) => `T=${t}`;
     const { container } = render(<DvrBadge currentT={FIXED_T} formatTime={format} />);
-    expect(container.querySelector("span")!.textContent).toBe(`▶ TIME-TRAVEL @ T=${FIXED_T}`);
+    expect(container.querySelector("span")!.textContent).toBe(
+      `▶ TIME-TRAVEL @ T=${FIXED_T}`,
+    );
   });
 
   it("applies textColor to the span style", () => {
-    const { container } = render(
-      <DvrBadge currentT={FIXED_T} textColor="#ff0000" />,
-    );
+    const { container } = render(<DvrBadge currentT={FIXED_T} textColor="#ff0000" />);
     // happy-dom preserves the raw style string, not the computed value
-    expect(container.querySelector("span")!.getAttribute("style")).toContain("color: #ff0000");
+    expect(container.querySelector("span")!.getAttribute("style")).toContain(
+      "color: #ff0000",
+    );
   });
 
   it("applies custom style override", () => {
@@ -48,9 +50,7 @@ describe("DvrBadge", () => {
     );
     expect(c1.querySelector("span")!.getAttribute("style")).toContain("#bbb");
 
-    const { container: c2 } = render(
-      <DvrBadge currentT={FIXED_T} textColor="#aaa" />,
-    );
+    const { container: c2 } = render(<DvrBadge currentT={FIXED_T} textColor="#aaa" />);
     // borderColor falls back to textColor
     const style = c2.querySelector("span")!.getAttribute("style")!;
     const borderMatches = [...style.matchAll(/#aaa/g)];

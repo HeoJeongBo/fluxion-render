@@ -62,11 +62,7 @@ describe("PoseArrowLayer", () => {
   it("filters samples outside viewport xMin", () => {
     const layer = new PoseArrowLayer("pose");
     const vp = makeViewport();
-    layer.setData(
-      new Float32Array([100, 0.0, 0, 200, 0.5, 0]).buffer,
-      6,
-      vp,
-    );
+    layer.setData(new Float32Array([100, 0.0, 0, 200, 0.5, 0]).buffer, 6, vp);
     // Move window to exclude t=100
     vp.setBounds({ xMin: 150, xMax: 5000, yMin: -1, yMax: 1 });
     const ctx = createFakeCtx();
@@ -108,11 +104,7 @@ describe("PoseArrowLayer", () => {
   it("scan excludes samples outside x window", () => {
     const layer = new PoseArrowLayer("pose");
     const vp = makeViewport();
-    layer.setData(
-      new Float32Array([100, 99, 0, 300, -0.5, 0]).buffer,
-      6,
-      vp,
-    );
+    layer.setData(new Float32Array([100, 99, 0, 300, -0.5, 0]).buffer, 6, vp);
     vp.setBounds({ xMin: 200, xMax: 5000, yMin: -100, yMax: 100 });
     vp.beginScan();
     layer.scan(vp);

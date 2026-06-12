@@ -85,12 +85,23 @@ export function HistoricalDemoPage({ compactHud = false }: HistoricalDemoPagePro
   useFluxionHistorical({ host, layerId: "plot", data });
 
   const legendItems = [
-    { color: "#80ffa0", label: DATASET_LABELS.find((d) => d.id === activeKey)?.label ?? activeKey },
+    {
+      color: "#80ffa0",
+      label: DATASET_LABELS.find((d) => d.id === activeKey)?.label ?? activeKey,
+    },
   ];
 
   return (
-    <div ref={containerRef} style={{ position: "relative", width: "100%", height: "100%" }}>
-      <FluxionLegend items={legendItems} visibility="hover" containerRef={containerRef} position="top-left" />
+    <div
+      ref={containerRef}
+      style={{ position: "relative", width: "100%", height: "100%" }}
+    >
+      <FluxionLegend
+        items={legendItems}
+        visibility="hover"
+        containerRef={containerRef}
+        position="top-left"
+      />
       <FluxionCanvas
         externalAxes
         axisLayerId="axis"
@@ -129,9 +140,7 @@ export function HistoricalDemoPage({ compactHud = false }: HistoricalDemoPagePro
             {label}
           </button>
         ))}
-        <span style={{ color: THEME.page.textSecondary }}>
-          {data.length} pts
-        </span>
+        <span style={{ color: THEME.page.textSecondary }}>{data.length} pts</span>
       </div>
     </div>
   );

@@ -56,7 +56,10 @@ describe("defineWorker", () => {
     });
     selfMock.emit({ op: "sum", hostId: "host-1" });
     expect(selfMock.postMessage).toHaveBeenCalledOnce();
-    expect(selfMock.postMessage.mock.calls[0]![0]).toMatchObject({ result: 42, hostId: "host-1" });
+    expect(selfMock.postMessage.mock.calls[0]![0]).toMatchObject({
+      result: 42,
+      hostId: "host-1",
+    });
   });
 
   it("omits hostId from reply when message has no hostId", () => {
@@ -119,7 +122,10 @@ describe("defineWorker", () => {
     // flush microtasks
     await Promise.resolve();
     expect(selfMock.postMessage).toHaveBeenCalledOnce();
-    expect(selfMock.postMessage.mock.calls[0]![0]).toMatchObject({ result: 99, hostId: "host-async" });
+    expect(selfMock.postMessage.mock.calls[0]![0]).toMatchObject({
+      result: 99,
+      hostId: "host-async",
+    });
   });
 
   it("overwrites onmessage on repeated defineWorker calls", () => {
@@ -210,10 +216,12 @@ describe("defineWorkerWithState", () => {
 
     // Re-verify by tracking calls directly
     const calls: Array<{ count: number } | undefined> = [];
-    defineWorkerWithState<object, object, { count: number }>((_msg, _reply, { state }) => {
-      calls.push(state);
-      return { count: (state?.count ?? 0) + 1 };
-    });
+    defineWorkerWithState<object, object, { count: number }>(
+      (_msg, _reply, { state }) => {
+        calls.push(state);
+        return { count: (state?.count ?? 0) + 1 };
+      },
+    );
     selfMock.emit({ hostId: "h2" });
     selfMock.emit({ hostId: "h2" });
     selfMock.emit({ hostId: "h2" });
@@ -462,8 +470,12 @@ describe("defineWorkerWithState — stream mode", () => {
   it("exposes mode in HostContext", () => {
     const ctxCaptures: string[] = [];
     defineWorkerWithState(
-      (_msg, _reply, ctx) => { ctxCaptures.push(ctx.mode); },
-      (_msg, _push, ctx) => { ctxCaptures.push(ctx.mode); },
+      (_msg, _reply, ctx) => {
+        ctxCaptures.push(ctx.mode);
+      },
+      (_msg, _push, ctx) => {
+        ctxCaptures.push(ctx.mode);
+      },
     );
     selfMock.emit({ hostId: "h1", mode: "rpc" });
     selfMock.emit({ hostId: "h1", mode: "stream" });

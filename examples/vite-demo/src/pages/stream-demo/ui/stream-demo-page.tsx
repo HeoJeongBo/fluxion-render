@@ -41,23 +41,35 @@ const SERIES = [
 const transformBatch = (msgs: Float32StampedMessage[]): LineSample[] =>
   msgs.map((m) => ({ t: stampToMs(m.header), y: m.data }));
 
-type SeriesHandle = { spec: (typeof SERIES)[number]; handle: ReturnType<FluxionHost["line"]> };
+type SeriesHandle = {
+  spec: (typeof SERIES)[number];
+  handle: ReturnType<FluxionHost["line"]>;
+};
 type SeriesRow = { id: string; color: string; value: string; time: string };
 
-const TABLE_COLUMNS: import("@heojeongbo/fluxion-render/react").FluxionTableColumn<SeriesRow>[] = [
-  {
-    key: "id",
-    header: "Series",
-    render: (v, row) => (
-      <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-        <span style={{ width: 8, height: 8, borderRadius: "50%", background: row.color, display: "inline-block" }} />
-        {String(v)}
-      </span>
-    ),
-  },
-  { key: "value", header: "Latest Value" },
-  { key: "time", header: "Time" },
-];
+const TABLE_COLUMNS: import("@heojeongbo/fluxion-render/react").FluxionTableColumn<SeriesRow>[] =
+  [
+    {
+      key: "id",
+      header: "Series",
+      render: (v, row) => (
+        <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+          <span
+            style={{
+              width: 8,
+              height: 8,
+              borderRadius: "50%",
+              background: row.color,
+              display: "inline-block",
+            }}
+          />
+          {String(v)}
+        </span>
+      ),
+    },
+    { key: "value", header: "Latest Value" },
+    { key: "time", header: "Time" },
+  ];
 
 const cache = new HoverDataCache();
 for (const s of SERIES) {
@@ -79,8 +91,8 @@ export function StreamDemoPage({
   const windowMs = windowProp ?? localWindowMs;
   const timeOrigin = useTimeOrigin();
   const [host, setHost] = useState<FluxionHost | null>(null);
-  const [enabled, setEnabled] = useState<Record<string, boolean>>(
-    () => Object.fromEntries(SERIES.map((s) => [s.id, true])),
+  const [enabled, setEnabled] = useState<Record<string, boolean>>(() =>
+    Object.fromEntries(SERIES.map((s) => [s.id, true])),
   );
 
   const layers = useMemo(
@@ -226,12 +238,20 @@ export function StreamDemoPage({
         {SERIES.map((s) => (
           <label
             key={s.id}
-            style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer", userSelect: "none" }}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 6,
+              cursor: "pointer",
+              userSelect: "none",
+            }}
           >
             <input
               type="checkbox"
               checked={enabled[s.id]}
-              onChange={(e) => setEnabled((prev) => ({ ...prev, [s.id]: e.target.checked }))}
+              onChange={(e) =>
+                setEnabled((prev) => ({ ...prev, [s.id]: e.target.checked }))
+              }
               style={{ accentColor: s.color, width: 12, height: 12, cursor: "pointer" }}
             />
             <span
@@ -244,7 +264,11 @@ export function StreamDemoPage({
                 opacity: enabled[s.id] ? 1 : 0.3,
               }}
             />
-            <span style={{ color: enabled[s.id] ? THEME.page.textPrimary : THEME.page.textMuted }}>
+            <span
+              style={{
+                color: enabled[s.id] ? THEME.page.textPrimary : THEME.page.textMuted,
+              }}
+            >
               {s.id}
             </span>
           </label>

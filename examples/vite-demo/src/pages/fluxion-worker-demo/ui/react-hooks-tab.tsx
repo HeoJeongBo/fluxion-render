@@ -1,5 +1,5 @@
-import { useWorkerHandle, useWorkerRequest } from "@heojeongbo/fluxion-worker/react";
 import { WorkerHandle, WorkerTimeoutError } from "@heojeongbo/fluxion-worker";
+import { useWorkerHandle, useWorkerRequest } from "@heojeongbo/fluxion-worker/react";
 import { useMemo, useState } from "react";
 import { THEME } from "../../../shared/ui/theme";
 import type { CalcMsg, CalcOp, CalcResultMsg } from "../lib/calc-worker";
@@ -68,7 +68,10 @@ export function ReactHooksTab() {
   const handle = useWorkerHandle(
     () =>
       new WorkerHandle(
-        () => new Worker(new URL("../lib/calc-worker.ts", import.meta.url), { type: "module" }),
+        () =>
+          new Worker(new URL("../lib/calc-worker.ts", import.meta.url), {
+            type: "module",
+          }),
       ),
   );
 
@@ -78,11 +81,9 @@ export function ReactHooksTab() {
     [op, valueCount, seed],
   );
 
-  const { data, loading, error } = useWorkerRequest<CalcMsg, CalcResultMsg>(
-    handle,
-    msg,
-    { timeoutMs: 5_000 },
-  );
+  const { data, loading, error } = useWorkerRequest<CalcMsg, CalcResultMsg>(handle, msg, {
+    timeoutMs: 5_000,
+  });
 
   return (
     <div style={{ display: "flex", flex: 1, minHeight: 0 }}>
@@ -107,13 +108,17 @@ export function ReactHooksTab() {
             {OP_CONFIGS.map(({ op: o, label, count }) => (
               <button
                 key={o}
-                onClick={() => { setOp(o); setValueCount(count); }}
+                onClick={() => {
+                  setOp(o);
+                  setValueCount(count);
+                }}
                 style={{
                   padding: "6px 12px",
                   fontSize: 12,
                   border: `1px solid ${o === op ? THEME.button.border : THEME.page.border}`,
                   borderRadius: 4,
-                  background: o === op ? THEME.button.background : THEME.button.inactiveBackground,
+                  background:
+                    o === op ? THEME.button.background : THEME.button.inactiveBackground,
                   color: o === op ? THEME.button.text : THEME.button.inactiveText,
                   cursor: "pointer",
                   textAlign: "left",
@@ -162,7 +167,9 @@ export function ReactHooksTab() {
             }}
           >
             handle:{" "}
-            <span style={{ color: handle ? THEME.button.background : THEME.page.textMuted }}>
+            <span
+              style={{ color: handle ? THEME.button.background : THEME.page.textMuted }}
+            >
               {handle ? "ready" : "null (initializing…)"}
             </span>
           </div>
@@ -200,14 +207,22 @@ export function ReactHooksTab() {
                   fontSize: 11,
                   fontFamily: "monospace",
                   background: active
-                    ? k === "error" ? "#c0392b22" : THEME.button.background
+                    ? k === "error"
+                      ? "#c0392b22"
+                      : THEME.button.background
                     : THEME.panel.background,
                   color: active
-                    ? k === "error" ? "#e74c3c" : THEME.button.text
+                    ? k === "error"
+                      ? "#e74c3c"
+                      : THEME.button.text
                     : THEME.page.textMuted,
-                  border: `1px solid ${active
-                    ? k === "error" ? "#c0392b44" : THEME.button.border
-                    : THEME.page.border}`,
+                  border: `1px solid ${
+                    active
+                      ? k === "error"
+                        ? "#c0392b44"
+                        : THEME.button.border
+                      : THEME.page.border
+                  }`,
                 }}
               >
                 {k}
@@ -248,7 +263,13 @@ export function ReactHooksTab() {
               gap: 8,
             }}
           >
-            <div style={{ fontSize: 11, color: THEME.page.textMuted, fontFamily: "monospace" }}>
+            <div
+              style={{
+                fontSize: 11,
+                color: THEME.page.textMuted,
+                fontFamily: "monospace",
+              }}
+            >
               op: <span style={{ color: THEME.button.background }}>{data.op}</span>
             </div>
             <div
@@ -261,14 +282,23 @@ export function ReactHooksTab() {
             >
               {data.result.toFixed(4)}
             </div>
-            <div style={{ fontSize: 11, color: THEME.page.textMuted, fontFamily: "monospace" }}>
-              {data.durationMs.toFixed(3)} ms &middot; {valueCount.toLocaleString()} values
+            <div
+              style={{
+                fontSize: 11,
+                color: THEME.page.textMuted,
+                fontFamily: "monospace",
+              }}
+            >
+              {data.durationMs.toFixed(3)} ms &middot; {valueCount.toLocaleString()}{" "}
+              values
             </div>
           </div>
         )}
 
         {!loading && !data && !error && handle && (
-          <div style={{ color: THEME.page.textMuted, fontSize: 13 }}>Waiting for result…</div>
+          <div style={{ color: THEME.page.textMuted, fontSize: 13 }}>
+            Waiting for result…
+          </div>
         )}
       </div>
     </div>

@@ -9,7 +9,6 @@ function makeCache() {
   return c;
 }
 
-
 let mockAnchor: { href: string; download: string; click: ReturnType<typeof vi.fn> };
 let createObjectURLMock: ReturnType<typeof vi.fn>;
 let revokeObjectURLMock: ReturnType<typeof vi.fn>;
@@ -26,10 +25,12 @@ beforeEach(() => {
     revokeObjectURL: revokeObjectURLMock,
   });
 
-  vi.spyOn(document, "createElement").mockImplementation((tag: string, ...rest: any[]) => {
-    if (tag === "a") return mockAnchor as unknown as HTMLElement;
-    return originalCreateElement(tag, ...rest);
-  });
+  vi.spyOn(document, "createElement").mockImplementation(
+    (tag: string, ...rest: any[]) => {
+      if (tag === "a") return mockAnchor as unknown as HTMLElement;
+      return originalCreateElement(tag, ...rest);
+    },
+  );
 });
 
 afterEach(() => {
@@ -124,9 +125,7 @@ describe("useFluxionExport — exportCSV", () => {
     const cache = new HoverDataCache();
     cache.registerLayer("a", { capacity: 64, label: "Series A", color: "#f00" });
     cache.push("a", 1000, 1.5);
-    const { result } = renderHook(() =>
-      useFluxionExport({ cache, filename: "my-data" }),
-    );
+    const { result } = renderHook(() => useFluxionExport({ cache, filename: "my-data" }));
 
     act(() => {
       result.current.exportCSV();
@@ -161,30 +160,30 @@ describe("useFluxionExport — exportCSV", () => {
   });
 });
 
-  it("CSV header includes all layer labels when multiple layers are registered", () => {
-    const c = new HoverDataCache();
-    c.registerLayer("a", { capacity: 64, label: "Alpha", color: "#f00" });
-    c.registerLayer("b", { capacity: 64, label: "Beta", color: "#0f0" });
-    c.push("a", 100, 1.0);
-    c.push("b", 200, 2.0);
+it("CSV header includes all layer labels when multiple layers are registered", () => {
+  const c = new HoverDataCache();
+  c.registerLayer("a", { capacity: 64, label: "Alpha", color: "#f00" });
+  c.registerLayer("b", { capacity: 64, label: "Beta", color: "#0f0" });
+  c.push("a", 100, 1.0);
+  c.push("b", 200, 2.0);
 
-    const { result } = renderHook(() => useFluxionExport({ cache: c }));
+  const { result } = renderHook(() => useFluxionExport({ cache: c }));
 
-    let capturedBlob: Blob | undefined;
-    createObjectURLMock.mockImplementation((b: Blob) => {
-      capturedBlob = b;
-      return "blob:fake-url";
-    });
-
-    act(() => {
-      result.current.exportCSV();
-    });
-
-    return capturedBlob!.text().then((text) => {
-      const header = text.split("\n")[0];
-      expect(header).toBe("timestamp_ms,Alpha,Beta");
-    });
+  let capturedBlob: Blob | undefined;
+  createObjectURLMock.mockImplementation((b: Blob) => {
+    capturedBlob = b;
+    return "blob:fake-url";
   });
+
+  act(() => {
+    result.current.exportCSV();
+  });
+
+  return capturedBlob!.text().then((text) => {
+    const header = text.split("\n")[0];
+    expect(header).toBe("timestamp_ms,Alpha,Beta");
+  });
+});
 
 describe("useFluxionExport — exportJSON", () => {
   it("generates valid JSON with layers array", () => {

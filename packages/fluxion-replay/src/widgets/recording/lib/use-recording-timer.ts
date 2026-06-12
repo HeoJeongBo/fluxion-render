@@ -25,7 +25,9 @@ export interface UseRecordingTimerResult {
  *
  * <span>{Math.floor(elapsedSec / 60)}:{String(elapsedSec % 60).padStart(2, "0")}</span>
  */
-export function useRecordingTimer(opts: UseRecordingTimerOptions): UseRecordingTimerResult {
+export function useRecordingTimer(
+  opts: UseRecordingTimerOptions,
+): UseRecordingTimerResult {
   const { isRecording } = opts;
   const [elapsedSec, setElapsedSec] = useState(0);
 

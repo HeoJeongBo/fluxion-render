@@ -1,7 +1,7 @@
 import { render } from "@testing-library/react";
 import { useRef } from "react";
 import { describe, expect, it, vi } from "vitest";
-import { useResizeObserver, type ResizeInfo } from "./use-resize-observer";
+import { type ResizeInfo, useResizeObserver } from "./use-resize-observer";
 
 function Harness({ onResize }: { onResize: (info: ResizeInfo) => void }) {
   const ref = useRef<HTMLDivElement | null>(null);

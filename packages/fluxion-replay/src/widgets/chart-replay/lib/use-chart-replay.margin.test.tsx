@@ -9,7 +9,16 @@
  * the vitest fork worker's heap budget.
  */
 import { act, render } from "@testing-library/react";
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  afterAll,
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest";
 import {
   ChartReplayProbe,
   makeFakeHost,
@@ -39,7 +48,9 @@ describe("useChartReplay — prefetch margin", () => {
     const store = makeFakeStore({ signal: [metricFrame("signal", 9000, 0.5)] });
 
     await act(async () => {
-      render(<ChartReplayProbe host={host} player={player} store={store} windowMs={2000} />);
+      render(
+        <ChartReplayProbe host={host} player={player} store={store} windowMs={2000} />,
+      );
       await settle();
     });
 
@@ -64,7 +75,9 @@ describe("useChartReplay — prefetch margin", () => {
     });
 
     await act(async () => {
-      render(<ChartReplayProbe host={host} player={player} store={store} windowMs={2000} />);
+      render(
+        <ChartReplayProbe host={host} player={player} store={store} windowMs={2000} />,
+      );
       await settle();
     });
     // One query on mount: cached [5000, 13000].
@@ -96,7 +109,9 @@ describe("useChartReplay — prefetch margin", () => {
     });
 
     await act(async () => {
-      render(<ChartReplayProbe host={host} player={player} store={store} windowMs={2000} />);
+      render(
+        <ChartReplayProbe host={host} player={player} store={store} windowMs={2000} />,
+      );
       await settle();
     });
 

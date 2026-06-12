@@ -164,11 +164,19 @@ describe("VirtualClock", () => {
     clock.start(0);
     expect(clock.isRunning).toBe(true);
 
-    Object.defineProperty(document, "visibilityState", { value: "hidden", writable: true, configurable: true });
+    Object.defineProperty(document, "visibilityState", {
+      value: "hidden",
+      writable: true,
+      configurable: true,
+    });
     document.dispatchEvent(new Event("visibilitychange"));
     expect(clock.isRunning).toBe(false);
 
-    Object.defineProperty(document, "visibilityState", { value: "visible", writable: true, configurable: true });
+    Object.defineProperty(document, "visibilityState", {
+      value: "visible",
+      writable: true,
+      configurable: true,
+    });
     document.dispatchEvent(new Event("visibilitychange"));
     expect(clock.isRunning).toBe(true);
 
@@ -180,7 +188,11 @@ describe("VirtualClock", () => {
     clock.start(0);
     clock.pause(); // manually paused — _pausedByVisibility is false
 
-    Object.defineProperty(document, "visibilityState", { value: "visible", writable: true, configurable: true });
+    Object.defineProperty(document, "visibilityState", {
+      value: "visible",
+      writable: true,
+      configurable: true,
+    });
     document.dispatchEvent(new Event("visibilitychange"));
     // Should not resume since _pausedByVisibility is false
     expect(clock.isRunning).toBe(false);

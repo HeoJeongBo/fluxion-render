@@ -72,7 +72,8 @@ export function WorkerHandleTab() {
 
   useEffect(() => {
     const handle = new WorkerHandle<CalcMsg>(
-      () => new Worker(new URL("../lib/calc-worker.ts", import.meta.url), { type: "module" }),
+      () =>
+        new Worker(new URL("../lib/calc-worker.ts", import.meta.url), { type: "module" }),
     );
     handleRef.current = handle;
     return () => {
@@ -100,7 +101,9 @@ export function WorkerHandleTab() {
           op,
           error: WorkerTimeoutError.is(e)
             ? `timeout (${e.timeoutMs}ms)`
-            : e instanceof Error ? e.message : String(e),
+            : e instanceof Error
+              ? e.message
+              : String(e),
         },
         ...prev.slice(0, 19),
       ]);
@@ -129,7 +132,9 @@ export function WorkerHandleTab() {
         <div style={{ fontSize: 11, color: THEME.page.textMuted, lineHeight: 1.5 }}>
           Single Worker, no pool. <code>release()</code> is a no-op.
           {pending > 0 && (
-            <span style={{ marginLeft: 8, color: THEME.button.background, fontWeight: 600 }}>
+            <span
+              style={{ marginLeft: 8, color: THEME.button.background, fontWeight: 600 }}
+            >
               {pending} pending…
             </span>
           )}
@@ -179,9 +184,23 @@ export function WorkerHandleTab() {
       </div>
 
       {/* Results panel */}
-      <div style={{ flex: 1, overflowY: "auto", padding: 16, background: THEME.page.background }}>
+      <div
+        style={{
+          flex: 1,
+          overflowY: "auto",
+          padding: 16,
+          background: THEME.page.background,
+        }}
+      >
         {results.length === 0 ? (
-          <div style={{ color: THEME.page.textMuted, fontSize: 13, paddingTop: 24, textAlign: "center" }}>
+          <div
+            style={{
+              color: THEME.page.textMuted,
+              fontSize: 13,
+              paddingTop: 24,
+              textAlign: "center",
+            }}
+          >
             Dispatch a job to see results
           </div>
         ) : (
@@ -201,7 +220,13 @@ export function WorkerHandleTab() {
                   fontSize: 12,
                 }}
               >
-                <span style={{ fontWeight: 700, color: r.error ? "#e74c3c" : THEME.button.background, fontFamily: "monospace" }}>
+                <span
+                  style={{
+                    fontWeight: 700,
+                    color: r.error ? "#e74c3c" : THEME.button.background,
+                    fontFamily: "monospace",
+                  }}
+                >
                   {r.op}
                 </span>
                 {r.error ? (
@@ -210,10 +235,22 @@ export function WorkerHandleTab() {
                   </span>
                 ) : (
                   <>
-                    <span style={{ fontWeight: 600, color: THEME.page.textPrimary, fontFamily: "monospace" }}>
+                    <span
+                      style={{
+                        fontWeight: 600,
+                        color: THEME.page.textPrimary,
+                        fontFamily: "monospace",
+                      }}
+                    >
                       = {r.result?.toFixed(2)}
                     </span>
-                    <span style={{ color: THEME.page.textMuted, fontSize: 11, textAlign: "right" }}>
+                    <span
+                      style={{
+                        color: THEME.page.textMuted,
+                        fontSize: 11,
+                        textAlign: "right",
+                      }}
+                    >
                       {r.durationMs?.toFixed(3)} ms
                     </span>
                   </>

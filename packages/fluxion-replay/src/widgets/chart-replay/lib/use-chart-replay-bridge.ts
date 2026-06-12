@@ -1,11 +1,11 @@
-import { useRef } from "react";
 import type { FluxionHost } from "@heojeongbo/fluxion-render";
 import { useFluxionStream } from "@heojeongbo/fluxion-render/react";
+import { useRef } from "react";
 import type { ReplaySession } from "../../../features/session/model/replay-session";
 import type { BaseChannel } from "../../../shared/model/base-channel";
 import type { UseReplayDvrResult } from "../../dvr/lib/use-replay-dvr";
 import { useChartLiveBackfill } from "./use-chart-live-backfill";
-import { useChartReplay, type UseChartReplayResult } from "./use-chart-replay";
+import { type UseChartReplayResult, useChartReplay } from "./use-chart-replay";
 
 export interface UseChartReplayBridgeOptions<T> {
   /** Host from `<FluxionCanvas onReady={setHost}>`. `null` while mounting. */
@@ -123,7 +123,7 @@ export function useChartReplayBridge<T>(
   const replay = useChartReplay<T>({
     host: isLive ? null : host,
     player: isLive ? null : dvr.player,
-    store: isLive ? null : session?.store ?? null,
+    store: isLive ? null : (session?.store ?? null),
     channel,
     layerId,
     windowMs,

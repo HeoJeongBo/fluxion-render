@@ -15,13 +15,14 @@
  *   timestamp_ms = timestamp_us / 1000
  *   normalized   = raw_i16 / 32767  → [-1.0, 1.0]
  */
-import { Engine, Op } from "@heojeongbo/fluxion-render/worker";
+
 import type {
   FluxionPoolStreamMsg,
   HostMsg,
   PoolDisposeMsg,
   PoolInitMsg,
 } from "@heojeongbo/fluxion-render/worker";
+import { Engine, Op } from "@heojeongbo/fluxion-render/worker";
 
 const RAW_MAX = 32767;
 const SOLO_HOST_ID = "__solo__";

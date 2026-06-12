@@ -240,7 +240,10 @@ describe("ScatterLayerHandle", () => {
   it("pushBatch encodes multiple samples", () => {
     const { sink, pushes } = makeFakeSink();
     const h = new ScatterLayerHandle(sink, "sc");
-    h.pushBatch([{ t: 1, y: 0.1 }, { t: 2, y: 0.2 }]);
+    h.pushBatch([
+      { t: 1, y: 0.1 },
+      { t: 2, y: 0.2 },
+    ]);
     expect(pushes).toHaveLength(1);
     expectF32Close(pushes[0].data, [1, 0.1, 2, 0.2]);
   });
@@ -272,7 +275,10 @@ describe("AreaLayerHandle", () => {
   it("pushBatch encodes multiple samples", () => {
     const { sink, pushes } = makeFakeSink();
     const h = new AreaLayerHandle(sink, "area");
-    h.pushBatch([{ t: 1, y: 0.1 }, { t: 2, y: 0.2 }]);
+    h.pushBatch([
+      { t: 1, y: 0.1 },
+      { t: 2, y: 0.2 },
+    ]);
     expectF32Close(pushes[0].data, [1, 0.1, 2, 0.2]);
   });
 
@@ -303,7 +309,10 @@ describe("StepLayerHandle", () => {
   it("pushBatch encodes multiple samples", () => {
     const { sink, pushes } = makeFakeSink();
     const h = new StepLayerHandle(sink, "step");
-    h.pushBatch([{ t: 10, y: 1 }, { t: 20, y: 2 }]);
+    h.pushBatch([
+      { t: 10, y: 1 },
+      { t: 20, y: 2 },
+    ]);
     expect(Array.from(pushes[0].data)).toEqual([10, 1, 20, 2]);
   });
 
@@ -327,7 +336,10 @@ describe("BarLayerHandle", () => {
   it("setXY interleaves xy points", () => {
     const { sink, pushes } = makeFakeSink();
     const h = new BarLayerHandle(sink, "bar");
-    h.setXY([{ x: 1, y: 2 }, { x: 3, y: 4 }]);
+    h.setXY([
+      { x: 1, y: 2 },
+      { x: 3, y: 4 },
+    ]);
     expect(Array.from(pushes[0].data)).toEqual([1, 2, 3, 4]);
   });
 

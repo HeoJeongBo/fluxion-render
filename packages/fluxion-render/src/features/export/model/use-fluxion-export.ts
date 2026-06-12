@@ -96,7 +96,10 @@ export function useFluxionExport(opts: UseFluxionExportOptions): UseFluxionExpor
 
       const header = ["timestamp_ms", ...layers.map((l) => l.label)].join(",");
       const rows = times.map((t) => {
-        const cols = [t.toFixed(3), ...byT.map((m) => (m.has(t) ? m.get(t)!.toFixed(6) : ""))];
+        const cols = [
+          t.toFixed(3),
+          ...byT.map((m) => (m.has(t) ? m.get(t)!.toFixed(6) : "")),
+        ];
         return cols.join(",");
       });
 

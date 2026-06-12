@@ -15,7 +15,11 @@ import { describe, expect, it } from "vitest";
 
 // ─── Minimal replica of the buffer flush logic ───────────────────────────────
 
-interface BufItem { channelId: string; tAbsMs: number; value: number; }
+interface BufItem {
+  channelId: string;
+  tAbsMs: number;
+  value: number;
+}
 
 /** Simulates DvrApp.handleDvrReady */
 function makeDvrReady(bufRef: { current: BufItem[] }) {
@@ -43,19 +47,21 @@ function simulateHostReady(
 
 describe("DVR metric buffer flush (onDvrReady pattern)", () => {
   it("flushes all buffered frames when onDvrReady fires", () => {
-    const buf = { current: [
-      { channelId: "cpu",    tAbsMs: 1000, value: 30 },
-      { channelId: "memory", tAbsMs: 2000, value: 55 },
-      { channelId: "cpu",    tAbsMs: 3000, value: 42 },
-    ] };
+    const buf = {
+      current: [
+        { channelId: "cpu", tAbsMs: 1000, value: 30 },
+        { channelId: "memory", tAbsMs: 2000, value: 55 },
+        { channelId: "cpu", tAbsMs: 3000, value: 42 },
+      ],
+    };
 
     const received: Array<{ channelId: string; t: number; y: number }> = [];
     simulateHostReady(makeDvrReady(buf), received);
 
     expect(received).toEqual([
-      { channelId: "cpu",    t: 1000, y: 30 },
+      { channelId: "cpu", t: 1000, y: 30 },
       { channelId: "memory", t: 2000, y: 55 },
-      { channelId: "cpu",    t: 3000, y: 42 },
+      { channelId: "cpu", t: 3000, y: 42 },
     ]);
   });
 
@@ -82,15 +88,15 @@ describe("DVR metric buffer flush (onDvrReady pattern)", () => {
   });
 
   it("seek resets the buffer so stale frames from the previous position are discarded", () => {
-    const buf = { current: [
-      { channelId: "cpu", tAbsMs: 1000, value: 10 },
-      { channelId: "cpu", tAbsMs: 2000, value: 20 },
-    ] };
+    const buf = {
+      current: [
+        { channelId: "cpu", tAbsMs: 1000, value: 10 },
+        { channelId: "cpu", tAbsMs: 2000, value: 20 },
+      ],
+    };
 
     // Simulate seek: clear old frames, add new frames at the seek position
-    buf.current = [
-      { channelId: "cpu", tAbsMs: 60_000, value: 99 },
-    ];
+    buf.current = [{ channelId: "cpu", tAbsMs: 60_000, value: 99 }];
 
     const received: Array<{ channelId: string; t: number; y: number }> = [];
     simulateHostReady(makeDvrReady(buf), received);

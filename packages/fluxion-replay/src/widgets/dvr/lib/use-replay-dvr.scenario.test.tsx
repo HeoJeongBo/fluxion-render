@@ -130,10 +130,14 @@ describe("useReplayDvr — real ReplayPlayer scenario (60s recording, seek to 30
     );
 
     const seekT = ORIGIN + 30_000;
-    await act(async () => { await result.current.enter(seekT); });
+    await act(async () => {
+      await result.current.enter(seekT);
+    });
 
     const player = result.current.player!;
-    await act(async () => { vi.advanceTimersByTime(100); });
+    await act(async () => {
+      vi.advanceTimersByTime(100);
+    });
 
     // At 2x rate, virtual time advances 200ms in 100ms wall. Allow a window
     // for rAF timing slop.
@@ -161,11 +165,15 @@ describe("useReplayDvr — real ReplayPlayer scenario (60s recording, seek to 30
     // Enter near the very end of the recording so play() has only a tiny
     // virtual distance to cover.
     const seekT = LIVE_TIME_RANGE.latest - 50;
-    await act(async () => { await result.current.enter(seekT); });
+    await act(async () => {
+      await result.current.enter(seekT);
+    });
     expect(result.current.isDvr).toBe(true);
 
     // A few rAF cycles at 100,000x easily clears the remaining 50ms virtual.
-    await act(async () => { vi.advanceTimersByTime(200); });
+    await act(async () => {
+      vi.advanceTimersByTime(200);
+    });
 
     expect(result.current.isDvr).toBe(false);
     expect(result.current.player).toBeNull();
@@ -187,22 +195,30 @@ describe("useReplayDvr — real ReplayPlayer scenario (60s recording, seek to 30
     );
 
     // Enter near the end so play() reaches the frozen edge almost immediately.
-    await act(async () => { await result.current.enter(LIVE_TIME_RANGE.latest - 50); });
+    await act(async () => {
+      await result.current.enter(LIVE_TIME_RANGE.latest - 50);
+    });
     expect(result.current.isDvr).toBe(true);
 
     // Run well past the edge — auto-exit should fire and NOT re-fire on
     // subsequent ticks (no flapping between live/DVR).
-    await act(async () => { vi.advanceTimersByTime(500); });
+    await act(async () => {
+      vi.advanceTimersByTime(500);
+    });
     expect(result.current.isDvr).toBe(false);
     expect(result.current.player).toBeNull();
 
     // Extra time must not resurrect DVR or null/dispose anything further.
-    await act(async () => { vi.advanceTimersByTime(1_000); });
+    await act(async () => {
+      vi.advanceTimersByTime(1_000);
+    });
     expect(result.current.isDvr).toBe(false);
     expect(result.current.player).toBeNull();
 
     // The controller is reusable after an auto-exit: a fresh enter() works.
-    await act(async () => { await result.current.enter(LIVE_TIME_RANGE.earliest + 10_000); });
+    await act(async () => {
+      await result.current.enter(LIVE_TIME_RANGE.earliest + 10_000);
+    });
     expect(result.current.isDvr).toBe(true);
     expect(result.current.player).not.toBeNull();
     expect(result.current.player!.currentT).toBe(LIVE_TIME_RANGE.earliest + 10_000);
@@ -224,11 +240,15 @@ describe("useReplayDvr — real ReplayPlayer scenario (60s recording, seek to 30
       }),
     );
 
-    await act(async () => { await result.current.enter(LIVE_TIME_RANGE.latest - 50); });
+    await act(async () => {
+      await result.current.enter(LIVE_TIME_RANGE.latest - 50);
+    });
     expect(result.current.isDvr).toBe(true);
 
     // Playback reaches the end, but with autoExitToLive off it stays in DVR.
-    await act(async () => { vi.advanceTimersByTime(500); });
+    await act(async () => {
+      vi.advanceTimersByTime(500);
+    });
     expect(result.current.isDvr).toBe(true);
     expect(result.current.player).not.toBeNull();
 
@@ -281,7 +301,9 @@ describe("useReplayDvr — live recording continues during DVR", () => {
 
     // Enter DVR at the 30 s mark.
     const seekT = ORIGIN + 30_000;
-    await act(async () => { await result.current.enter(seekT); });
+    await act(async () => {
+      await result.current.enter(seekT);
+    });
 
     // frozenLatest pins the scrubber to the 80 s edge even as live grows.
     expect(result.current.isDvr).toBe(true);
@@ -317,7 +339,9 @@ describe("useReplayDvr — live recording continues during DVR", () => {
 
     // Now let replay run to the frozen edge at 100,000x. ~50 s of virtual
     // distance, ~200 ms of fake wall time covers it many times over.
-    await act(async () => { vi.advanceTimersByTime(500); });
+    await act(async () => {
+      vi.advanceTimersByTime(500);
+    });
 
     // onEnd fired → useReplayDvr auto-exited → back to live mode.
     expect(result.current.isDvr).toBe(false);
@@ -363,7 +387,9 @@ describe("useReplayDvr — live recording continues during DVR", () => {
       { initialProps: { liveTimeRange: live } },
     );
 
-    await act(async () => { await result.current.enter(ORIGIN + 10_000); });
+    await act(async () => {
+      await result.current.enter(ORIGIN + 10_000);
+    });
     expect(result.current.effectiveTimeRange?.latest).toBe(ORIGIN + 40_000);
 
     // Live keeps recording 5 s more while user time-travels.
@@ -375,7 +401,9 @@ describe("useReplayDvr — live recording continues during DVR", () => {
     rerender({ liveTimeRange: live });
 
     // User pulls scrubber back to the right edge → manual exit.
-    await act(async () => { result.current.exit(); });
+    await act(async () => {
+      result.current.exit();
+    });
 
     expect(result.current.isDvr).toBe(false);
     expect(result.current.effectiveTimeRange?.latest).toBe(ORIGIN + 45_000);
@@ -402,20 +430,32 @@ describe("useReplayDvr — playback controls during DVR", () => {
     );
 
     const seekT = ORIGIN + 30_000;
-    await act(async () => { await result.current.enter(seekT); });
+    await act(async () => {
+      await result.current.enter(seekT);
+    });
 
     const player = result.current.player!;
-    await act(async () => { vi.advanceTimersByTime(100); });
+    await act(async () => {
+      vi.advanceTimersByTime(100);
+    });
     const beforePause = player.currentT;
     expect(beforePause).toBeGreaterThan(seekT);
 
-    await act(async () => { player.pause(); });
+    await act(async () => {
+      player.pause();
+    });
     // Wall time advances but virtual t does not.
-    await act(async () => { vi.advanceTimersByTime(500); });
+    await act(async () => {
+      vi.advanceTimersByTime(500);
+    });
     expect(player.currentT).toBe(beforePause);
 
-    await act(async () => { player.play(1); });
-    await act(async () => { vi.advanceTimersByTime(100); });
+    await act(async () => {
+      player.play(1);
+    });
+    await act(async () => {
+      vi.advanceTimersByTime(100);
+    });
     expect(player.currentT).toBeGreaterThan(beforePause);
 
     result.current.exit();
@@ -434,18 +474,24 @@ describe("useReplayDvr — playback controls during DVR", () => {
       }),
     );
 
-    await act(async () => { await result.current.enter(ORIGIN + 30_000); });
+    await act(async () => {
+      await result.current.enter(ORIGIN + 30_000);
+    });
     const player = result.current.player!;
 
     const seekEvents: number[] = [];
     player.onSeek((t) => seekEvents.push(t));
 
-    await act(async () => { player.seek(ORIGIN + 15_000); });
+    await act(async () => {
+      player.seek(ORIGIN + 15_000);
+    });
     expect(player.currentT).toBe(ORIGIN + 15_000);
     expect(seekEvents).toEqual([ORIGIN + 15_000]);
 
     // After seeking backward in DVR, playback continues from the new point.
-    await act(async () => { vi.advanceTimersByTime(100); });
+    await act(async () => {
+      vi.advanceTimersByTime(100);
+    });
     expect(player.currentT).toBeGreaterThan(ORIGIN + 15_000);
     expect(player.currentT).toBeLessThan(ORIGIN + 15_500);
 
@@ -465,19 +511,27 @@ describe("useReplayDvr — playback controls during DVR", () => {
       }),
     );
 
-    await act(async () => { await result.current.enter(ORIGIN + 30_000); });
+    await act(async () => {
+      await result.current.enter(ORIGIN + 30_000);
+    });
     const player = result.current.player!;
     const t0 = player.currentT;
 
-    await act(async () => { vi.advanceTimersByTime(100); });
+    await act(async () => {
+      vi.advanceTimersByTime(100);
+    });
     const slowDelta = player.currentT - t0;
     expect(slowDelta).toBeGreaterThan(50);
     expect(slowDelta).toBeLessThan(200);
 
     // Bump to 4x — same wall time should yield ~4x virtual delta.
-    await act(async () => { player.play(4); });
+    await act(async () => {
+      player.play(4);
+    });
     const tBeforeFast = player.currentT;
-    await act(async () => { vi.advanceTimersByTime(100); });
+    await act(async () => {
+      vi.advanceTimersByTime(100);
+    });
     const fastDelta = player.currentT - tBeforeFast;
 
     expect(fastDelta).toBeGreaterThan(slowDelta * 2);
@@ -507,7 +561,9 @@ describe("useReplayDvr — rapid enter/exit/enter cycles", () => {
 
     const players = [];
     for (const seekT of [ORIGIN + 20_000, ORIGIN + 35_000, ORIGIN + 50_000]) {
-      await act(async () => { await result.current.enter(seekT); });
+      await act(async () => {
+        await result.current.enter(seekT);
+      });
       players.push(result.current.player!);
       expect(result.current.player!.currentT).toBe(seekT);
     }
@@ -534,15 +590,23 @@ describe("useReplayDvr — rapid enter/exit/enter cycles", () => {
       }),
     );
 
-    await act(async () => { await result.current.enter(ORIGIN + 10_000); });
-    await act(async () => { vi.advanceTimersByTime(100); });
+    await act(async () => {
+      await result.current.enter(ORIGIN + 10_000);
+    });
+    await act(async () => {
+      vi.advanceTimersByTime(100);
+    });
     expect(result.current.player!.currentT).toBeGreaterThan(ORIGIN + 10_000);
 
-    await act(async () => { result.current.exit(); });
+    await act(async () => {
+      result.current.exit();
+    });
     expect(result.current.isDvr).toBe(false);
     expect(result.current.player).toBeNull();
 
-    await act(async () => { await result.current.enter(ORIGIN + 45_000); });
+    await act(async () => {
+      await result.current.enter(ORIGIN + 45_000);
+    });
     expect(result.current.player!.currentT).toBe(ORIGIN + 45_000);
     expect(result.current.player!.state).toBe("playing");
 
@@ -673,7 +737,9 @@ describe("useReplayDvr + useChartReplay end-to-end (real player, real session)",
     // Let the rAF tick a bit and confirm forward pushes start appearing AFTER
     // the seek point, never overlapping the backfill range.
     pushes.length = 0;
-    await act(async () => { vi.advanceTimersByTime(200); });
+    await act(async () => {
+      vi.advanceTimersByTime(200);
+    });
 
     if (pushes.length > 0) {
       // Every forward push must have host-relative t > seek point (30_000 ms).
@@ -716,7 +782,10 @@ describe("useReplayDvr + useChartReplay end-to-end (real player, real session)",
       );
     };
 
-    await act(async () => { render(<Harness />); await Promise.resolve(); });
+    await act(async () => {
+      render(<Harness />);
+      await Promise.resolve();
+    });
     const dvr = (window as unknown as { __dvr2: ReturnType<typeof useReplayDvr> }).__dvr2;
 
     // Burst three enters in a row — each one creates a new player + new
@@ -768,7 +837,10 @@ describe("useReplayDvr + useChartReplay end-to-end (real player, real session)",
       );
     };
 
-    await act(async () => { render(<Harness live={LIVE_TIME_RANGE} />); await Promise.resolve(); });
+    await act(async () => {
+      render(<Harness live={LIVE_TIME_RANGE} />);
+      await Promise.resolve();
+    });
     const dvr = (window as unknown as { __dvr3: ReturnType<typeof useReplayDvr> }).__dvr3;
     // In live mode the chart hook is a no-op (host/player/store all null
     // inside its ChartReplayProbe wiring? actually only player gates it).
@@ -789,11 +861,15 @@ describe("useReplayDvr + useChartReplay end-to-end (real player, real session)",
     const batchCountInDvr = batches.length;
 
     // Manual exit.
-    await act(async () => { dvr.exit(); });
+    await act(async () => {
+      dvr.exit();
+    });
 
     // After exit, dvr.player === null again — no new chart writes from the
     // bridge. The chart is now free for the page's live-push pipeline.
-    await act(async () => { vi.advanceTimersByTime(100); });
+    await act(async () => {
+      vi.advanceTimersByTime(100);
+    });
     expect(batches.length).toBe(batchCountInDvr); // no new batch from bridge
     expect(dvr.isDvr).toBe(false);
     expect(dvr.player).toBeNull();
@@ -825,8 +901,9 @@ describe("useReplayDvr — scrubber drag patterns (real player)", () => {
 
     // Simulate the scrubber firing 10 enters in a row as the user drags from
     // the live edge backward. None of them is awaited individually.
-    const sweep = [55_000, 50_000, 45_000, 40_000, 35_000, 30_000, 25_000, 20_000, 15_000, 10_000]
-      .map((dt) => ORIGIN + dt);
+    const sweep = [
+      55_000, 50_000, 45_000, 40_000, 35_000, 30_000, 25_000, 20_000, 15_000, 10_000,
+    ].map((dt) => ORIGIN + dt);
     await act(async () => {
       for (const t of sweep) void result.current.enter(t);
       // Let the microtask queue drain so all the await enterReplay()s resolve.
@@ -843,7 +920,9 @@ describe("useReplayDvr — scrubber drag patterns (real player)", () => {
     expect(player.state).toBe("playing");
 
     // And it actually advances — not stuck at "B~B".
-    await act(async () => { vi.advanceTimersByTime(100); });
+    await act(async () => {
+      vi.advanceTimersByTime(100);
+    });
     expect(player.currentT).toBeGreaterThan(finalSeek);
     expect(player.currentT).toBeLessThan(finalSeek + 500);
 
@@ -874,7 +953,9 @@ describe("useReplayDvr — scrubber drag patterns (real player)", () => {
     expect(result.current.isDvr).toBe(true);
 
     // User immediately pulls back out (exit while burst settled).
-    await act(async () => { result.current.exit(); });
+    await act(async () => {
+      result.current.exit();
+    });
 
     // No DVR, no leaked player, time range is the live one again.
     expect(result.current.isDvr).toBe(false);
@@ -896,14 +977,21 @@ describe("useReplayDvr — scrubber drag patterns (real player)", () => {
       }),
     );
 
-    await act(async () => { await result.current.enter(ORIGIN + 30_000); });
+    await act(async () => {
+      await result.current.enter(ORIGIN + 30_000);
+    });
     const player = result.current.player!;
 
     // Drag inside DVR. Each onChange would call player.seek(t) — not enter()
     // again. seek() is synchronous so race isn't an issue, but we still want
     // currentT to track the last seek precisely.
     await act(async () => {
-      for (const t of [ORIGIN + 28_000, ORIGIN + 22_000, ORIGIN + 18_000, ORIGIN + 12_000]) {
+      for (const t of [
+        ORIGIN + 28_000,
+        ORIGIN + 22_000,
+        ORIGIN + 18_000,
+        ORIGIN + 12_000,
+      ]) {
         player.seek(t);
       }
     });
@@ -911,7 +999,9 @@ describe("useReplayDvr — scrubber drag patterns (real player)", () => {
     expect(player.currentT).toBe(ORIGIN + 12_000);
 
     // Playback continues from the final seek point.
-    await act(async () => { vi.advanceTimersByTime(100); });
+    await act(async () => {
+      vi.advanceTimersByTime(100);
+    });
     expect(player.currentT).toBeGreaterThan(ORIGIN + 12_000);
 
     result.current.exit();
@@ -944,7 +1034,9 @@ describe("useReplayDvr — scrubber drag patterns (real player)", () => {
     expect(player.currentT).toBe(finalT);
     expect(player.state).toBe("playing");
 
-    await act(async () => { vi.advanceTimersByTime(200); });
+    await act(async () => {
+      vi.advanceTimersByTime(200);
+    });
     expect(player.currentT).toBeGreaterThan(finalT);
 
     result.current.exit();
@@ -988,7 +1080,9 @@ describe("useReplayDvr + useReplayPlayer combo (cursor progression)", () => {
     );
 
     const seekT = ORIGIN + 30_000;
-    await act(async () => { await result.current.dvr.enter(seekT); });
+    await act(async () => {
+      await result.current.dvr.enter(seekT);
+    });
 
     // Right after enter — currentT should reflect the seek point.
     expect(result.current.replayPlayer.currentT).toBe(seekT);
@@ -998,11 +1092,15 @@ describe("useReplayDvr + useReplayPlayer combo (cursor progression)", () => {
     // "cursor stuck" bug the user reported.
     // Phase 14: cursor snaps to 1s boundaries — must advance past 1000ms to
     // observe a tick (rate=1).
-    await act(async () => { vi.advanceTimersByTime(1_200); });
+    await act(async () => {
+      vi.advanceTimersByTime(1_200);
+    });
     const tAfter1200 = result.current.replayPlayer.currentT;
     expect(tAfter1200).toBeGreaterThan(seekT);
 
-    await act(async () => { vi.advanceTimersByTime(1_200); });
+    await act(async () => {
+      vi.advanceTimersByTime(1_200);
+    });
     const tAfter2400 = result.current.replayPlayer.currentT;
     expect(tAfter2400).toBeGreaterThan(tAfter1200);
 
@@ -1017,9 +1115,13 @@ describe("useReplayDvr + useReplayPlayer combo (cursor progression)", () => {
     );
 
     const seekT = ORIGIN + 20_000;
-    await act(async () => { await result.current.dvr.enter(seekT); });
+    await act(async () => {
+      await result.current.dvr.enter(seekT);
+    });
     // Phase 14: must cross a 1s boundary to observe a cursor update.
-    await act(async () => { vi.advanceTimersByTime(1_200); });
+    await act(async () => {
+      vi.advanceTimersByTime(1_200);
+    });
 
     const tBefore = result.current.replayPlayer.currentT;
     expect(tBefore).toBeGreaterThan(seekT);
@@ -1031,7 +1133,9 @@ describe("useReplayDvr + useReplayPlayer combo (cursor progression)", () => {
     expect(result.current.replayPlayer.currentT).toBeGreaterThanOrEqual(tBefore);
 
     // And still keeps progressing after the re-render storm.
-    await act(async () => { vi.advanceTimersByTime(1_200); });
+    await act(async () => {
+      vi.advanceTimersByTime(1_200);
+    });
     expect(result.current.replayPlayer.currentT).toBeGreaterThan(tBefore);
 
     result.current.dvr.exit();
@@ -1049,7 +1153,9 @@ describe("useReplayDvr + useReplayPlayer combo (cursor progression)", () => {
     );
 
     const seekT = ORIGIN + 15_000;
-    await act(async () => { await result.current.dvr.enter(seekT); });
+    await act(async () => {
+      await result.current.dvr.enter(seekT);
+    });
 
     const frozen = result.current.dvr.frozenLatest!;
     expect(frozen).toBe(ORIGIN + 30_000);
@@ -1083,7 +1189,9 @@ describe("useReplayDvr + useReplayPlayer combo (cursor progression)", () => {
     rerender();
     expect(result.current.dvr.effectiveTimeRange).toBe(beforeEnter);
 
-    await act(async () => { await result.current.dvr.enter(ORIGIN + 10_000); });
+    await act(async () => {
+      await result.current.dvr.enter(ORIGIN + 10_000);
+    });
     const inDvr = result.current.dvr.effectiveTimeRange;
     rerender();
     rerender();
@@ -1118,11 +1226,15 @@ describe("useReplayDvr — drag-preview pattern (Phase 12)", () => {
       }),
     );
 
-    await act(async () => { await result.current.enter(ORIGIN + 40_000); });
+    await act(async () => {
+      await result.current.enter(ORIGIN + 40_000);
+    });
     const player = result.current.player!;
 
     // Simulate a slow drag inward — 6 onChange events all firing player.seek.
-    const path = [38_000, 32_000, 26_000, 20_000, 14_000, 10_000].map((dt) => ORIGIN + dt);
+    const path = [38_000, 32_000, 26_000, 20_000, 14_000, 10_000].map(
+      (dt) => ORIGIN + dt,
+    );
     await act(async () => {
       for (const t of path) player.seek(t);
     });
@@ -1130,7 +1242,9 @@ describe("useReplayDvr — drag-preview pattern (Phase 12)", () => {
     expect(player.currentT).toBe(path[path.length - 1]!);
 
     // After "release", playback continues forward.
-    await act(async () => { vi.advanceTimersByTime(100); });
+    await act(async () => {
+      vi.advanceTimersByTime(100);
+    });
     expect(player.currentT).toBeGreaterThan(path[path.length - 1]!);
 
     result.current.exit();
@@ -1185,7 +1299,9 @@ describe("useReplayDvr — drag-preview pattern (Phase 12)", () => {
       }),
     );
 
-    await act(async () => { await result.current.enter(ORIGIN + 30_000); });
+    await act(async () => {
+      await result.current.enter(ORIGIN + 30_000);
+    });
     const player = result.current.player!;
     const seenSeeks: number[] = [];
     player.onSeek((t) => seenSeeks.push(t));
@@ -1219,7 +1335,7 @@ describe("useReplayDvr — drag-preview pattern (Phase 12)", () => {
     // Drag from live edge backward, fast — Phase 9 race fix on enter() must
     // hold, AND subsequent seeks must not be lost.
     await act(async () => {
-      void result.current.enter(ORIGIN + 50_000);  // not awaited
+      void result.current.enter(ORIGIN + 50_000); // not awaited
       // The remaining seeks happen before / interleaved with the enter await.
       // If `player` exists yet, seek; otherwise the next render hooks them up.
       await Promise.resolve();
@@ -1231,7 +1347,9 @@ describe("useReplayDvr — drag-preview pattern (Phase 12)", () => {
     expect(result.current.player!.currentT).toBe(ORIGIN + 50_000);
 
     // A seek now lands cleanly.
-    await act(async () => { result.current.player?.seek(ORIGIN + 25_000); });
+    await act(async () => {
+      result.current.player?.seek(ORIGIN + 25_000);
+    });
     expect(result.current.player!.currentT).toBe(ORIGIN + 25_000);
 
     result.current.exit();
@@ -1254,7 +1372,9 @@ describe("useReplayDvr — drag-preview pattern (Phase 12)", () => {
         useReplayDvr({ session, enterReplay, exitReplay, liveTimeRange: live, rate: 1 }),
       );
 
-      await act(async () => { await result.current.enter(ORIGIN + 20_000); });
+      await act(async () => {
+        await result.current.enter(ORIGIN + 20_000);
+      });
 
       const player = result.current.player!;
       // The root-cause assertion: the player's end condition is EXACTLY the
@@ -1278,17 +1398,23 @@ describe("useReplayDvr — drag-preview pattern (Phase 12)", () => {
       );
 
       // Enter at 30s into the recording — 20s of replay until the frozen edge.
-      await act(async () => { await result.current.enter(ORIGIN + 30_000); });
+      await act(async () => {
+        await result.current.enter(ORIGIN + 30_000);
+      });
       expect(result.current.isDvr).toBe(true);
       expect(result.current.player!.timeRange.latest).toBe(live.latest);
 
       // Walk the clock to just before the frozen edge — onEnd MUST NOT fire.
-      await act(async () => { vi.advanceTimersByTime(19_000); });
+      await act(async () => {
+        vi.advanceTimersByTime(19_000);
+      });
       expect(result.current.isDvr).toBe(true);
       expect(exitReplay).not.toHaveBeenCalled();
 
       // Cross the frozen edge — onEnd MUST fire, isDvr flips false.
-      await act(async () => { vi.advanceTimersByTime(2_000); });
+      await act(async () => {
+        vi.advanceTimersByTime(2_000);
+      });
       expect(result.current.isDvr).toBe(false);
       expect(result.current.player).toBeNull();
       expect(result.current.frozenLatest).toBeNull();
@@ -1310,10 +1436,14 @@ describe("useReplayDvr — drag-preview pattern (Phase 12)", () => {
         useReplayDvr({ session, enterReplay, exitReplay, liveTimeRange: live, rate: 1 }),
       );
 
-      await act(async () => { await result.current.enter(ORIGIN + 10_000); });
+      await act(async () => {
+        await result.current.enter(ORIGIN + 10_000);
+      });
 
       // Try to seek past frozenLatest into the IDB-only region.
-      await act(async () => { result.current.player?.seek(ORIGIN + 55_000); });
+      await act(async () => {
+        result.current.player?.seek(ORIGIN + 55_000);
+      });
       // Clamped down to frozenLatest, not IDB's 60_000.
       expect(result.current.player!.currentT).toBe(ORIGIN + 40_000);
 
@@ -1367,7 +1497,9 @@ describe("useReplayDvr — drag-preview pattern (Phase 12)", () => {
       const { result } = renderHook(() =>
         useReplayDvr({ session, enterReplay, exitReplay, liveTimeRange: live, rate: 1 }),
       );
-      await act(async () => { await result.current.enter(ORIGIN + 5_000); });
+      await act(async () => {
+        await result.current.enter(ORIGIN + 5_000);
+      });
 
       // The player's end matches the live tail — no truncation.
       expect(result.current.player!.timeRange.latest).toBe(expectedTailLatest);

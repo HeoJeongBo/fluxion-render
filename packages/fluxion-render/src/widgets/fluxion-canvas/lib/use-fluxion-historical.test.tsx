@@ -1,8 +1,8 @@
 import { act, render } from "@testing-library/react";
 import { useState } from "react";
 import { describe, expect, it, vi } from "vitest";
-import { FluxionHost } from "../../../features/host";
 import type { XyPoint } from "../../../features/host";
+import { FluxionHost } from "../../../features/host";
 import { Op } from "../../../shared/protocol";
 import { useFluxionHistorical } from "./use-fluxion-historical";
 
@@ -77,7 +77,10 @@ describe("useFluxionHistorical", () => {
 
   it("sends DATA message when xy data is provided", () => {
     const { host, posts } = makeHost();
-    const data: XyPoint[] = [{ x: 0, y: 1 }, { x: 1, y: 2 }];
+    const data: XyPoint[] = [
+      { x: 0, y: 1 },
+      { x: 1, y: 2 },
+    ];
     render(<Harness host={host} layerId="line" data={data} />);
     const dataMsgs = posts.filter(isData);
     expect(dataMsgs.length).toBe(1);
@@ -92,7 +95,14 @@ describe("useFluxionHistorical", () => {
       const [data, setData] = useState<XyPoint[]>([{ x: 0, y: 1 }]);
       useFluxionHistorical({ host, layerId: "line", data });
       return (
-        <button onClick={() => setData([{ x: 1, y: 2 }, { x: 2, y: 3 }])}>
+        <button
+          onClick={() =>
+            setData([
+              { x: 1, y: 2 },
+              { x: 2, y: 3 },
+            ])
+          }
+        >
           update
         </button>
       );
@@ -100,7 +110,9 @@ describe("useFluxionHistorical", () => {
 
     const { getByRole } = render(<Container />);
     const before = posts.filter(isData).length;
-    act(() => { getByRole("button").click(); });
+    act(() => {
+      getByRole("button").click();
+    });
     expect(posts.filter(isData).length).toBe(before + 1);
     host.dispose();
   });
@@ -130,7 +142,9 @@ describe("useFluxionHistorical", () => {
     const { getByText } = render(<Container />);
     expect(posts1.filter(isData).length).toBe(1);
 
-    act(() => { getByText("switch").click(); });
+    act(() => {
+      getByText("switch").click();
+    });
     expect(posts2.filter(isData).length).toBe(1);
 
     host1.dispose();

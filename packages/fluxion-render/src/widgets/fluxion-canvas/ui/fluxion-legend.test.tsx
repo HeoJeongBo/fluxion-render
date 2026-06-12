@@ -193,16 +193,18 @@ describe("FluxionLegend — position prop", () => {
 
 describe("FluxionLegend — className props", () => {
   it("applies className to root element", () => {
-    const { container } = render(
-      <FluxionLegend items={ITEMS} className="legend-root" />,
-    );
+    const { container } = render(<FluxionLegend items={ITEMS} className="legend-root" />);
     const root = getLegendEl(container);
     expect(root.classList.contains("legend-root")).toBe(true);
   });
 
   it("classNames.root overrides className", () => {
     const { container } = render(
-      <FluxionLegend items={ITEMS} className="ignored" classNames={{ root: "custom-root" }} />,
+      <FluxionLegend
+        items={ITEMS}
+        className="ignored"
+        classNames={{ root: "custom-root" }}
+      />,
     );
     const root = getLegendEl(container);
     expect(root.classList.contains("custom-root")).toBe(true);
@@ -244,9 +246,7 @@ describe("FluxionLegend — className props", () => {
 
 describe("FluxionLegend — custom style", () => {
   it("merges custom style into the root element outerHTML", () => {
-    const { container } = render(
-      <FluxionLegend items={ITEMS} style={{ zIndex: 10 }} />,
-    );
+    const { container } = render(<FluxionLegend items={ITEMS} style={{ zIndex: 10 }} />);
     const root = getLegendEl(container);
     expect(root.outerHTML).toContain("z-index: 10");
   });

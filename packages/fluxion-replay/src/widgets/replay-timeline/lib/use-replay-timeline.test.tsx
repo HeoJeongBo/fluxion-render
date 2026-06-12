@@ -1,7 +1,10 @@
-import { renderHook, act } from "@testing-library/react";
+import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ReplayPlayer } from "../../../features/player/model/replay-player";
-import { ReplayStore, type RecordingSegment } from "../../../features/store/model/replay-store";
+import {
+  type RecordingSegment,
+  ReplayStore,
+} from "../../../features/store/model/replay-store";
 import { useReplayTimeline } from "./use-replay-timeline";
 
 function makePlayer(earliest = 0, latest = 10_000) {
@@ -28,7 +31,7 @@ describe("useReplayTimeline", () => {
   it("computes durationMs from timeRange", () => {
     const player = makePlayer(1000, 6000);
     const { result } = renderHook(() =>
-      useReplayTimeline(player, { earliest: 1000, latest: 6000 })
+      useReplayTimeline(player, { earliest: 1000, latest: 6000 }),
     );
     expect(result.current.durationMs).toBe(5000);
     player.dispose();
@@ -37,7 +40,7 @@ describe("useReplayTimeline", () => {
   it("fraction starts at 0", () => {
     const player = makePlayer(0, 10_000);
     const { result } = renderHook(() =>
-      useReplayTimeline(player, { earliest: 0, latest: 10_000 })
+      useReplayTimeline(player, { earliest: 0, latest: 10_000 }),
     );
     expect(result.current.fraction).toBe(0);
     player.dispose();
@@ -47,9 +50,11 @@ describe("useReplayTimeline", () => {
     const player = makePlayer(0, 10_000);
     const seekSpy = vi.spyOn(player, "seek");
     const { result } = renderHook(() =>
-      useReplayTimeline(player, { earliest: 0, latest: 10_000 })
+      useReplayTimeline(player, { earliest: 0, latest: 10_000 }),
     );
-    act(() => { result.current.seekTo(0.5); });
+    act(() => {
+      result.current.seekTo(0.5);
+    });
     expect(seekSpy).toHaveBeenCalledWith(5000);
     player.dispose();
   });
@@ -58,11 +63,15 @@ describe("useReplayTimeline", () => {
     const player = makePlayer(0, 10_000);
     const seekSpy = vi.spyOn(player, "seek");
     const { result } = renderHook(() =>
-      useReplayTimeline(player, { earliest: 0, latest: 10_000 })
+      useReplayTimeline(player, { earliest: 0, latest: 10_000 }),
     );
-    act(() => { result.current.seekTo(-0.5); });
+    act(() => {
+      result.current.seekTo(-0.5);
+    });
     expect(seekSpy).toHaveBeenCalledWith(0);
-    act(() => { result.current.seekTo(1.5); });
+    act(() => {
+      result.current.seekTo(1.5);
+    });
     expect(seekSpy).toHaveBeenCalledWith(10_000);
     player.dispose();
   });
@@ -71,9 +80,11 @@ describe("useReplayTimeline", () => {
     const player = makePlayer(0, 10_000);
     const seekSpy = vi.spyOn(player, "seek");
     const { result } = renderHook(() =>
-      useReplayTimeline(player, { earliest: 0, latest: 10_000 })
+      useReplayTimeline(player, { earliest: 0, latest: 10_000 }),
     );
-    act(() => { result.current.seekToMs(3000); });
+    act(() => {
+      result.current.seekToMs(3000);
+    });
     expect(seekSpy).toHaveBeenCalledWith(3000);
     player.dispose();
   });
@@ -82,7 +93,9 @@ describe("useReplayTimeline", () => {
     const player = makePlayer(0, 10_000);
     const seekSpy = vi.spyOn(player, "seek");
     const { result } = renderHook(() => useReplayTimeline(player, null));
-    act(() => { result.current.seekTo(0.5); });
+    act(() => {
+      result.current.seekTo(0.5);
+    });
     expect(seekSpy).not.toHaveBeenCalled();
     player.dispose();
   });
@@ -90,7 +103,7 @@ describe("useReplayTimeline", () => {
   it("fraction is 0 when durationMs is 0", () => {
     const player = makePlayer(5000, 5000);
     const { result } = renderHook(() =>
-      useReplayTimeline(player, { earliest: 5000, latest: 5000 })
+      useReplayTimeline(player, { earliest: 5000, latest: 5000 }),
     );
     expect(result.current.fraction).toBe(0);
     player.dispose();
@@ -100,9 +113,11 @@ describe("useReplayTimeline", () => {
     const player = makePlayer(0, 10_000);
     const seekSpy = vi.spyOn(player, "seek");
     const { result } = renderHook(() =>
-      useReplayTimeline(player, { earliest: 0, latest: 10_000 })
+      useReplayTimeline(player, { earliest: 0, latest: 10_000 }),
     );
-    act(() => { result.current.seekForward(2000); });
+    act(() => {
+      result.current.seekForward(2000);
+    });
     // currentT starts at 0, so seek(0 + 2000)
     expect(seekSpy).toHaveBeenCalledWith(2000);
     player.dispose();
@@ -112,9 +127,11 @@ describe("useReplayTimeline", () => {
     const player = makePlayer(0, 10_000);
     const seekSpy = vi.spyOn(player, "seek");
     const { result } = renderHook(() =>
-      useReplayTimeline(player, { earliest: 0, latest: 10_000 })
+      useReplayTimeline(player, { earliest: 0, latest: 10_000 }),
     );
-    act(() => { result.current.seekBackward(1000); });
+    act(() => {
+      result.current.seekBackward(1000);
+    });
     // currentT starts at 0, seek(0 - 1000) = -1000 (clamped by player internally)
     expect(seekSpy).toHaveBeenCalledWith(-1000);
     player.dispose();
@@ -124,9 +141,11 @@ describe("useReplayTimeline", () => {
     const player = makePlayer(0, 10_000);
     const seekSpy = vi.spyOn(player, "seek");
     const { result } = renderHook(() =>
-      useReplayTimeline(player, { earliest: 0, latest: 10_000 })
+      useReplayTimeline(player, { earliest: 0, latest: 10_000 }),
     );
-    act(() => { result.current.seekToPercent(50); });
+    act(() => {
+      result.current.seekToPercent(50);
+    });
     expect(seekSpy).toHaveBeenCalledWith(5000);
     player.dispose();
   });
@@ -135,11 +154,15 @@ describe("useReplayTimeline", () => {
     const player = makePlayer(0, 10_000);
     const seekSpy = vi.spyOn(player, "seek");
     const { result } = renderHook(() =>
-      useReplayTimeline(player, { earliest: 0, latest: 10_000 })
+      useReplayTimeline(player, { earliest: 0, latest: 10_000 }),
     );
-    act(() => { result.current.seekToPercent(-10); });
+    act(() => {
+      result.current.seekToPercent(-10);
+    });
     expect(seekSpy).toHaveBeenCalledWith(0);
-    act(() => { result.current.seekToPercent(150); });
+    act(() => {
+      result.current.seekToPercent(150);
+    });
     expect(seekSpy).toHaveBeenCalledWith(10_000);
     player.dispose();
   });
@@ -147,7 +170,7 @@ describe("useReplayTimeline", () => {
   it("progress.currentMs is 0 at start", () => {
     const player = makePlayer(0, 10_000);
     const { result } = renderHook(() =>
-      useReplayTimeline(player, { earliest: 0, latest: 10_000 })
+      useReplayTimeline(player, { earliest: 0, latest: 10_000 }),
     );
     expect(result.current.progress.currentMs).toBe(0);
     player.dispose();
@@ -156,7 +179,7 @@ describe("useReplayTimeline", () => {
   it("progress.remainingMs equals durationMs at start", () => {
     const player = makePlayer(0, 10_000);
     const { result } = renderHook(() =>
-      useReplayTimeline(player, { earliest: 0, latest: 10_000 })
+      useReplayTimeline(player, { earliest: 0, latest: 10_000 }),
     );
     expect(result.current.progress.remainingMs).toBe(10_000);
     player.dispose();
@@ -165,7 +188,7 @@ describe("useReplayTimeline", () => {
   it("progress.percent matches fraction * 100", () => {
     const player = makePlayer(0, 10_000);
     const { result } = renderHook(() =>
-      useReplayTimeline(player, { earliest: 0, latest: 10_000 })
+      useReplayTimeline(player, { earliest: 0, latest: 10_000 }),
     );
     expect(result.current.progress.percent).toBeCloseTo(result.current.fraction * 100, 5);
     player.dispose();
@@ -174,7 +197,7 @@ describe("useReplayTimeline", () => {
   it("isAtStart is true when currentT equals earliest", () => {
     const player = makePlayer(1000, 5000);
     const { result } = renderHook(() =>
-      useReplayTimeline(player, { earliest: 1000, latest: 5000 })
+      useReplayTimeline(player, { earliest: 1000, latest: 5000 }),
     );
     // player starts at earliest by default
     expect(result.current.isAtStart).toBe(true);
@@ -184,7 +207,7 @@ describe("useReplayTimeline", () => {
   it("isAtLiveEdge is true when durationMs is 0", () => {
     const player = makePlayer(5000, 5000);
     const { result } = renderHook(() =>
-      useReplayTimeline(player, { earliest: 5000, latest: 5000 })
+      useReplayTimeline(player, { earliest: 5000, latest: 5000 }),
     );
     expect(result.current.isAtLiveEdge).toBe(true);
     player.dispose();
@@ -201,7 +224,7 @@ describe("useReplayTimeline", () => {
     it("isInGap is false when no segments", () => {
       const player = makePlayer(0, 10_000);
       const { result } = renderHook(() =>
-        useReplayTimeline(player, { earliest: 0, latest: 10_000 })
+        useReplayTimeline(player, { earliest: 0, latest: 10_000 }),
       );
       expect(result.current.isInGap).toBe(false);
       player.dispose();
@@ -214,7 +237,7 @@ describe("useReplayTimeline", () => {
         { start: 6_000, end: 10_000 },
       ];
       const { result } = renderHook(() =>
-        useReplayTimeline(player, { earliest: 0, latest: 10_000 }, segments)
+        useReplayTimeline(player, { earliest: 0, latest: 10_000 }, segments),
       );
       // currentT starts at 0, inside first segment
       expect(result.current.isInGap).toBe(false);
@@ -235,7 +258,7 @@ describe("useReplayTimeline", () => {
         { start: 6_000, end: 10_000 },
       ];
       const { result } = renderHook(() =>
-        useReplayTimeline(p, { earliest: 0, latest: 10_000 }, segments)
+        useReplayTimeline(p, { earliest: 0, latest: 10_000 }, segments),
       );
       // currentT=5000, gap=[4000..6000)
       expect(result.current.isInGap).toBe(true);
@@ -250,10 +273,12 @@ describe("useReplayTimeline", () => {
         { start: 6_000, end: 10_000 },
       ];
       const { result } = renderHook(() =>
-        useReplayTimeline(player, { earliest: 0, latest: 10_000 }, segments)
+        useReplayTimeline(player, { earliest: 0, latest: 10_000 }, segments),
       );
       // seekTo(0.5) = 5000ms, which is in the gap → snapped to 6000
-      act(() => { result.current.seekTo(0.5); });
+      act(() => {
+        result.current.seekTo(0.5);
+      });
       expect(seekSpy).toHaveBeenCalledWith(6_000);
       player.dispose();
     });
@@ -266,10 +291,12 @@ describe("useReplayTimeline", () => {
         { start: 6_000, end: 10_000 },
       ];
       const { result } = renderHook(() =>
-        useReplayTimeline(player, { earliest: 0, latest: 10_000 }, segments)
+        useReplayTimeline(player, { earliest: 0, latest: 10_000 }, segments),
       );
       // t=5000 is in gap → snapped to 6000
-      act(() => { result.current.seekToMs(5_000); });
+      act(() => {
+        result.current.seekToMs(5_000);
+      });
       expect(seekSpy).toHaveBeenCalledWith(6_000);
       player.dispose();
     });
@@ -282,10 +309,12 @@ describe("useReplayTimeline", () => {
         { start: 6_000, end: 10_000 },
       ];
       const { result } = renderHook(() =>
-        useReplayTimeline(player, { earliest: 0, latest: 10_000 }, segments)
+        useReplayTimeline(player, { earliest: 0, latest: 10_000 }, segments),
       );
       // currentT=0, seekForward(4500) → raw=4500 (in gap) → snapped to 6000
-      act(() => { result.current.seekForward(4_500); });
+      act(() => {
+        result.current.seekForward(4_500);
+      });
       expect(seekSpy).toHaveBeenCalledWith(6_000);
       player.dispose();
     });
@@ -294,9 +323,11 @@ describe("useReplayTimeline", () => {
       const player = makePlayer(0, 10_000);
       const seekSpy = vi.spyOn(player, "seek");
       const { result } = renderHook(() =>
-        useReplayTimeline(player, { earliest: 0, latest: 10_000 })
+        useReplayTimeline(player, { earliest: 0, latest: 10_000 }),
       );
-      act(() => { result.current.seekToMs(3_500); });
+      act(() => {
+        result.current.seekToMs(3_500);
+      });
       expect(seekSpy).toHaveBeenCalledWith(3_500);
       player.dispose();
     });
@@ -305,9 +336,11 @@ describe("useReplayTimeline", () => {
       const player = makePlayer(0, 10_000);
       const seekSpy = vi.spyOn(player, "seek");
       const { result } = renderHook(() =>
-        useReplayTimeline(player, { earliest: 0, latest: 10_000 })
+        useReplayTimeline(player, { earliest: 0, latest: 10_000 }),
       );
-      act(() => { result.current.seekForward(3_000); });
+      act(() => {
+        result.current.seekForward(3_000);
+      });
       expect(seekSpy).toHaveBeenCalledWith(3_000);
       player.dispose();
     });

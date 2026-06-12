@@ -4,11 +4,19 @@ import { HeatmapStreamLayer } from "./heatmap-stream-layer";
 
 function makeCtx() {
   return {
-    save: vi.fn(), restore: vi.fn(),
-    clearRect: vi.fn(), fillRect: vi.fn(),
-    beginPath: vi.fn(), fill: vi.fn(), stroke: vi.fn(),
-    moveTo: vi.fn(), lineTo: vi.fn(),
-    fillStyle: "", strokeStyle: "", lineWidth: 0, globalAlpha: 1,
+    save: vi.fn(),
+    restore: vi.fn(),
+    clearRect: vi.fn(),
+    fillRect: vi.fn(),
+    beginPath: vi.fn(),
+    fill: vi.fn(),
+    stroke: vi.fn(),
+    moveTo: vi.fn(),
+    lineTo: vi.fn(),
+    fillStyle: "",
+    strokeStyle: "",
+    lineWidth: 0,
+    globalAlpha: 1,
     createLinearGradient: vi.fn(() => ({ addColorStop: vi.fn() })),
     drawImage: vi.fn(),
   } as unknown as OffscreenCanvasRenderingContext2D;
@@ -19,7 +27,8 @@ function makeViewport(width = 800, height = 400) {
     bounds: { xMin: 0, xMax: 1000, yMin: 0, yMax: 100 },
     xToPx: vi.fn((x: number) => x * 0.8),
     yToPx: vi.fn((y: number) => height - y * 4),
-    width, height,
+    width,
+    height,
     heightPx: height,
     observedYMin: Number.POSITIVE_INFINITY,
     observedYMax: Number.NEGATIVE_INFINITY,
@@ -27,7 +36,10 @@ function makeViewport(width = 800, height = 400) {
   } as unknown as Viewport;
 }
 
-function makeColumn(t: number, ...values: number[]): { buffer: ArrayBuffer; length: number } {
+function makeColumn(
+  t: number,
+  ...values: number[]
+): { buffer: ArrayBuffer; length: number } {
   const arr = new Float32Array([t, ...values]);
   return { buffer: arr.buffer, length: arr.length };
 }
@@ -188,7 +200,9 @@ describe("HeatmapStreamLayer", () => {
     }
     const ctx = makeCtx();
     layer.draw(ctx, vp);
-    expect((ctx.fillRect as ReturnType<typeof vi.fn>).mock.calls.length).toBeGreaterThan(0);
+    expect((ctx.fillRect as ReturnType<typeof vi.fn>).mock.calls.length).toBeGreaterThan(
+      0,
+    );
   });
 
   it("draw computes cellW from adjacent column spacing", () => {

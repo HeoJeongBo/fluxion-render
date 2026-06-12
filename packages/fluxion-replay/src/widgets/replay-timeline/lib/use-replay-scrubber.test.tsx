@@ -1,9 +1,6 @@
 import { renderHook } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import {
-  useReplayScrubber,
-  type UseReplayScrubberOptions,
-} from "./use-replay-scrubber";
+import { type UseReplayScrubberOptions, useReplayScrubber } from "./use-replay-scrubber";
 
 function setup(initial: UseReplayScrubberOptions) {
   return renderHook((p: UseReplayScrubberOptions) => useReplayScrubber(p), {
