@@ -1,5 +1,18 @@
 # Changelog
 
+# [0.17.0](https://github-personal/HeoJeongBo/fluxion-render/compare/fluxion-render-v0.16.0...fluxion-render-v0.17.0) (2026-06-12)
+
+
+### Bug Fixes
+
+* **replay:** cancel stale DVR enter on return-to-live scrub release ([54de418](https://github-personal/HeoJeongBo/fluxion-render/commit/54de418ac8540107f4dfcf16117fd7ab7039caba))
+* **replay:** fix bugs, improve perf, and expand test coverage ([844c71a](https://github-personal/HeoJeongBo/fluxion-render/commit/844c71ac933330abbbfd224520efc18d0f8a0f7e))
+
+
+### Features
+
+* **render,examples:** add followClock for wall-clock axis scrolling ([3ea8346](https://github-personal/HeoJeongBo/fluxion-render/commit/3ea8346b1a18b97f5db065ea90d6607d4028c11a))
+
 # [0.16.0](https://github-personal/HeoJeongBo/fluxion-render/compare/fluxion-render-v0.15.0...fluxion-render-v0.16.0) (2026-06-05)
 
 
