@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.11.2](https://github-personal/HeoJeongBo/fluxion-render/compare/fluxion-replay-v0.11.1...fluxion-replay-v0.11.2) (2026-06-12)
+
+
+### Bug Fixes
+
+* **replay:** cancel stale DVR enter on return-to-live scrub release ([54de418](https://github-personal/HeoJeongBo/fluxion-render/commit/54de418ac8540107f4dfcf16117fd7ab7039caba))
+
 ## [0.11.1](https://github-personal/HeoJeongBo/fluxion-render/compare/fluxion-replay-v0.11.0...fluxion-replay-v0.11.1) (2026-06-08)
 
 
