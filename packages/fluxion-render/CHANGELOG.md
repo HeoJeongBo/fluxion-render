@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.17.1](https://github-personal/HeoJeongBo/fluxion-render/compare/fluxion-render-v0.17.0...fluxion-render-v0.17.1) (2026-06-12)
+
+
+### Bug Fixes
+
+* **render,replay:** widen pre-1.0 peer ranges to >=X <1 ([68f27c3](https://github-personal/HeoJeongBo/fluxion-render/commit/68f27c380d84a2ed09a370fffd70e46e30cb08e1))
+
 # [0.17.0](https://github-personal/HeoJeongBo/fluxion-render/compare/fluxion-render-v0.16.0...fluxion-render-v0.17.0) (2026-06-12)
 
 
