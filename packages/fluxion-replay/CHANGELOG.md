@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.11.3](https://github-personal/HeoJeongBo/fluxion-render/compare/fluxion-replay-v0.11.2...fluxion-replay-v0.11.3) (2026-06-12)
+
+
+### Bug Fixes
+
+* **render,replay:** widen pre-1.0 peer ranges to >=X <1 ([68f27c3](https://github-personal/HeoJeongBo/fluxion-render/commit/68f27c380d84a2ed09a370fffd70e46e30cb08e1))
+
+
+### Features
+
+* **render,examples:** add followClock for wall-clock axis scrolling ([3ea8346](https://github-personal/HeoJeongBo/fluxion-render/commit/3ea8346b1a18b97f5db065ea90d6607d4028c11a))
+
 ## [0.11.2](https://github-personal/HeoJeongBo/fluxion-render/compare/fluxion-replay-v0.11.1...fluxion-replay-v0.11.2) (2026-06-12)
 
 
