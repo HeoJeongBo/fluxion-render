@@ -11,6 +11,7 @@
   "dependencies": {
     "@heojeongbo/fluxion-render": "workspace:*",
     "@heojeongbo/fluxion-worker": "workspace:*",
+    "@tanstack/react-router": "^1.170.15",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
   },
