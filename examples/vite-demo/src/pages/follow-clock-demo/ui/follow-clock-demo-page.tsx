@@ -29,8 +29,23 @@ const PAUSE_MS = 1_000;
 const CYCLE_MS = STREAM_MS + PAUSE_MS;
 
 const SERIES = [
-  { id: "s1", color: "#4fc3f7", freqHz: 0.8, amplitude: 0.9, seriesOffset: 0 },
-  { id: "s2", color: "#ffb060", freqHz: 1.6, amplitude: 0.6, seriesOffset: 1.4 },
+  {
+    id: "s1",
+    color: "#4fc3f7",
+    freqHz: 0.8,
+    amplitude: 0.9,
+    seriesOffset: 0,
+    dash: false,
+  },
+  // Dashed so it stays distinguishable from s1 where their values overlap.
+  {
+    id: "s2",
+    color: "#ffb060",
+    freqHz: 1.6,
+    amplitude: 0.6,
+    seriesOffset: 1.4,
+    dash: true,
+  },
 ];
 
 const noise = mulberry32(0x1234_5678);
@@ -85,6 +100,8 @@ export function FollowClockDemoPage() {
           // Break the stroke across the 1s silence (any gap beyond half the
           // pause is clearly "no data", not jitter).
           maxGapMs: PAUSE_MS / 2,
+          // Dashed series stays readable where it overlaps the solid one.
+          dashArray: s.dash ? [6, 4] : undefined,
         }),
       ),
     ],

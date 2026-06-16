@@ -1,6 +1,7 @@
 import type { ComponentType } from "react";
 import { AllDemoPage } from "../pages/all-demo";
 import { AreaDemoPage } from "../pages/area-demo";
+import { AxisFormatDemoPage } from "../pages/axis-format-demo";
 import { BarDemoPage } from "../pages/bar-demo";
 import { BrushDemoPage } from "../pages/brush-demo";
 import { CandlestickDemoPage } from "../pages/candlestick-demo";
@@ -11,6 +12,7 @@ import { FluxionWorkerDemoPage } from "../pages/fluxion-worker-demo";
 import { FollowClockDemoPage } from "../pages/follow-clock-demo";
 import { GaugeDemoPage } from "../pages/gauge-demo";
 import { HeatmapDemoPage } from "../pages/heatmap-demo";
+import { HelpersDemoPage } from "../pages/helpers-demo";
 import { HighRateDemoPage } from "../pages/high-rate-demo";
 import { HistoricalDemoPage } from "../pages/historical-demo";
 import { LidarDemoPage } from "../pages/lidar-demo";
@@ -76,6 +78,13 @@ export const DEMO_GROUPS: readonly DemoGroup[] = [
       { slug: "heatmap", label: "Heatmap", component: HeatmapDemoPage },
       { slug: "pie", label: "Pie Chart", component: PieDemoPage },
       { slug: "table", label: "Table", component: TableDemoPage },
+    ],
+  },
+  {
+    label: "DX Helpers",
+    demos: [
+      { slug: "helpers", label: "Helper Hooks + Dash", component: HelpersDemoPage },
+      { slug: "axis-format", label: "Axis Formatters", component: AxisFormatDemoPage },
     ],
   },
   {
