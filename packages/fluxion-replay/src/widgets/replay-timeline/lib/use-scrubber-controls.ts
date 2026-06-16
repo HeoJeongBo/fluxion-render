@@ -165,10 +165,12 @@ export function useScrubberControls(
   const scheduleSeek = useCallback(
     (t: number) => {
       // requestAnimationFrame may be absent (SSR/tests) — seek immediately then.
+      /* v8 ignore start -- SSR/no-rAF fallback; happy-dom always provides rAF */
       if (typeof requestAnimationFrame === "undefined") {
         dvr.player?.seek(t);
         return;
       }
+      /* v8 ignore stop */
       if (pendingSeekRef.current) {
         // Same frame already scheduled → just update the target.
         pendingSeekRef.current.t = t;

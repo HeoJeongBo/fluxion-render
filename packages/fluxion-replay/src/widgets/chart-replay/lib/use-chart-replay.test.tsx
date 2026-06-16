@@ -75,6 +75,29 @@ describe("useChartReplay", () => {
     expect(resets[0]).toEqual({ id: "signal", latestT: 5000 });
   });
 
+  it("surfaces a store/decode hydrate error via console.error", async () => {
+    const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const { host } = makeFakeHost();
+    const player = makeFakePlayer(5000);
+    const store = makeFakeStore({ signal: [] });
+    // Force the async fetch to reject → hydrate catch block fires.
+    store.getFramesByChannel.mockRejectedValueOnce(new Error("idb boom"));
+
+    await act(async () => {
+      render(
+        <ChartReplayProbe host={host} player={player} store={store} windowMs={2000} />,
+      );
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(errSpy).toHaveBeenCalledWith(
+      "[useChartReplay] hydrate failed:",
+      expect.any(Error),
+    );
+    errSpy.mockRestore();
+  });
+
   it("re-hydrates on player.onSeek(t)", async () => {
     const { host, batches, resets } = makeFakeHost();
     const player = makeFakePlayer(5000);

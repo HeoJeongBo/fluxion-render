@@ -33,6 +33,18 @@ describe("VirtualClock", () => {
     clock.stop();
   });
 
+  it("start() while already running restarts cleanly without a duplicate loop", () => {
+    const clock = new VirtualClock();
+    clock.start(0, 1.0);
+    vi.advanceTimersByTime(500);
+    // Re-start while running → stops the existing loop, then re-anchors.
+    clock.start(10_000, 1.0);
+    expect(clock.currentT).toBeCloseTo(10_000, 0);
+    vi.advanceTimersByTime(500);
+    expect(clock.currentT).toBeCloseTo(10_500, -1);
+    clock.stop();
+  });
+
   it("pause freezes currentT", () => {
     const clock = new VirtualClock();
     clock.start(0, 1.0);

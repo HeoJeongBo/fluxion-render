@@ -97,7 +97,9 @@ describe("Scenario 09-A: 5-minute multi-channel recording", () => {
   // A1. Full playback from t=0: gap-free, dup-free, value-coherent
   // -------------------------------------------------------------------------
 
-  it("A1: full 5-min 3-ch playback is gap-free, dup-free, and value-coherent", async () => {
+  it("A1: full 5-min 3-ch playback is gap-free, dup-free, and value-coherent", {
+    timeout: 20_000,
+  }, async () => {
     const player = await session.enterReplay(0);
 
     const s0: { t: number; value: number }[] = [];
@@ -139,7 +141,9 @@ describe("Scenario 09-A: 5-minute multi-channel recording", () => {
   // A2. Mid-point seek → playback → data integrity + 3-channel sync
   // -------------------------------------------------------------------------
 
-  it("A2: seek to 5-min midpoint delivers correct values and channels stay in sync", async () => {
+  it("A2: seek to 5-min midpoint delivers correct values and channels stay in sync", {
+    timeout: 20_000,
+  }, async () => {
     const SEEK_T = 150_000;
     const player = await session.enterReplay(SEEK_T);
     await drain();
@@ -193,7 +197,9 @@ describe("Scenario 09-A: 5-minute multi-channel recording", () => {
   // A3. Past → present → past round-trip (stale frame contamination guard)
   // -------------------------------------------------------------------------
 
-  it("A3: past-present-past round-trip seek delivers only frames from the correct time window", async () => {
+  it("A3: past-present-past round-trip seek delivers only frames from the correct time window", {
+    timeout: 20_000,
+  }, async () => {
     const player = await session.enterReplay(0);
 
     // Phase 1: play forward to ~200k
@@ -276,7 +282,9 @@ describe("Scenario 09-A: 5-minute multi-channel recording", () => {
   // A5. Pause → idle → resume — playback continues from pause position
   // -------------------------------------------------------------------------
 
-  it("A5: pause-idle-resume continues playback gaplessly from the paused position", async () => {
+  it("A5: pause-idle-resume continues playback gaplessly from the paused position", {
+    timeout: 20_000,
+  }, async () => {
     const SEEK_T = 100_000;
     const player = await session.enterReplay(SEEK_T);
 
@@ -286,7 +294,11 @@ describe("Scenario 09-A: 5-minute multi-channel recording", () => {
     });
 
     player.play();
-    await vi.advanceTimersByTimeAsync(5_000); // play ~5s → currentT ≈ 105k
+    // Step the advance in small increments. Under v8 coverage instrumentation
+    // the rAF loop body runs slower, and a single large advance can overshoot
+    // the wall-clock delta enough to trip an end/stop reset (currentT → 0).
+    // Stepping keeps each settle bounded so the pause snapshot is deterministic.
+    for (let i = 0; i < 10; i++) await vi.advanceTimersByTimeAsync(500); // ~5s → currentT ≈ 105k
     player.pause();
 
     const pausedAt = player.currentT;
@@ -299,7 +311,7 @@ describe("Scenario 09-A: 5-minute multi-channel recording", () => {
 
     // Resume
     player.play();
-    await vi.advanceTimersByTimeAsync(10_000);
+    for (let i = 0; i < 20; i++) await vi.advanceTimersByTimeAsync(500); // ~10s
     session.exitReplay();
 
     // Frames after resume start at pausedAt (with STEP_MS precision)
@@ -374,7 +386,9 @@ describe("Scenario 09-B: 10-minute multi-channel recording", () => {
   // B2. Value integrity sampled at 5 seek points across the 10-min span
   // -------------------------------------------------------------------------
 
-  it("B2: value coherence holds at five seek points across the 10-min span", async () => {
+  it("B2: value coherence holds at five seek points across the 10-min span", {
+    timeout: 20_000,
+  }, async () => {
     const seekPoints = [0, 150_000, 300_000, 450_000, 590_000];
 
     for (const seekT of seekPoints) {
@@ -425,7 +439,9 @@ describe("Scenario 09-B: 10-minute multi-channel recording", () => {
   // B3. Near-end seek + playback → onEnd fires exactly once
   // -------------------------------------------------------------------------
 
-  it("B3: seek to near end of 10-min recording, play to end, onEnd fires exactly once", async () => {
+  it("B3: seek to near end of 10-min recording, play to end, onEnd fires exactly once", {
+    timeout: 20_000,
+  }, async () => {
     const player = await session.enterReplay(590_000);
     await drain();
 
@@ -461,7 +477,9 @@ describe("Scenario 09-B: 10-minute multi-channel recording", () => {
   // B4. Backward seek from ~500k → no stale frames from old prefetch window
   // -------------------------------------------------------------------------
 
-  it("B4: backward seek from 500k to 50k delivers no stale frames from the old window", async () => {
+  it("B4: backward seek from 500k to 50k delivers no stale frames from the old window", {
+    timeout: 20_000,
+  }, async () => {
     const player = await session.enterReplay(0);
 
     // Warm prefetch buffer near 500k
@@ -504,7 +522,9 @@ describe("Scenario 09-B: 10-minute multi-channel recording", () => {
   // B5. Multi-channel fan-out seek atomicity across two seek points
   // -------------------------------------------------------------------------
 
-  it("B5: sequential seeks reposition all 3 channels atomically with no cross-channel contamination", async () => {
+  it("B5: sequential seeks reposition all 3 channels atomically with no cross-channel contamination", {
+    timeout: 20_000,
+  }, async () => {
     const player = await session.enterReplay(0);
 
     const m0Ts: number[] = [];

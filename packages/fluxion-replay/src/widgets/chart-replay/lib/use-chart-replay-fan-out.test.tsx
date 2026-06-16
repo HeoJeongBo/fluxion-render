@@ -139,6 +139,38 @@ describe("useChartReplayFanOut", () => {
     expect(b.host.line).toHaveBeenCalledWith("L3");
   });
 
+  it("surfaces a hydrate error via console.error instead of swallowing it", async () => {
+    const a = makeFanOutHost("A");
+    const store = makeFakeStore({ snap: snapFrames({ t: 1000, value: 7 }) });
+    const player = makeFakePlayer(1000);
+    const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const getSources = (): ReplayFanOutSource<{ value: number }>[] => [
+      {
+        host: a.host as never,
+        lines: [
+          {
+            layerId: "boom",
+            pick: () => {
+              throw new Error("decode boom");
+            },
+          },
+        ],
+      },
+    ];
+
+    await act(async () => {
+      render(<FanOutProbe player={player} store={store} getSources={getSources} />);
+      await flushMicrotasks();
+    });
+
+    expect(errSpy).toHaveBeenCalledWith(
+      "[useChartReplayFanOut] hydrate failed:",
+      expect.any(Error),
+    );
+    errSpy.mockRestore();
+  });
+
   it("extracts a distinct field per line via pick", async () => {
     const a = makeFanOutHost("A");
     const store = makeFakeStore({ snap: snapFrames({ t: 1000, value: 7 }) });

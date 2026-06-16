@@ -1,6 +1,10 @@
 # @heojeongbo/fluxion-replay
 
 [![npm](https://img.shields.io/npm/v/@heojeongbo/fluxion-replay)](https://www.npmjs.com/package/@heojeongbo/fluxion-replay)
+[![coverage](https://img.shields.io/badge/coverage-100%25%20lines-brightgreen)](#)
+
+<!-- Tested with Vitest; enforced threshold: 100% lines. Run `pnpm vitest run --coverage` in this package (scenario-09 needs the 20s per-test timeouts under instrumentation). -->
+
 
 Time-travel replay for real-time dashboards. Record any stream of typed data (metrics, logs, ROS messages, screen video) and scrub back through the last N minutes — all in-browser with no backend.
 
