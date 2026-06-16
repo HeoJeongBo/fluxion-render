@@ -134,6 +134,13 @@ describe("WorkerPool", () => {
       }
     });
 
+    it("isDisposed flips from false to true on dispose", () => {
+      const { pool } = makePool(1);
+      expect(pool.isDisposed).toBe(false);
+      pool.dispose();
+      expect(pool.isDisposed).toBe(true);
+    });
+
     it("is idempotent (double-dispose does not crash)", () => {
       const { pool, fakeWorkers } = makePool(1);
       pool.dispose();

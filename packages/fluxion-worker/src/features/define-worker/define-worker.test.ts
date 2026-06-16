@@ -396,6 +396,17 @@ describe("defineWorker — stream mode", () => {
     expect(call[1]).toEqual([buf]);
   });
 
+  it("push() omits hostId when the stream message has none", () => {
+    defineWorker(vi.fn(), (_msg, push) => {
+      push({ parsed: 3 });
+    });
+    selfMock.emit({ mode: "stream" }); // no hostId
+    const out = selfMock.postMessage.mock.calls[0]![0] as Record<string, unknown>;
+    expect(out.__fluxionStream).toBe(true);
+    expect(out.parsed).toBe(3);
+    expect("hostId" in out).toBe(false);
+  });
+
   it("falls back to rpcHandler when no streamHandler and mode=stream", () => {
     const rpc = vi.fn();
     defineWorker(rpc);
@@ -491,5 +502,40 @@ describe("defineWorkerWithState — stream mode", () => {
     expect(out.__fluxionStream).toBe(true);
     expect(out.value).toBe(55);
     expect(out.hostId).toBe("host-1");
+  });
+
+  it("posts WorkerErrorMsg when a synchronous streamHandler throws", () => {
+    defineWorkerWithState(vi.fn(), () => {
+      throw new Error("stream boom");
+    });
+    selfMock.emit({ hostId: "host-9", mode: "stream" });
+    expect(selfMock.postMessage).toHaveBeenCalledOnce();
+    const err = selfMock.postMessage.mock.calls[0]![0] as WorkerErrorMsg;
+    expect(err.__fluxionError).toBe(true);
+    expect(err.message).toBe("stream boom");
+    expect(err.hostId).toBe("host-9");
+  });
+
+  it("push() forwards a transfer list when provided", () => {
+    const buf = new ArrayBuffer(8);
+    defineWorkerWithState(vi.fn(), (_msg, push) => {
+      push({ value: 1 }, [buf]);
+    });
+    selfMock.emit({ hostId: "host-1", mode: "stream" });
+    expect(selfMock.postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({ __fluxionStream: true, value: 1 }),
+      [buf],
+    );
+  });
+
+  it("push() omits hostId on the stream output when the message has none", () => {
+    defineWorkerWithState(vi.fn(), (_msg, push) => {
+      push({ value: 7 });
+    });
+    selfMock.emit({ mode: "stream" }); // no hostId
+    const out = selfMock.postMessage.mock.calls[0]![0] as Record<string, unknown>;
+    expect(out.__fluxionStream).toBe(true);
+    expect(out.value).toBe(7);
+    expect("hostId" in out).toBe(false);
   });
 });

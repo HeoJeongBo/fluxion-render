@@ -170,7 +170,6 @@ export function defineWorkerWithState<
           result.catch((e) => _postError(hostId, e));
         }
       } catch (e) {
-        /* v8 ignore next */
         _postError(hostId, e);
       }
       return;
