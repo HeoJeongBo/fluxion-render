@@ -1,10 +1,7 @@
 # @heojeongbo/fluxion-replay
 
 [![npm](https://img.shields.io/npm/v/@heojeongbo/fluxion-replay)](https://www.npmjs.com/package/@heojeongbo/fluxion-replay)
-[![coverage](https://img.shields.io/badge/coverage-100%25%20lines-brightgreen)](#)
-
-<!-- Tested with Vitest; enforced threshold: 100% lines. Run `pnpm vitest run --coverage` in this package (scenario-09 needs the 20s per-test timeouts under instrumentation). -->
-
+[![coverage](https://img.shields.io/badge/coverage-100%25%20lines-brightgreen)](#testing)
 
 Time-travel replay for real-time dashboards. Record any stream of typed data (metrics, logs, ROS messages, screen video) and scrub back through the last N minutes — all in-browser with no backend.
 
@@ -826,6 +823,23 @@ packages/fluxion-replay/src/
         ├── use-replay-player.ts
         └── use-replay-timeline.ts
 ```
+
+---
+
+## Testing
+
+Tested with [Vitest](https://vitest.dev). Build `fluxion-render` first so the
+workspace dependency resolves via `dist/`, then run coverage from this package:
+
+```bash
+pnpm --filter @heojeongbo/fluxion-render build
+cd packages/fluxion-replay && pnpm vitest run --coverage
+```
+
+Enforced thresholds (`vitest.config.ts`): **100% lines · 90% statements ·
+90% functions · 85% branches**. The `scenarios/09-*` suite is timing-flaky
+*only* under `--coverage` (v8 instrumentation slowdown), so it carries per-test
+`testTimeout: 20_000` — that's expected, not a clock/player bug.
 
 ---
 

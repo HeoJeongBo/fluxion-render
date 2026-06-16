@@ -1,10 +1,7 @@
 # @heojeongbo/fluxion-worker
 
 [![npm](https://img.shields.io/npm/v/@heojeongbo/fluxion-worker)](https://www.npmjs.com/package/@heojeongbo/fluxion-worker)
-[![coverage](https://img.shields.io/badge/coverage-100%25%20lines-brightgreen)](#)
-
-<!-- Tested with Vitest; enforced thresholds: 100% statements/functions/lines, 90% branches. Run `pnpm vitest run --coverage` in this package. -->
-
+[![coverage](https://img.shields.io/badge/coverage-99%25%20lines-brightgreen)](#testing)
 
 Generic Web Worker pool and utilities. Zero dependencies, framework-agnostic.
 
@@ -397,6 +394,19 @@ useEffect(() => {
   return () => ctrl.abort(); // cancel on unmount or dep change
 }, [handle, msg]);
 ```
+
+---
+
+## Testing
+
+Tested with [Vitest](https://vitest.dev). Run coverage from this package:
+
+```bash
+cd packages/fluxion-worker && pnpm vitest run --coverage
+```
+
+Enforced thresholds (`vitest.config.ts`): **99% lines · 99% statements ·
+100% functions · 90% branches**.
 
 ---
 

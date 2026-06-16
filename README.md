@@ -72,6 +72,32 @@ pnpm test
 
 ---
 
+## Testing
+
+Each package is tested with [Vitest](https://vitest.dev) (happy-dom + a fake
+OffscreenCanvas in `src/test/setup.ts`). `pnpm test` runs every package's suite.
+
+Coverage runs **per package** (there is no root aggregate script) — build
+`fluxion-render` first so `fluxion-replay` resolves it via `dist/`:
+
+```bash
+pnpm --filter @heojeongbo/fluxion-render build
+cd packages/<pkg> && pnpm vitest run --coverage
+```
+
+Enforced thresholds (the authoritative source is each package's `vitest.config.ts`):
+
+| Package | lines | statements | functions | branches |
+|---------|:-----:|:----------:|:---------:|:--------:|
+| `fluxion-worker` | 99 | 99 | 100 | 90 |
+| `fluxion-render` | 100 | 100 | 100 | 98 |
+| `fluxion-replay` | 100 | 90 | 90 | 85 |
+
+`fluxion-render`'s branch gate is 98, not 100: the v8 provider emits an
+untargetable phantom "implicit-else" branch on every `if` without an `else`.
+
+---
+
 ## Release
 
 ### fluxion-render
