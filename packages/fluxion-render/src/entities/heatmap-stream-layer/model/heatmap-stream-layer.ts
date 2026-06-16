@@ -198,7 +198,9 @@ function buildLut(stops: [number, number, number, number][]): Uint8Array {
     while (j < stops.length - 1 && stops[j + 1]![0]! < t) j++;
     const [t0, r0, g0, b0] = stops[j]!;
     const [t1, r1, g1, b1] = stops[Math.min(j + 1, stops.length - 1)]!;
+    /* v8 ignore start -- t0===t1 unreachable: stop times strictly increasing, j capped at length-2 */
     const f = t1 === t0 ? 0 : (t - t0) / (t1 - t0);
+    /* v8 ignore stop */
     out[i * 3] = Math.round(r0 + (r1 - r0) * f);
     out[i * 3 + 1] = Math.round(g0 + (g1 - g0) * f);
     out[i * 3 + 2] = Math.round(b0 + (b1 - b0) * f);

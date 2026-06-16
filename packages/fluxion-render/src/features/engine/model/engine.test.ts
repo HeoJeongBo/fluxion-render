@@ -764,5 +764,81 @@ describe("Engine", () => {
 
       engine.dispatch({ op: Op.DISPOSE });
     });
+
+    it("SET_VISIBLE false suspends continuous render; true resumes it", () => {
+      const engine = new Engine();
+      const canvas = newCanvas(100, 100);
+      engine.dispatch({ op: Op.INIT, canvas, width: 100, height: 100, dpr: 1 });
+      engine.dispatch({
+        op: Op.ADD_LAYER,
+        id: "axis",
+        kind: "axis-grid",
+        config: {
+          xMode: "time",
+          timeWindowMs: 1000,
+          timeOrigin: 1_000_000,
+          followClock: true,
+          yRange: [-1, 1],
+        },
+      });
+      flushFrame();
+      const ctx = (canvas as unknown as { getContext: () => FakeCtx }).getContext();
+
+      // Hidden: continuous mode off → no frames without data.
+      engine.dispatch({ op: Op.SET_VISIBLE, visible: false });
+      flushFrame(); // drain any dirty frame queued before suspension
+      ctx.calls.length = 0;
+      flushFrame();
+      expect(frameCount(ctx)).toBe(0);
+
+      // Visible again: re-anchors + resumes continuous rendering.
+      engine.dispatch({ op: Op.SET_VISIBLE, visible: true });
+      flushFrame();
+      ctx.calls.length = 0;
+      flushFrame();
+      expect(frameCount(ctx)).toBeGreaterThanOrEqual(1);
+
+      engine.dispatch({ op: Op.DISPOSE });
+    });
+
+    it("SET_VISIBLE is a harmless no-op with no axis layer", () => {
+      const engine = new Engine();
+      const canvas = newCanvas(100, 100);
+      engine.dispatch({ op: Op.INIT, canvas, width: 100, height: 100, dpr: 1 });
+      expect(() => {
+        engine.dispatch({ op: Op.SET_VISIBLE, visible: false });
+        engine.dispatch({ op: Op.SET_VISIBLE, visible: true });
+      }).not.toThrow();
+      engine.dispatch({ op: Op.DISPOSE });
+    });
+  });
+
+  describe("pre-init guards + flat range", () => {
+    it("RESIZE before INIT is a harmless no-op (no canvas)", () => {
+      const engine = new Engine();
+      expect(() =>
+        engine.dispatch({ op: Op.RESIZE, width: 100, height: 100, dpr: 1 }),
+      ).not.toThrow();
+    });
+
+    it("a render tick before INIT is a no-op (no ctx/canvas)", () => {
+      const engine = new Engine();
+      // No INIT → markDirty + flushFrame must not throw (render early-returns).
+      expect(() => flushFrame()).not.toThrow();
+    });
+
+    it("flat y-range (yMin === yMax) renders without dividing by zero", () => {
+      const engine = new Engine();
+      const canvas = newCanvas(100, 100);
+      engine.dispatch({ op: Op.INIT, canvas, width: 100, height: 100, dpr: 1 });
+      engine.dispatch({
+        op: Op.ADD_LAYER,
+        id: "axis",
+        kind: "axis-grid",
+        config: { xRange: [0, 1], yRange: [5, 5] }, // degenerate range → `|| 1` guard
+      });
+      expect(() => flushFrame()).not.toThrow();
+      engine.dispatch({ op: Op.DISPOSE });
+    });
   });
 });

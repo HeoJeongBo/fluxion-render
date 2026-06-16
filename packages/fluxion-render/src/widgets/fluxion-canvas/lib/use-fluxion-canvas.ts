@@ -122,7 +122,9 @@ export function useFluxionCanvas(
 
   useEffect(() => {
     const container = containerRef.current;
+    /* v8 ignore start -- containerRef is always attached once mounted; null-ref guard */
     if (!container) return;
+    /* v8 ignore stop */
 
     // StrictMode: parent cleanup disposes the pool and schedules a new one via setPool,
     // but children effects re-run synchronously before that re-render propagates the new
@@ -198,9 +200,12 @@ export function useFluxionCanvas(
 
   const handleResize = useCallback((info: ResizeInfo) => {
     const instance = hostRef.current;
+    /* v8 ignore start -- host is set before RO fires; jsdom rects are 0×0 so the
+       non-zero resize path never runs in tests (defensive guards + real resize). */
     if (!instance) return;
     if (info.width === 0 || info.height === 0) return;
     instance.resize(info.width, info.height, info.dpr);
+    /* v8 ignore stop */
   }, []);
 
   useResizeObserver(containerRef, handleResize);

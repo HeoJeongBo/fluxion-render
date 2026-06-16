@@ -162,6 +162,54 @@ describe("LidarScatterLayer", () => {
     });
   });
 
+  it("clamps intensity bucket index above and below the LUT range", () => {
+    const layer = new LidarScatterLayer("l");
+    // intensityMax 0 -> invMax falls back to 1 (covers `this.intensityMax || 1`).
+    layer.setConfig({ stride: 4, pointSize: 1, intensityMax: 0 });
+    const vp = makeViewport();
+    // intensity -1 -> idx < 0 (clamped to 0); intensity 5 -> idx >= LUT_BUCKETS
+    // (clamped to 255). With invMax=1 and LUT_BUCKETS-1=255, 5*255 overflows.
+    const data = new Float32Array([0, 0, 0, -1, 1, 1, 0, 5]);
+    layer.setData(data.buffer, data.length, vp);
+    const ctx = createFakeCtx();
+    layer.draw(ctx as unknown as OffscreenCanvasRenderingContext2D, vp);
+    expect(ctx.calls.filter((c) => c.name === "rect").length).toBe(2);
+  });
+
+  it("parses 3-digit hex solid color", () => {
+    const layer = new LidarScatterLayer("l");
+    layer.setConfig({ stride: 4, pointSize: 1, color: "#f0a" });
+    const vp = makeViewport();
+    const data = new Float32Array([0, 0, 0, 0]);
+    layer.setData(data.buffer, data.length, vp);
+    const ctx = createFakeCtx();
+    layer.draw(ctx as unknown as OffscreenCanvasRenderingContext2D, vp);
+    expect(ctx.fillStyle).toBe("rgb(255,0,170)");
+  });
+
+  it("falls back to white for invalid color strings", () => {
+    const layer = new LidarScatterLayer("l");
+    layer.setConfig({ stride: 4, pointSize: 1, color: "rgb(1,2,3)" });
+    const vp = makeViewport();
+    const data = new Float32Array([0, 0, 0, 0]);
+    layer.setData(data.buffer, data.length, vp);
+    const ctx = createFakeCtx();
+    layer.draw(ctx as unknown as OffscreenCanvasRenderingContext2D, vp);
+    expect(ctx.fillStyle).toBe("rgb(255,255,255)");
+  });
+
+  it("falls back to white for malformed hex length", () => {
+    const layer = new LidarScatterLayer("l");
+    // 4-char hex hits neither length===3 nor length===6 -> fallback.
+    layer.setConfig({ stride: 4, pointSize: 1, color: "#abcd" });
+    const vp = makeViewport();
+    const data = new Float32Array([0, 0, 0, 0]);
+    layer.setData(data.buffer, data.length, vp);
+    const ctx = createFakeCtx();
+    layer.draw(ctx as unknown as OffscreenCanvasRenderingContext2D, vp);
+    expect(ctx.fillStyle).toBe("rgb(255,255,255)");
+  });
+
   it("dispose clears data", () => {
     const layer = new LidarScatterLayer("l");
     const vp = makeViewport();

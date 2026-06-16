@@ -1,6 +1,7 @@
 # @heojeongbo/fluxion-render
 
 [![npm](https://img.shields.io/npm/v/@heojeongbo/fluxion-render)](https://www.npmjs.com/package/@heojeongbo/fluxion-render)
+[![coverage](https://img.shields.io/badge/coverage-100%25%20lines-brightgreen)](#testing)
 
 High-performance OffscreenCanvas rendering engine for real-time data visualization.
 
@@ -64,6 +65,45 @@ function Chart() {
 
   return <div ref={containerRef} style={{ width: '100%', height: 300 }} />;
 }
+```
+
+### Even simpler: `useSimpleChart`
+
+For the common "just show me live data" case, `useSimpleChart` bundles the time
+origin, the `axis-grid + line` pair (capacity auto-sized from `hz` + `windowMs`),
+and the stream pump behind a single `sample` callback:
+
+```tsx
+import { FluxionCanvas, useSimpleChart } from '@heojeongbo/fluxion-render/react';
+
+function Live() {
+  const { layers, setHost } = useSimpleChart({
+    hz: 60,
+    windowMs: 5000,
+    color: '#4fc3f7',
+    sample: (t) => Math.sin(t / 500),     // y at host-relative t (ms)
+    axis: { gridDashArray: [3, 3] },      // optional theme overrides
+  });
+
+  return <FluxionCanvas layers={layers} onReady={setHost} style={{ height: 300 }} />;
+}
+```
+
+**Multiple series?** `useMultiSeriesChart` takes a `series: { id, color, sample }[]`
+and fans each tick out to every line — no manual layers/setup/tick triple-edit.
+(Changing the *number* of series at runtime needs a `<FluxionCanvas key={...}>`
+remount — config changes are reconciled, structural ones aren't.)
+
+```tsx
+const { layers, setHost } = useMultiSeriesChart({
+  hz: 60,
+  windowMs: 5000,
+  series: [
+    { id: 'a', color: '#4fc3f7', sample: (t) => Math.sin(t / 500) },
+    { id: 'b', color: '#ffb060', sample: (t) => Math.cos(t / 400) },
+  ],
+});
+return <FluxionCanvas key={2} layers={layers} onReady={setHost} />;
 ```
 
 ### Vanilla JS
@@ -154,7 +194,10 @@ lineLayer('signal', {
 ```
 
 `retentionMs` + `maxHz` auto-calculate `capacity = ceil(retentionMs/1000 * maxHz * 1.1)`.  
-Explicit `capacity` always takes priority when both are set.
+Explicit `capacity` always takes priority when both are set. If the ring is too
+small for the visible window — i.e. samples are evicted while still on screen —
+the layer logs a one-time `[fluxion] Layer "id": ring capacity … is smaller than
+the visible window` warning so silent data loss is visible during development.
 
 **High-rate decimation** — set `decimate: true` to draw a min/max-per-pixel-column
 path when there are far more visible samples than pixels (e.g. 500Hz over a multi-second
@@ -256,12 +299,19 @@ axisGridLayer('axis', {
   timeOrigin?: number,        // Date.now() at stream start (for clock labels)
   followClock?: boolean,      // xMode: 'time' — right edge tracks Date.now()-timeOrigin every
                               // frame (scrolls continuously with no data); requires timeOrigin
-  xTickFormat?: string | ((v: number) => string), // format string or custom formatter
+  xTickFormat?: string | { pattern?, precision?, suffix?, si? } | ((v: number) => string),
+                              // string clock-pattern, worker-safe object, or function.
+                              // object form works on every render path (see table below);
+                              // function form applies React-side only
 
   // Y axis
   yMode?: 'fixed' | 'auto',   // 'auto': fits to visible data
   yRange?: [min, max],        // yMode: 'fixed' only
   yAutoPadding?: number,      // fractional padding for auto mode (default 0.1)
+  yTickFormat?: { precision?, suffix?, si? } | ((v: number) => string),
+                              // object form is worker-safe (works with externalAxes:
+                              // precision via toFixed, unit suffix, k/M/G scaling);
+                              // function form applies on the React side only
 
   // Appearance
   gridColor?: string,
@@ -275,6 +325,22 @@ axisGridLayer('axis', {
   showYLabels?: boolean,
 })
 ```
+
+#### Tick formatters and `externalAxes`
+
+By default (`externalAxes`, the recommended path) tick labels are drawn by the
+worker on a dedicated axis canvas. A **function** formatter can't cross the
+worker boundary — it's stripped before `postMessage` and only re-applied on the
+React side. Use the **string** or **object** form for worker-drawn labels:
+
+| `xTickFormat` / `yTickFormat` form | Worker-drawn axis (`externalAxes`) | React-side tick set |
+| --- | --- | --- |
+| `string` (x: clock pattern `"HH:mm:ss"`) | ✅ | ✅ |
+| object (`{ pattern?, precision?, suffix?, si? }`) | ✅ | ✅ |
+| function `(v) => string` | ❌ (falls back to raw value) | ✅ |
+
+For non-time axes or numeric labels, prefer the object form:
+`xTickFormat: { precision: 1, suffix: 'ms' }`, `yTickFormat: { si: true, suffix: 'B' }`.
 
 ---
 
@@ -891,6 +957,25 @@ ramp(Date.now() + 1000);                // 0.5 — perfect "is data flowing?" sm
 ```
 
 Use these to drive integration tests, Storybook stories, or your own demos with the same fixtures the monorepo's demos use.
+
+---
+
+## Testing
+
+Tested with [Vitest](https://vitest.dev) (happy-dom) and a fake OffscreenCanvas.
+Coverage runs on the v8 provider:
+
+```bash
+pnpm --filter @heojeongbo/fluxion-render build   # workspace deps resolve via dist
+cd packages/fluxion-render && pnpm vitest run --coverage
+```
+
+Enforced thresholds (`vitest.config.ts`): **100% statements / functions / lines**;
+branches **98%**. The branch shortfall is entirely v8's phantom "implicit-else"
+branch on every `if` without an `else` (reported with no source location, so it
+can't be tested or ignored) — every reachable branch is covered or carries a
+documented `/* v8 ignore … */`. The coverage badge above is static; the real
+guarantee is the threshold gate, which fails CI if coverage regresses.
 
 ---
 

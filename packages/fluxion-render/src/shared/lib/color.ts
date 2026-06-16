@@ -27,7 +27,9 @@ function ramp(t: number): [number, number, number] {
       ];
     }
   }
+  /* v8 ignore start -- defensive clamp: `ramp` is module-private and only ever called with t in [0,1] (i/(LUT_SIZE-1) maxes at exactly 1.0, where t<=t1 holds), so the t>1 fallback is unreachable */
   return stops[stops.length - 1][1];
+  /* v8 ignore stop */
 }
 
 for (let i = 0; i < LUT_SIZE; i++) {

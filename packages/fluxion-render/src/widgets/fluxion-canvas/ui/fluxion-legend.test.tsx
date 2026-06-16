@@ -250,4 +250,24 @@ describe("FluxionLegend — custom style", () => {
     const root = getLegendEl(container);
     expect(root.outerHTML).toContain("z-index: 10");
   });
+
+  it("removes hover listeners on unmount (effect cleanup)", () => {
+    const { unmount } = render(
+      <div>
+        <FluxionLegend items={ITEMS} visibility="hover" />
+      </div>,
+    );
+    // Unmount triggers the effect cleanup (removeEventListener).
+    expect(() => unmount()).not.toThrow();
+  });
+
+  it("uses the custom-className root style branch (opacity reflects visibility)", () => {
+    const { container } = render(
+      <FluxionLegend items={ITEMS} visibility="hover" classNames={{ root: "lg-root" }} />,
+    );
+    const el = container.querySelector(".lg-root") as HTMLElement;
+    // rootClassName set → the `rootClassName ? {opacity…} : {…}` true branch,
+    // and hover hidden → opacity 0.
+    expect(el.style.opacity).toBe("0");
+  });
 });

@@ -6,6 +6,7 @@ import {
   type AxisTickSet,
   computeAxisTicks,
 } from "../../../shared/lib/axis-ticks";
+import { getAxisSpec } from "../../../shared/lib/get-axis-spec";
 import type { SerializedTick } from "../../../shared/protocol";
 import type { FluxionLayerSpec } from "./use-fluxion-canvas";
 
@@ -23,16 +24,6 @@ function yTicksEqual(a: AxisTick[], b: AxisTick[]): boolean {
     if (a[i]!.label !== b[i]!.label || a[i]!.fraction !== b[i]!.fraction) return false;
   }
   return true;
-}
-
-function getAxisSpec(
-  layers: FluxionLayerSpec[],
-  axisLayerId: string,
-): (FluxionLayerSpec & { kind: "axis-grid" }) | undefined {
-  return layers.find(
-    (l): l is FluxionLayerSpec & { kind: "axis-grid" } =>
-      l.id === axisLayerId && l.kind === "axis-grid",
-  );
 }
 
 function computeFromConfig(config: AxisGridConfig, now = Date.now()): AxisTickSet {
@@ -64,6 +55,7 @@ function computeFromConfig(config: AxisGridConfig, now = Date.now()): AxisTickSe
     xMode,
     timeOrigin,
     xTickFormat: config.xTickFormat,
+    yTickFormat: config.yTickFormat,
     xTickIntervalMs: config.xTickIntervalMs,
   });
 }
@@ -78,11 +70,15 @@ function computeFromConfig(config: AxisGridConfig, now = Date.now()): AxisTickSe
  *   When `xTickFormat` is a function the worker sends raw x values and the
  *   main thread applies the function before updating state.
  *
- * @param _refreshMs - Deprecated. Ignored. Kept for API compatibility.
+ * @param _refreshMs
+ *   @deprecated Ignored — tick refresh is worker-driven (time mode) or
+ *   memoized (fixed mode). Kept only so existing 4-arg call sites with a
+ *   positional `host` don't break. Pass `undefined`.
  */
 export function useAxisTicks(
   layers: FluxionLayerSpec[],
   axisLayerId: string,
+  /** @deprecated Ignored. Kept for positional API compatibility. */
   _refreshMs = 16,
   host?: FluxionHost | null,
 ): AxisTickSet | null {
@@ -95,6 +91,9 @@ export function useAxisTicks(
   const xTickFormatFnRef = useRef<((v: number) => string) | null>(null);
   xTickFormatFnRef.current =
     typeof config?.xTickFormat === "function" ? config.xTickFormat : null;
+  const yTickFormatFnRef = useRef<((v: number) => string) | null>(null);
+  yTickFormatFnRef.current =
+    typeof config?.yTickFormat === "function" ? config.yTickFormat : null;
 
   // Worker-driven ticks (time mode only).
   const [workerTicks, setWorkerTicks] = useState<AxisTickSet | null>(null);
@@ -111,7 +110,10 @@ export function useAxisTicks(
       const xTicks: AxisTick[] = fn
         ? rawX.map((t) => ({ value: t.value, label: fn(t.value), fraction: t.fraction }))
         : (rawX as AxisTick[]);
-      const yTicks = rawY as AxisTick[];
+      const yFn = yTickFormatFnRef.current;
+      const yTicks: AxisTick[] = yFn
+        ? rawY.map((t) => ({ value: t.value, label: yFn(t.value), fraction: t.fraction }))
+        : (rawY as AxisTick[]);
       setWorkerTicks((prev) => {
         if (prev && xTicksEqual(prev.xTicks, xTicks) && yTicksEqual(prev.yTicks, yTicks))
           return prev;

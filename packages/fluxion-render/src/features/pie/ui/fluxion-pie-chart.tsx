@@ -232,10 +232,12 @@ function usePieAnimation(
       const t = easeOutCubic(Math.min(elapsed / duration, 1));
 
       animRef.current = to.map((target, i) => {
+        /* v8 ignore start -- from/to always have equal length; defensive fallback */
         const f = from[i] ?? {
           sliceStart: target.sliceStart,
           sliceEnd: target.sliceStart,
         };
+        /* v8 ignore stop */
         return {
           sliceStart: f.sliceStart + (target.sliceStart - f.sliceStart) * t,
           sliceEnd: f.sliceEnd + (target.sliceEnd - f.sliceEnd) * t,
@@ -342,7 +344,9 @@ function Tooltip({
 }) {
   const slice = data[state.idx];
   if (!slice) return null;
+  /* v8 ignore start -- a hovered slice implies total > 0 */
   const pct = total > 0 ? (slice.value / total) * 100 : 0;
+  /* v8 ignore stop */
   const fill = slice.fill ?? colors[state.idx % colors.length];
 
   if (className) {
@@ -511,7 +515,9 @@ export function FluxionPieChart({
 
   const slices = validData.map((slice) => {
     const idx = data.indexOf(slice); // preserve original color index
+    /* v8 ignore start -- slices only exist when validData is non-empty ⟹ total > 0 */
     const fraction = total > 0 ? slice.value / total : 0;
+    /* v8 ignore stop */
     return { slice, idx, fraction };
   });
 
@@ -566,10 +572,12 @@ export function FluxionPieChart({
         >
           {/* Slices */}
           {targetRanges.map(({ slice, idx, fraction }, i) => {
+            /* v8 ignore start -- animatedRanges length always matches targetRanges */
             const animated = animatedRanges[i] ?? {
               sliceStart: startAngle,
               sliceEnd: startAngle,
             };
+            /* v8 ignore stop */
             const fill = slice.fill ?? colors[idx % colors.length] ?? colors[0];
             const isHovered = hovered?.idx === idx;
             const d = describeSlice(

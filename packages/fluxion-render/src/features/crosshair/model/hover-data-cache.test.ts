@@ -59,6 +59,12 @@ describe("push + findNearest", () => {
     expect(c.findNearest("unknown", 1, 0)).toBeNull();
   });
 
+  it("push to an unregistered layer id is a silent no-op", () => {
+    const c = makeCache();
+    expect(() => c.push("unregistered", 5, 5)).not.toThrow();
+    expect(c.getPoints("unregistered")).toEqual([]);
+  });
+
   it("finds the single pushed point", () => {
     const c = makeCache();
     c.push("a", 10, 42);
@@ -191,6 +197,50 @@ describe("clear", () => {
     c.clear("a");
     c.push("a", 5, 42);
     expect(c.findNearest("a", 5, 0)).toEqual({ t: 5, y: 42 });
+  });
+});
+
+// ─── getPoints ──────────────────────────────────────────────────────────────
+
+describe("getPoints", () => {
+  it("returns [] for an unknown layer", () => {
+    const c = makeCache();
+    expect(c.getPoints("nope")).toEqual([]);
+  });
+
+  it("returns [] for an empty layer", () => {
+    const c = makeCache();
+    expect(c.getPoints("a")).toEqual([]);
+  });
+
+  it("returns all retained points in chronological order", () => {
+    const c = makeCache(8);
+    pushMany(c, "a", [
+      [10, 1],
+      [20, 2],
+      [30, 3],
+    ]);
+    expect(c.getPoints("a")).toEqual([
+      { t: 10, y: 1 },
+      { t: 20, y: 2 },
+      { t: 30, y: 3 },
+    ]);
+  });
+
+  it("after ring wrap returns only the most recent `capacity` points, oldest→newest", () => {
+    const c = makeCache(3);
+    pushMany(c, "a", [
+      [1, 1],
+      [2, 2],
+      [3, 3],
+      [4, 4],
+      [5, 5],
+    ]);
+    expect(c.getPoints("a")).toEqual([
+      { t: 3, y: 3 },
+      { t: 4, y: 4 },
+      { t: 5, y: 5 },
+    ]);
   });
 });
 

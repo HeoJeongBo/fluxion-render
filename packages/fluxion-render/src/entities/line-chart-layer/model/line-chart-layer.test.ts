@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { Viewport } from "../../../shared/model/viewport";
 import { createFakeCtx } from "../../../test/setup";
 import { AxisGridLayer } from "../../axis-grid-layer/model/axis-grid-layer";
@@ -17,6 +17,18 @@ describe("LineChartLayer (streaming)", () => {
     const ctx = createFakeCtx();
     layer.draw(ctx as unknown as OffscreenCanvasRenderingContext2D, makeViewport());
     expect(ctx.calls.some((c) => c.name === "stroke")).toBe(false);
+  });
+
+  it("setData ignores buffers shorter than one [t,y] pair (length < 2)", () => {
+    const layer = new LineChartLayer("l");
+    const vp = makeViewport();
+    expect(vp.latestT).toBe(0);
+    layer.setData(new Float32Array([42]).buffer, 1, vp);
+    // No sample pushed, latestT untouched.
+    expect(vp.latestT).toBe(0);
+    const ctx = createFakeCtx();
+    layer.draw(ctx as unknown as OffscreenCanvasRenderingContext2D, vp);
+    expect(ctx.calls.some((c) => c.name === "moveTo")).toBe(false);
   });
 
   it("accumulates [t,y] samples across multiple setData calls", () => {
@@ -564,6 +576,39 @@ describe("LineChartLayer (streaming)", () => {
       expect(vp.observedYMax).toBeCloseTo(0.9, 5);
     });
 
+    it("decimated path skips samples older than viewport.bounds.xMin", () => {
+      const layer = new LineChartLayer("l");
+      const vp = makeViewport();
+      layer.setConfig({ decimate: true });
+      fill5000(layer, vp); // t = 0..4999
+      // Retarget so the first half of the ring is below xMin — the decimated
+      // forEach must `continue` past those (line: `if (t < xMin) return`).
+      vp.setBounds({ xMin: 2500, xMax: 5000, yMin: -1, yMax: 1 });
+      const ctx = createFakeCtx();
+      layer.draw(ctx as unknown as OffscreenCanvasRenderingContext2D, vp);
+      const xs = ctx.calls
+        .filter((c) => c.name === "moveTo" || c.name === "lineTo")
+        .map((c) => (c.args as number[])[0]);
+      // Every emitted point's x-pixel must be at/after the xMin column.
+      const xMinPx = vp.xToPx(2500);
+      expect(xs.length).toBeGreaterThan(0);
+      expect(xs.every((x) => x >= xMinPx - 1)).toBe(true);
+    });
+
+    it("decimated path with every sample out of window emits no points", () => {
+      const layer = new LineChartLayer("l");
+      const vp = makeViewport();
+      layer.setConfig({ decimate: true });
+      fill5000(layer, vp); // t = 0..4999
+      // Window entirely after the data — every sample hits the xMin filter,
+      // so curCol stays NaN and the final flush is skipped (no path built).
+      vp.setBounds({ xMin: 10_000, xMax: 12_000, yMin: -1, yMax: 1 });
+      const ctx = createFakeCtx();
+      layer.draw(ctx as unknown as OffscreenCanvasRenderingContext2D, vp);
+      expect(ctx.calls.filter((c) => c.name === "moveTo").length).toBe(0);
+      expect(ctx.calls.filter((c) => c.name === "lineTo").length).toBe(0);
+    });
+
     it("decimate: false (default) draws every sample", () => {
       const layer = new LineChartLayer("l");
       const vp = makeViewport();
@@ -650,6 +695,77 @@ describe("LineChartLayer (streaming)", () => {
       const lineTos = ctx.calls.filter((c) => c.name === "lineTo").length;
       expect(lineTos).toBeGreaterThan(0);
       expect(lineTos).toBeLessThan(6000); // decimated, not per-sample
+    });
+  });
+
+  describe("undersized-capacity warning", () => {
+    /** Fill the ring past capacity with samples all inside [xMin, xMax]. */
+    function fillBeyondCapacity(layer: LineChartLayer, cap: number, vp: Viewport) {
+      const n = cap + 5;
+      const arr = new Float32Array(n * 2);
+      for (let i = 0; i < n; i++) {
+        arr[i * 2] = 100 + i; // t, all >= xMin (0) and within window
+        arr[i * 2 + 1] = Math.sin(i);
+      }
+      layer.setData(arr.buffer, arr.length, vp);
+    }
+
+    it("warns once when the full ring's oldest sample is still in-window", () => {
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+      const layer = new LineChartLayer("l");
+      layer.setConfig({ capacity: 8 });
+      const vp = makeViewport();
+      fillBeyondCapacity(layer, 8, vp);
+
+      layer.scan(vp);
+      expect(warn).toHaveBeenCalledTimes(1);
+      expect(warn.mock.calls[0]![0]).toContain("ring capacity (8)");
+      // Second scan must not warn again.
+      layer.scan(vp);
+      expect(warn).toHaveBeenCalledTimes(1);
+      warn.mockRestore();
+    });
+
+    it("does not warn when the ring is not full", () => {
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+      const layer = new LineChartLayer("l");
+      layer.setConfig({ capacity: 100 });
+      const vp = makeViewport();
+      layer.setData(new Float32Array([100, 0, 200, 1, 300, 2]).buffer, 6, vp);
+      layer.scan(vp);
+      expect(warn).not.toHaveBeenCalled();
+      warn.mockRestore();
+    });
+
+    it("does not warn when the oldest retained sample has scrolled out of the window", () => {
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+      const layer = new LineChartLayer("l");
+      layer.setConfig({ capacity: 4 });
+      const vp = makeViewport();
+      // Window starts at 3000; fill a full ring whose oldest retained t < 3000.
+      vp.setBounds({ xMin: 3000, xMax: 8000, yMin: -1, yMax: 1 });
+      const arr = new Float32Array([100, 0, 200, 1, 300, 2, 400, 3, 500, 4, 600, 5]);
+      layer.setData(arr.buffer, arr.length, vp);
+      layer.scan(vp);
+      expect(warn).not.toHaveBeenCalled();
+      warn.mockRestore();
+    });
+
+    it("re-arms the warning when capacity changes", () => {
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+      const layer = new LineChartLayer("l");
+      layer.setConfig({ capacity: 8 });
+      const vp = makeViewport();
+      fillBeyondCapacity(layer, 8, vp);
+      layer.scan(vp);
+      expect(warn).toHaveBeenCalledTimes(1);
+
+      // Still-too-small new capacity → can warn again after re-fill.
+      layer.setConfig({ capacity: 6 });
+      fillBeyondCapacity(layer, 6, vp);
+      layer.scan(vp);
+      expect(warn).toHaveBeenCalledTimes(2);
+      warn.mockRestore();
     });
   });
 });

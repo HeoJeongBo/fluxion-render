@@ -158,6 +158,159 @@ describe("AxisGridLayer", () => {
     });
   });
 
+  describe("followClock monotonic clock", () => {
+    // The real `now()` derives wall-clock from `performance.now()` deltas off a
+    // one-time `Date.now()` anchor. Drive both globals to exercise the seam end
+    // to end (not via spyOn).
+    function withClocks<T>(date: number, perf: () => number, fn: () => T): T {
+      const realDate = Date.now;
+      const realPerf = performance.now;
+      Date.now = () => date;
+      performance.now = perf;
+      try {
+        return fn();
+      } finally {
+        Date.now = realDate;
+        performance.now = realPerf;
+      }
+    }
+
+    const cfg = {
+      xMode: "time" as const,
+      timeWindowMs: 1000,
+      timeOrigin: 1_000_000,
+      followClock: true,
+      yRange: [-1, 1] as [number, number],
+    };
+
+    it("anchors on first scan and advances with performance.now", () => {
+      const layer = new AxisGridLayer("axis");
+      layer.setConfig(cfg);
+      const v = makeViewport();
+      v.latestT = 0;
+
+      let perf = 500;
+      withClocks(
+        1_002_000,
+        () => perf,
+        () => {
+          // anchor: epoch 1_002_000 at perf 500 → right edge = 2000.
+          frame(layer, v);
+          expect(v.bounds.xMax).toBe(2000);
+          // perf advances 1500ms; Date.now frozen → right edge advances to 3500.
+          perf = 2000;
+          frame(layer, v);
+          expect(v.bounds.xMax).toBe(3500);
+        },
+      );
+    });
+
+    it("does NOT move backward when Date.now() steps back after anchoring", () => {
+      const layer = new AxisGridLayer("axis");
+      layer.setConfig(cfg);
+      const v = makeViewport();
+      v.latestT = 0;
+
+      let date = 1_002_000;
+      let perf = 0;
+      withClocks(
+        date,
+        () => perf,
+        () => {},
+      );
+      // Manually anchor then mutate both globals across frames.
+      const realDate = Date.now;
+      const realPerf = performance.now;
+      Date.now = () => date;
+      performance.now = () => perf;
+      try {
+        frame(layer, v); // anchor at epoch 1_002_000, perf 0 → xMax 2000.
+        expect(v.bounds.xMax).toBe(2000);
+        // Wall clock jumps BACKWARD 5s, but perf keeps advancing 100ms.
+        date = 997_000;
+        perf = 100;
+        frame(layer, v);
+        // Monotonic: right edge = 1_002_000 + 100 - origin = 2100, not 997_000-origin.
+        expect(v.bounds.xMax).toBe(2100);
+      } finally {
+        Date.now = realDate;
+        performance.now = realPerf;
+      }
+    });
+
+    it("re-anchors to current Date.now() after resetClockAnchor()", () => {
+      const layer = new AxisGridLayer("axis");
+      layer.setConfig(cfg);
+      const v = makeViewport();
+      v.latestT = 0;
+
+      let date = 1_002_000;
+      let perf = 0;
+      const realDate = Date.now;
+      const realPerf = performance.now;
+      Date.now = () => date;
+      performance.now = () => perf;
+      try {
+        frame(layer, v); // anchor epoch 1_002_000 → xMax 2000.
+        expect(v.bounds.xMax).toBe(2000);
+        perf = 5000; // 5s elapse.
+        // Now the page becomes visible again: epoch advanced to 1_010_000.
+        date = 1_010_000;
+        layer.resetClockAnchor();
+        frame(layer, v); // re-anchors at epoch 1_010_000 → xMax 10_000.
+        expect(v.bounds.xMax).toBe(10_000);
+      } finally {
+        Date.now = realDate;
+        performance.now = realPerf;
+      }
+    });
+
+    it("keeps the spyOn(now) test seam working", () => {
+      const layer = new AxisGridLayer("axis");
+      layer.setConfig(cfg);
+      vi.spyOn(layer as unknown as { now(): number }, "now").mockReturnValue(1_003_000);
+      const v = makeViewport();
+      v.latestT = 0;
+      frame(layer, v);
+      expect(v.bounds.xMax).toBe(3000);
+    });
+  });
+
+  describe("followClock misconfig warning", () => {
+    it("warns once when followClock+time is set without timeOrigin", () => {
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+      const layer = new AxisGridLayer("axis");
+      layer.setConfig({ xMode: "time", followClock: true, yRange: [-1, 1] });
+      expect(warn).toHaveBeenCalledTimes(1);
+      expect(warn.mock.calls[0]![0]).toContain("followClock requires timeOrigin");
+      // A second config (still no origin) does not warn again.
+      layer.setConfig({ timeWindowMs: 2000 });
+      expect(warn).toHaveBeenCalledTimes(1);
+      warn.mockRestore();
+    });
+
+    it("does not warn when timeOrigin is present", () => {
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+      const layer = new AxisGridLayer("axis");
+      layer.setConfig({
+        xMode: "time",
+        followClock: true,
+        timeOrigin: 1_000_000,
+        yRange: [-1, 1],
+      });
+      expect(warn).not.toHaveBeenCalled();
+      warn.mockRestore();
+    });
+
+    it("does not warn when followClock is off", () => {
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+      const layer = new AxisGridLayer("axis");
+      layer.setConfig({ xMode: "time", yRange: [-1, 1] });
+      expect(warn).not.toHaveBeenCalled();
+      warn.mockRestore();
+    });
+  });
+
   describe("xTickFormat (HH:mm:ss clock)", () => {
     it("custom pattern with milliseconds", () => {
       const layer = new AxisGridLayer("axis");
@@ -209,6 +362,50 @@ describe("AxisGridLayer", () => {
           (c.args[0] as string).endsWith("s"),
       );
       expect(labels.length).toBeGreaterThan(0);
+    });
+
+    it("object form { suffix } draws numeric labels in fixed mode", () => {
+      const layer = new AxisGridLayer("axis");
+      layer.setConfig({
+        xRange: [0, 1000],
+        yRange: [-1, 1],
+        xTickIntervalMs: 250,
+        xTickFormat: { suffix: "ms" },
+      });
+      const ctx = frame(layer, makeViewport());
+      const labels = ctx.calls
+        .filter((c) => c.name === "fillText" && typeof c.args[0] === "string")
+        .map((c) => c.args[0] as string);
+      expect(labels.some((l) => l.endsWith("ms"))).toBe(true);
+    });
+
+    it("computeTicksForExport treats the object form as serializable (labels filled, no raw values)", () => {
+      const layer = new AxisGridLayer("axis");
+      layer.setConfig({
+        xRange: [0, 1000],
+        yRange: [-1, 1],
+        xTickIntervalMs: 250,
+        xTickFormat: { precision: 0, suffix: "ms" },
+      });
+      frame(layer, makeViewport());
+      const out = layer.computeTicksForExport();
+      expect(out.xRawValues).toEqual([]);
+      expect(out.xTicks.length).toBeGreaterThan(0);
+      expect(out.xTicks.every((t) => t.label.endsWith("ms"))).toBe(true);
+    });
+
+    it("computeTicksForExport leaves labels empty + raw values for a function format", () => {
+      const layer = new AxisGridLayer("axis");
+      layer.setConfig({
+        xRange: [0, 1000],
+        yRange: [-1, 1],
+        xTickIntervalMs: 250,
+        xTickFormat: (v: number) => `${v}x`,
+      });
+      frame(layer, makeViewport());
+      const out = layer.computeTicksForExport();
+      expect(out.xRawValues.length).toBeGreaterThan(0);
+      expect(out.xTicks.every((t) => t.label === "")).toBe(true);
     });
   });
 
@@ -611,6 +808,166 @@ describe("AxisGridLayer", () => {
       frame(layer, v);
       const { xTicks } = layer.computeTicksForExport();
       expect(xTicks.some((t) => t.value === 1000 || t.value === 2000)).toBe(true);
+    });
+  });
+
+  describe("yTickFormat", () => {
+    it("formats in-canvas y labels via the object form (precision + suffix)", () => {
+      const layer = new AxisGridLayer("axis");
+      layer.setConfig({
+        xRange: [0, 10],
+        yRange: [0, 10],
+        yTickFormat: { precision: 1, suffix: "V" },
+      });
+      const ctx = frame(layer, makeViewport());
+      const labels = ctx.calls
+        .filter((c) => c.name === "fillText" && typeof c.args[0] === "string")
+        .map((c) => c.args[0] as string);
+      expect(labels.some((l) => /^\d+\.\dV$/.test(l))).toBe(true);
+    });
+
+    it("formats in-canvas y labels via the function form (same-thread usage)", () => {
+      const layer = new AxisGridLayer("axis");
+      layer.setConfig({
+        xRange: [0, 10],
+        yRange: [0, 1],
+        yTickFormat: (v: number) => `y=${v}`,
+      });
+      const ctx = frame(layer, makeViewport());
+      const labels = ctx.calls
+        .filter((c) => c.name === "fillText" && typeof c.args[0] === "string")
+        .map((c) => c.args[0] as string);
+      expect(labels.some((l) => l.startsWith("y="))).toBe(true);
+    });
+
+    it("drawYAxis applies yTickFormat", () => {
+      const layer = new AxisGridLayer("axis");
+      layer.setConfig({
+        xRange: [0, 10],
+        yRange: [0, 100],
+        yTickFormat: { precision: 0, suffix: "%" },
+      });
+      const v = makeViewport();
+      frame(layer, v); // finalize bounds
+      const ctx = createFakeCtx();
+      layer.drawYAxis(ctx as unknown as OffscreenCanvasRenderingContext2D, 60, 200, {});
+      const labels = ctx.calls
+        .filter((c) => c.name === "fillText" && typeof c.args[0] === "string")
+        .map((c) => c.args[0] as string);
+      expect(labels.length).toBeGreaterThan(0);
+      expect(labels.every((l) => /%$/.test(l))).toBe(true);
+    });
+
+    it("computeTicksForExport y labels use yTickFormat", () => {
+      const layer = new AxisGridLayer("axis");
+      layer.setConfig({
+        xRange: [0, 10],
+        yRange: [0, 5_000_000],
+        yTickFormat: { si: true },
+      });
+      frame(layer, makeViewport());
+      const ticks = layer.computeTicksForExport();
+      expect(ticks.yTicks.length).toBeGreaterThan(0);
+      expect(ticks.yTicks.some((t) => /[kM]$/.test(t.label))).toBe(true);
+    });
+  });
+
+  describe("config setters + draw paths (coverage tail)", () => {
+    it("applies every style/visual config field", () => {
+      const layer = new AxisGridLayer("axis");
+      layer.setConfig({
+        xRange: [0, 10],
+        yRange: [0, 10],
+        gridColor: "#111",
+        axisColor: "#222",
+        labelColor: "#333",
+        font: "9px monospace",
+        targetTicks: 4,
+        applyToViewport: false,
+        showXLabels: false,
+        showYLabels: false,
+        gridDashArray: [3, 3],
+        yPadPx: 8,
+        xTickIntervalMs: 2,
+      });
+      const v = makeViewport();
+      const before = { ...v.bounds };
+      frame(layer, v);
+      // applyToViewport:false → viewport bounds untouched.
+      expect(v.bounds).toEqual(before);
+    });
+
+    it("setData / resize / dispose are inert no-ops", () => {
+      const layer = new AxisGridLayer("axis");
+      const v = makeViewport();
+      expect(() => layer.setData(new Float32Array([1, 2]).buffer, 2, v)).not.toThrow();
+      expect(() => layer.resize(v)).not.toThrow();
+      expect(() => layer.dispose()).not.toThrow();
+    });
+
+    it("computeTicksForExport + getXTickIntervalMs expose tick data", () => {
+      const layer = new AxisGridLayer("axis");
+      layer.setConfig({ xRange: [0, 100], yRange: [0, 10], xTickIntervalMs: 25 });
+      frame(layer, makeViewport());
+      const out = layer.computeTicksForExport();
+      expect(out.xTicks.length).toBeGreaterThan(0);
+      expect(out.yTicks.length).toBeGreaterThan(0);
+      expect(layer.getXTickIntervalMs()).toBe(25);
+    });
+
+    it("dashed grid sets and resets the line dash", () => {
+      const layer = new AxisGridLayer("axis");
+      layer.setConfig({ xRange: [0, 10], yRange: [0, 10], gridDashArray: [4, 2] });
+      const ctx = frame(layer, makeViewport());
+      const dashCalls = ctx.calls.filter((c) => c.name === "setLineDash");
+      // One call to set the dash, one to reset it to [].
+      expect(dashCalls.length).toBeGreaterThanOrEqual(2);
+    });
+
+    it("drawXAxis / drawYAxis render ticks + labels with an explicit style", () => {
+      const layer = new AxisGridLayer("axis");
+      layer.setConfig({ xMode: "time", timeWindowMs: 1000, yRange: [-1, 1] });
+      const v = makeViewport();
+      v.latestT = 1000;
+      frame(layer, v); // settle bounds first
+
+      const xctx = createFakeCtx();
+      layer.drawXAxis(xctx as unknown as OffscreenCanvasRenderingContext2D, 400, 30, {
+        color: "#abc",
+        font: "10px sans",
+        tickSize: 5,
+        tickMargin: 3,
+      });
+      expect(xctx.calls.some((c) => c.name === "fillText")).toBe(true);
+
+      const yctx = createFakeCtx();
+      layer.drawYAxis(
+        yctx as unknown as OffscreenCanvasRenderingContext2D,
+        60,
+        300,
+        {},
+        8,
+      );
+      expect(yctx.calls.some((c) => c.name === "fillText")).toBe(true);
+    });
+
+    it("drawXAxis / drawYAxis with tickSize 0 skip tick strokes but still draw labels", () => {
+      const layer = new AxisGridLayer("axis");
+      layer.setConfig({ xRange: [0, 10], yRange: [0, 10] });
+      const v = makeViewport();
+      frame(layer, v);
+
+      const xctx = createFakeCtx();
+      layer.drawXAxis(xctx as unknown as OffscreenCanvasRenderingContext2D, 400, 30, {
+        tickSize: 0,
+      });
+      expect(xctx.calls.some((c) => c.name === "fillText")).toBe(true);
+
+      const yctx = createFakeCtx();
+      layer.drawYAxis(yctx as unknown as OffscreenCanvasRenderingContext2D, 60, 300, {
+        tickSize: 0,
+      });
+      expect(yctx.calls.some((c) => c.name === "fillText")).toBe(true);
     });
   });
 });

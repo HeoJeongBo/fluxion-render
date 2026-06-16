@@ -171,6 +171,46 @@ describe("HeatmapStreamLayer", () => {
     expect(() => layer.draw(ctx, vp)).not.toThrow();
   });
 
+  it("setConfig with no yBins/maxCols change does not realloc (preserves columns)", () => {
+    const layer = new HeatmapStreamLayer("hs1");
+    layer.setConfig({ yBins: 2 });
+    const vp = makeViewport();
+    layer.setData(makeColumn(100, 0.1, 0.2).buffer, 3, vp);
+    // Re-apply identical yBins/maxCols plus a non-structural change -> no realloc,
+    // so the previously pushed column survives and still draws.
+    layer.setConfig({ yBins: 2, maxCols: 256, colormap: "plasma" });
+    const ctx = makeCtx();
+    layer.draw(ctx, vp);
+    expect((ctx.fillRect as ReturnType<typeof vi.fn>).mock.calls.length).toBe(2);
+  });
+
+  it("setConfig switches colormap back to viridis", () => {
+    const layer = new HeatmapStreamLayer("hs1");
+    layer.setConfig({ yBins: 2, colormap: "hot" });
+    layer.setConfig({ colormap: "viridis" });
+    const vp = makeViewport();
+    layer.setData(makeColumn(100, 0.5, 0.8).buffer, 3, vp);
+    const ctx = makeCtx();
+    expect(() => layer.draw(ctx, vp)).not.toThrow();
+  });
+
+  it("draw auto-fills only one end when a single value bound is configured", () => {
+    const onlyMin = new HeatmapStreamLayer("hs1");
+    onlyMin.setConfig({ yBins: 2, minValue: 0 }); // maxValue auto
+    const vp = makeViewport();
+    onlyMin.setData(makeColumn(100, 0.25, 0.75).buffer, 3, vp);
+    const ctxA = makeCtx();
+    expect(() => onlyMin.draw(ctxA, vp)).not.toThrow();
+    expect((ctxA.fillRect as ReturnType<typeof vi.fn>).mock.calls.length).toBe(2);
+
+    const onlyMax = new HeatmapStreamLayer("hs2");
+    onlyMax.setConfig({ yBins: 2, maxValue: 1 }); // minValue auto
+    onlyMax.setData(makeColumn(100, 0.25, 0.75).buffer, 3, vp);
+    const ctxB = makeCtx();
+    expect(() => onlyMax.draw(ctxB, vp)).not.toThrow();
+    expect((ctxB.fillRect as ReturnType<typeof vi.fn>).mock.calls.length).toBe(2);
+  });
+
   it("draw uses auto value range when minValue/maxValue not set", () => {
     const layer = new HeatmapStreamLayer("hs1");
     layer.setConfig({ yBins: 3 });
@@ -224,6 +264,20 @@ describe("HeatmapStreamLayer", () => {
     layer.scan(vp);
     expect(vp.observedYMin).toBe(5);
     expect(vp.observedYMax).toBe(95);
+  });
+
+  it("scan leaves wider observed bounds untouched", () => {
+    const layer = new HeatmapStreamLayer("hs1");
+    layer.setConfig({ yBins: 2, yRange: [10, 90] });
+    const vp = makeViewport();
+    // Pre-seed bounds already wider than the layer's yRange -> neither the
+    // `observedYMin > yMin` nor `observedYMax < yMax` guard should fire.
+    vp.observedYMin = -100;
+    vp.observedYMax = 200;
+    layer.setData(makeColumn(100, 0.1, 0.2).buffer, 3, vp);
+    layer.scan(vp);
+    expect(vp.observedYMin).toBe(-100);
+    expect(vp.observedYMax).toBe(200);
   });
 
   it("scan is no-op when not visible", () => {

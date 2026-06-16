@@ -308,3 +308,43 @@ describe("FluxionGauge — size prop", () => {
     expect(svg.getAttribute("height")).toBe("150");
   });
 });
+
+describe("FluxionGauge — classNames + label + thresholds (branch sweep)", () => {
+  const cn = { valueText: "vt", label: "lb", track: "tk", root: "rt" };
+  const thresholds: GaugeThreshold[] = [
+    { value: 0, color: "#0f0" },
+    { value: 80, color: "#f00" },
+  ];
+
+  for (const type of ["arc", "circle", "bar"] as const) {
+    it(`type=${type} renders custom classNames + label + thresholds`, () => {
+      const { container } = render(
+        <FluxionGauge
+          value={50}
+          type={type}
+          label="Load"
+          classNames={cn}
+          thresholds={thresholds}
+        />,
+      );
+      // classNames.valueText/label set → the `? undefined :` arms are taken.
+      expect(container.querySelector(".vt")).not.toBeNull();
+      expect(container.querySelector(".lb")).not.toBeNull();
+    });
+
+    it(`type=${type} with showValue=false and no classNames uses default colors`, () => {
+      const { container } = render(
+        <FluxionGauge value={50} type={type} label="Load" showValue={false} />,
+      );
+      expect(container.querySelector("svg")).not.toBeNull();
+    });
+
+    it(`type=${type} with an explicitly empty thresholds array uses the default color`, () => {
+      // thresholds[0] undefined → `?? "#4caf50"` default-color branch.
+      const { container } = render(
+        <FluxionGauge value={50} type={type} thresholds={[]} />,
+      );
+      expect(container.querySelector("svg")).not.toBeNull();
+    });
+  }
+});

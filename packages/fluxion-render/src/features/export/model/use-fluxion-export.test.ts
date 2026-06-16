@@ -185,6 +185,34 @@ it("CSV header includes all layer labels when multiple layers are registered", (
   });
 });
 
+it("CSV body emits one row per distinct timestamp, blanking missing layer cells", () => {
+  const c = new HoverDataCache();
+  c.registerLayer("a", { capacity: 64, label: "Alpha", color: "#f00" });
+  c.registerLayer("b", { capacity: 64, label: "Beta", color: "#0f0" });
+  c.push("a", 100, 1);
+  c.push("a", 200, 2);
+  c.push("b", 200, 20);
+  c.push("b", 300, 30);
+
+  const { result } = renderHook(() => useFluxionExport({ cache: c }));
+  let blob: Blob | undefined;
+  createObjectURLMock.mockImplementation((b: Blob) => {
+    blob = b;
+    return "blob:fake-url";
+  });
+  act(() => result.current.exportCSV());
+
+  return blob!.text().then((text) => {
+    const lines = text.trim().split("\n");
+    expect(lines[0]).toBe("timestamp_ms,Alpha,Beta");
+    // Union of timestamps {100, 200, 300} → 3 data rows.
+    expect(lines.length).toBe(1 + 3);
+    expect(lines[1]).toBe("100.000,1.000000,"); // only Alpha at t=100
+    expect(lines[2]).toBe("200.000,2.000000,20.000000"); // both at t=200
+    expect(lines[3]).toBe("300.000,,30.000000"); // only Beta at t=300
+  });
+});
+
 describe("useFluxionExport — exportJSON", () => {
   it("generates valid JSON with layers array", () => {
     const cache = new HoverDataCache();

@@ -89,8 +89,12 @@ export type {
   AxisTick,
   AxisTickSet,
   ComputeAxisTicksOptions,
+  XTickFormat,
+  XTickFormatOptions,
+  YTickFormat,
+  YTickFormatOptions,
 } from "./shared/lib/axis-ticks";
-export { computeAxisTicks, formatTick } from "./shared/lib/axis-ticks";
+export { computeAxisTicks, formatTick, formatYTick } from "./shared/lib/axis-ticks";
 export type { TickFormatter } from "./shared/lib/time-format";
 export { formatClock, makeClockFormatter } from "./shared/lib/time-format";
 export type { DType, FluxionPoolStreamMsg, HostMsg, LayerKind } from "./shared/protocol";

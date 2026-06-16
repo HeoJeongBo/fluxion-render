@@ -43,7 +43,9 @@ export function FluxionBrush({
 
   useEffect(() => {
     const svg = brushRef.current;
+    /* v8 ignore start -- brushRef is always attached once mounted; null-ref guard */
     if (!svg) return;
+    /* v8 ignore stop */
 
     const onMouseDown = (e: MouseEvent) => {
       const rect = svg.getBoundingClientRect();

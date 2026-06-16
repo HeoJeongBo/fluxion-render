@@ -124,6 +124,25 @@ describe("ReferenceLineLayer", () => {
     expect(ctx.calls.some((c) => c.name === "setLineDash")).toBe(true);
   });
 
+  it("applies lineWidth config (clamped to a 0.5 minimum)", () => {
+    const layer = new ReferenceLineLayer("ref");
+    layer.setConfig({ y: 50, lineWidth: 0.1 });
+    const vp = makeViewport();
+    const ctx = createFakeCtx();
+    layer.draw(ctx as unknown as OffscreenCanvasRenderingContext2D, vp);
+    expect(ctx.lineWidth).toBe(0.5);
+  });
+
+  it("applies bandOpacity config (clamped to 0..1)", () => {
+    const layer = new ReferenceLineLayer("ref");
+    layer.setConfig({ y: 50, bandMin: 40, bandMax: 60, bandOpacity: 5 });
+    const vp = makeViewport();
+    const ctx = createFakeCtx();
+    layer.draw(ctx as unknown as OffscreenCanvasRenderingContext2D, vp);
+    // Clamped to 1 — band is drawn at full opacity.
+    expect(ctx.calls.some((c) => c.name === "fillRect")).toBe(true);
+  });
+
   it("dispose is a no-op and does not throw", () => {
     const layer = new ReferenceLineLayer("ref");
     layer.setConfig({ y: 50 });

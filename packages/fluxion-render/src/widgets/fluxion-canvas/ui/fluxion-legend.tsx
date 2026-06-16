@@ -53,8 +53,10 @@ export function FluxionLegend({
 
   useEffect(() => {
     if (visibility !== "hover") return;
+    /* v8 ignore start -- legendRef is set + always has a DOM parent once mounted; null-target guard */
     const target = containerRef?.current ?? legendRef.current?.parentElement ?? null;
     if (!target) return;
+    /* v8 ignore stop */
     const enter = () => setHovered(true);
     const leave = () => setHovered(false);
     target.addEventListener("mouseenter", enter);

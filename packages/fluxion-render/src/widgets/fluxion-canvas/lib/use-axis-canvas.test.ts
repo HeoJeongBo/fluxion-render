@@ -326,6 +326,101 @@ describe("useXAxisCanvas", () => {
     expect(fillText).toHaveBeenCalledWith("T1", expect.any(Number), expect.any(Number));
   });
 
+  it("falls back to dpr 1 when devicePixelRatio is falsy", () => {
+    const realDpr = Object.getOwnPropertyDescriptor(window, "devicePixelRatio");
+    Object.defineProperty(window, "devicePixelRatio", { value: 0, configurable: true });
+
+    const canvas = setupCanvas(300, 30);
+    const fakeCtx = {
+      clearRect: vi.fn(),
+      strokeStyle: "",
+      lineWidth: 0,
+      fillStyle: "",
+      font: "",
+      textAlign: "",
+      textBaseline: "",
+      beginPath: vi.fn(),
+      moveTo: vi.fn(),
+      lineTo: vi.fn(),
+      stroke: vi.fn(),
+      fillText: vi.fn(),
+      scale: vi.fn(),
+    };
+    vi.spyOn(canvas, "getContext").mockReturnValue(fakeCtx as any);
+
+    renderHook(() => {
+      const ref = useXAxisCanvas([{ label: "T", fraction: 0.5, value: 5 }]);
+      (ref as any).current = canvas;
+      return ref;
+    });
+
+    // dpr=1 fallback → target size equals CSS size (no scaling up).
+    expect(canvas.width).toBe(300);
+    expect(canvas.height).toBe(30);
+
+    if (realDpr) Object.defineProperty(window, "devicePixelRatio", realDpr);
+  });
+
+  it("skips x tick marks when tickSize is 0", () => {
+    const canvas = setupCanvas(300, 30);
+    const stroke = vi.fn();
+    const fakeCtx = {
+      clearRect: vi.fn(),
+      strokeStyle: "",
+      lineWidth: 0,
+      fillStyle: "",
+      font: "",
+      textAlign: "",
+      textBaseline: "",
+      beginPath: vi.fn(),
+      moveTo: vi.fn(),
+      lineTo: vi.fn(),
+      stroke,
+      fillText: vi.fn(),
+    };
+    vi.spyOn(canvas, "getContext").mockReturnValue(fakeCtx as any);
+
+    renderHook(() => {
+      const ref = useXAxisCanvas([{ label: "T1", fraction: 0.5, value: 5 }], {
+        tickSize: 0,
+      });
+      (ref as any).current = canvas;
+      return ref;
+    });
+
+    expect(stroke).not.toHaveBeenCalled();
+  });
+
+  it("falls back to an empty tick list when ticks is nullish", () => {
+    const canvas = setupCanvas(300, 30);
+    const fillText = vi.fn();
+    const fakeCtx = {
+      clearRect: vi.fn(),
+      strokeStyle: "",
+      lineWidth: 0,
+      fillStyle: "",
+      font: "",
+      textAlign: "",
+      textBaseline: "",
+      beginPath: vi.fn(),
+      moveTo: vi.fn(),
+      lineTo: vi.fn(),
+      stroke: vi.fn(),
+      fillText,
+    };
+    vi.spyOn(canvas, "getContext").mockReturnValue(fakeCtx as any);
+
+    renderHook(() => {
+      // Untyped nullish ticks exercise the `ticksRef.current ?? []` fallback.
+      const ref = useXAxisCanvas(undefined as unknown as never);
+      (ref as any).current = canvas;
+      return ref;
+    });
+
+    // No ticks → no labels drawn, but no throw either.
+    expect(fillText).not.toHaveBeenCalled();
+  });
+
   it("calls ctx.scale when canvas size changes on resize", () => {
     const canvas = document.createElement("canvas");
     canvas.width = 1;

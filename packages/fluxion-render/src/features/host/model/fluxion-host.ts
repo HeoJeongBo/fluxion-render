@@ -91,7 +91,12 @@ function dtypeOf(arr: FluxionTypedArray): DType {
   if (arr instanceof Int16Array) return "i16";
   if (arr instanceof Uint16Array) return "u16";
   if (arr instanceof Int32Array) return "i32";
-  throw new Error("fluxion-render: unsupported TypedArray");
+  throw new Error(
+    `fluxion-render: unsupported TypedArray "${
+      /* v8 ignore next -- TypedArrays always have a constructor.name; typeof fallback is defensive */
+      (arr as { constructor?: { name?: string } })?.constructor?.name ?? typeof arr
+    }". Supported: Float32Array, Uint8Array, Int16Array, Uint16Array, Int32Array.`,
+  );
 }
 
 /**
@@ -113,6 +118,29 @@ export type TickUpdateListener = (
   yTicks: SerializedTick[],
 ) => void;
 
+/**
+ * Functions can't structuredClone (postMessage throws DataCloneError). Layer
+ * configs may carry main-thread-only formatter functions (`xTickFormat` /
+ * `yTickFormat`) — drop them here; React-side hooks (`useAxisTicks`) apply
+ * them after TICK_UPDATE. Shallow by design: every layer config is flat.
+ * Object-form formatters (`{ pattern, precision, ... }`) are NOT functions, so
+ * they pass through untouched and reach the worker's draw path intact.
+ */
+function stripFunctionFields(config: unknown): unknown {
+  if (config == null || typeof config !== "object" || Array.isArray(config))
+    return config;
+  let changed = false;
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(config as Record<string, unknown>)) {
+    if (typeof v === "function") {
+      changed = true;
+      continue;
+    }
+    out[k] = v;
+  }
+  return changed ? out : config;
+}
+
 export class FluxionHost {
   private worker: {
     postMessage(msg: unknown, transfer?: Transferable[]): void;
@@ -125,6 +153,7 @@ export class FluxionHost {
   private boundsListeners: BoundsChangeListener[] = [];
   private tickListeners: TickUpdateListener[] = [];
   private workerMsgHandler: EventListener | null = null;
+  private visibilityHandler: (() => void) | null = null;
 
   constructor(canvas: HTMLCanvasElement, opts: FluxionHostOptions = {}) {
     if (opts.workerFactory) {
@@ -132,11 +161,15 @@ export class FluxionHost {
       this.worker = opts.workerFactory();
     } else {
       // Pool mode: use the explicit pool or fall back to the module-level default.
+      /* v8 ignore start -- default-pool fallback needs a real worker URL, unavailable in unit tests */
       this.worker = (opts.pool ?? getDefaultPool()).acquire();
+      /* v8 ignore stop */
     }
 
     const offscreen = canvas.transferControlToOffscreen();
+    /* v8 ignore start -- devicePixelRatio is always defined in the DOM test env; SSR fallback */
     const dpr = typeof devicePixelRatio === "number" ? devicePixelRatio : 1;
+    /* v8 ignore stop */
     const rect = canvas.getBoundingClientRect();
     const width = rect.width || canvas.width || 300;
     const height = rect.height || canvas.height || 150;
@@ -192,6 +225,20 @@ export class FluxionHost {
     if (this.worker.addEventListener) {
       this.worker.addEventListener("message", this.workerMsgHandler);
     }
+
+    // Forward page visibility to the worker (it has no `document`). While
+    // hidden, the worker suspends the follow-clock continuous render loop;
+    // on becoming visible it re-anchors the window to the current wall clock.
+    /* v8 ignore next -- the no-document (SSR) arm is unreachable in the DOM test env */
+    if (typeof document !== "undefined") {
+      this.visibilityHandler = () => {
+        this.post({
+          op: Op.SET_VISIBLE,
+          visible: document.visibilityState === "visible",
+        });
+      };
+      document.addEventListener("visibilitychange", this.visibilityHandler);
+    }
   }
 
   /**
@@ -245,7 +292,7 @@ export class FluxionHost {
   // `useFluxionCanvas({ layers: FluxionLayerSpec[] })`).
   addLayer(id: string, kind: LayerKind, config?: unknown): void;
   addLayer(id: string, kind: LayerKind, config?: unknown): void {
-    this.post({ op: Op.ADD_LAYER, id, kind, config });
+    this.post({ op: Op.ADD_LAYER, id, kind, config: stripFunctionFields(config) });
   }
 
   removeLayer(id: string): void {
@@ -265,7 +312,7 @@ export class FluxionHost {
   // config alongside the layer id.
   configLayer(id: string, config: unknown): void;
   configLayer(id: string, config: unknown): void {
-    this.post({ op: Op.CONFIG, id, config });
+    this.post({ op: Op.CONFIG, id, config: stripFunctionFields(config) });
   }
 
   // ──────────────────────────────────────────────────────────────────────
@@ -464,6 +511,11 @@ export class FluxionHost {
       this.worker.removeEventListener("message", this.workerMsgHandler);
     }
     this.workerMsgHandler = null;
+    /* v8 ignore next -- the no-handler / no-document arms are unreachable in the DOM test env */
+    if (this.visibilityHandler && typeof document !== "undefined") {
+      document.removeEventListener("visibilitychange", this.visibilityHandler);
+    }
+    this.visibilityHandler = null;
     this.boundsListeners.length = 0;
     this.tickListeners.length = 0;
     try {

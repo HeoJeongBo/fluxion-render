@@ -144,6 +144,36 @@ describe("PoseArrowLayer", () => {
     expect(vp.observedYMax).toBeCloseTo(0);
   });
 
+  it("applies arrowLength and arrowWidth config (clamped to minimums)", () => {
+    const layer = new PoseArrowLayer("pose");
+    // Below minimums -> clamped to 4 and 2.
+    layer.setConfig({ arrowLength: 1, arrowWidth: 1 });
+    const vp = makeViewport();
+    layer.setData(new Float32Array([100, 0, 0]).buffer, 3, vp);
+    const ctx = createFakeCtx();
+    layer.draw(ctx as unknown as OffscreenCanvasRenderingContext2D, vp);
+    expect(ctx.calls.some((c) => c.name === "stroke")).toBe(true);
+  });
+
+  it("setData ignores buffers shorter than one sample (length < 3)", () => {
+    const layer = new PoseArrowLayer("pose");
+    const vp = makeViewport();
+    layer.setData(new Float32Array([100, 0]).buffer, 2, vp);
+    const ctx = createFakeCtx();
+    layer.draw(ctx as unknown as OffscreenCanvasRenderingContext2D, vp);
+    expect(ctx.calls.length).toBe(0);
+  });
+
+  it("clearData empties the ring buffer", () => {
+    const layer = new PoseArrowLayer("pose");
+    const vp = makeViewport();
+    layer.setData(new Float32Array([100, 0.5, 0]).buffer, 3, vp);
+    layer.clearData();
+    const ctx = createFakeCtx();
+    layer.draw(ctx as unknown as OffscreenCanvasRenderingContext2D, vp);
+    expect(ctx.calls.length).toBe(0);
+  });
+
   it("dispose clears the ring buffer", () => {
     const layer = new PoseArrowLayer("pose");
     const vp = makeViewport();

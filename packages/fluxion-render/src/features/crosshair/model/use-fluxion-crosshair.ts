@@ -95,12 +95,16 @@ export function useFluxionCrosshair(
   // ResizeObserver on the chart overlay div.
   useEffect(() => {
     const el = chartRef.current;
+    /* v8 ignore start -- chartRef is always attached once mounted; null-ref guard */
     if (!el) return;
+    /* v8 ignore stop */
     // Seed size immediately so first pointermove has correct dimensions.
     sizeRef.current = { width: el.clientWidth, height: el.clientHeight };
     const ro = new ResizeObserver((entries) => {
       const entry = entries[0];
+      /* v8 ignore start -- ResizeObserver always delivers at least one entry */
       if (!entry) return;
+      /* v8 ignore stop */
       sizeRef.current = {
         width: entry.contentRect.width,
         height: entry.contentRect.height,
@@ -113,7 +117,9 @@ export function useFluxionCrosshair(
   // Pointer event listeners.
   useEffect(() => {
     const el = chartRef.current;
+    /* v8 ignore start -- chartRef is always attached once mounted; null-ref guard */
     if (!el) return;
+    /* v8 ignore stop */
 
     const defaultXFormat = (t: number): string =>
       timeOrigin > 0

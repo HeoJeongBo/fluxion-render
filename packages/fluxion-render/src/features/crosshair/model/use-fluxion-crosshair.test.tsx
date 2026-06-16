@@ -237,6 +237,57 @@ describe("pointermove", () => {
   });
 });
 
+// ─── default formatters + time-mode bounds ──────────────────────────────────
+
+describe("default formatters and time-mode bounds", () => {
+  it("formats the x label as a wall-clock time when timeOrigin > 0", () => {
+    const cache = makeCache();
+    cache.push("a", 100, 42);
+    const onState = vi.fn();
+    const { container } = render(
+      <Harness
+        host={null}
+        cache={cache}
+        xMode="fixed"
+        xRange={[0, 200]}
+        timeOrigin={1_700_000_000_000}
+        onState={onState}
+      />,
+    );
+    const el = container.firstChild as HTMLElement;
+    stubRect(el, { left: 0, top: 0, width: 200, height: 100 });
+    firePointerMove(el, 100, 50);
+    const s = onState.mock.calls.at(-1)![0] as CrosshairState;
+    // timeOrigin > 0 → xLabel is an ISO time slice (HH:mm:ss.SSS), not a number.
+    expect(s.points[0]!.xLabel).toMatch(/^\d{2}:\d{2}:\d{2}\.\d{3}$/);
+    expect(s.points[0]!.yLabel).toBe("42.0000"); // default y format toFixed(4)
+  });
+
+  it("updates time-mode bounds from onBoundsChange (xMin = latestT - timeWindowMs)", () => {
+    const { host, fireBounds } = makeMockHost();
+    const cache = makeCache();
+    cache.push("a", 4500, 7);
+    const onState = vi.fn();
+    const { container } = render(
+      <Harness
+        host={host}
+        cache={cache}
+        xMode="time"
+        timeWindowMs={1000}
+        onState={onState}
+      />,
+    );
+    const el = container.firstChild as HTMLElement;
+    stubRect(el, { left: 0, top: 0, width: 200, height: 100 });
+    // latestT 5000 → window [4000, 5000]. Pointer at px 100 → dataT 4500 → hit.
+    fireBounds(-1, 1, 5000);
+    firePointerMove(el, 100, 50);
+    const s = onState.mock.calls.at(-1)![0] as CrosshairState;
+    expect(s.points).toHaveLength(1);
+    expect(s.points[0]!.t).toBe(4500);
+  });
+});
+
 // ─── xMode="fixed" — dataT calculation and nearest lookup ───────────────────
 
 describe('xMode="fixed"', () => {

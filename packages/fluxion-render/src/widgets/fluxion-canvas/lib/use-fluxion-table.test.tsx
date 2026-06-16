@@ -293,10 +293,11 @@ describe("useFluxionTable", () => {
     host.dispose();
   });
 
-  it("uses rAF flush loop when updateHz is 0", () => {
+  it("uses rAF flush loop when updateHz is 0 and cancels it on unmount", () => {
+    const cancelSpy = vi.spyOn(globalThis, "cancelAnimationFrame");
     const host = makeHost();
     let capturedRows: Row[] = [];
-    render(
+    const { unmount } = render(
       <Probe
         host={host}
         intervalMs={10}
@@ -314,6 +315,10 @@ describe("useFluxionTable", () => {
       vi.advanceTimersByTime(16);
     });
     expect(capturedRows.length).toBeGreaterThan(0);
+    // Unmount runs the rAF cleanup: cancelAnimationFrame(rafId).
+    unmount();
+    expect(cancelSpy).toHaveBeenCalled();
+    cancelSpy.mockRestore();
     host.dispose();
   });
 });

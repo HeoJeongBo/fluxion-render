@@ -12,12 +12,14 @@ type ResultCapture = ReturnType<typeof useSyncedTimeWindow>;
 
 function Harness({
   initialMs,
+  followClock,
   onResult,
 }: {
   initialMs?: number;
+  followClock?: boolean;
   onResult?: (r: ResultCapture) => void;
 }) {
-  const result = useSyncedTimeWindow(initialMs);
+  const result = useSyncedTimeWindow(initialMs, { followClock });
   onResult?.(result);
   return <div data-testid="root">{result.windowMs}</div>;
 }
@@ -122,6 +124,35 @@ describe("useSyncedTimeWindow — syncConfig", () => {
     const b = captured!.syncConfig();
     expect(a).not.toBe(b);
     expect(a).toEqual(b);
+  });
+
+  it("omits followClock by default", () => {
+    let captured: ResultCapture | undefined;
+    render(
+      <Harness
+        onResult={(r) => {
+          captured = r;
+        }}
+      />,
+    );
+    expect(captured!.syncConfig()).not.toHaveProperty("followClock");
+  });
+
+  it("includes followClock:true when the hook is created with it", () => {
+    let captured: ResultCapture | undefined;
+    render(
+      <Harness
+        initialMs={7000}
+        followClock
+        onResult={(r) => {
+          captured = r;
+        }}
+      />,
+    );
+    const cfg = captured!.syncConfig();
+    expect(cfg.followClock).toBe(true);
+    expect(cfg.timeWindowMs).toBe(7000);
+    expect(typeof cfg.timeOrigin).toBe("number");
   });
 });
 

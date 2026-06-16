@@ -38,27 +38,13 @@ function collectPoints(
   const layers = cache.getLayers();
   const targets = layerId ? layers.filter((l) => l.id === layerId) : layers;
 
-  return targets.map(({ id, label, color }) => {
-    // Access the raw ring buffer via the public API: use findNearest across a
-    // synthetic sweep. Since HoverDataCache doesn't expose getAll(), we reconstruct
-    // by sampling at every stored t. We use the internal iteration trick via
-    // getLatestT and repeated findNearest with increasing xMin.
-    const points: { t: number; y: number }[] = [];
-
-    // Walk the ring buffer forward using the public findNearest API:
-    // start from t=-Infinity and advance xMin to the last found t each step.
-    let xMin = -Infinity;
-    for (let i = 0; i < 8192; i++) {
-      // Use getLatestT as upper bound check — stop when we've collected all.
-      const result = cache.findNearest(id, xMin + 1e-9, xMin);
-      if (!result) break;
-      if (result.t === xMin) break; // No new point found.
-      points.push({ t: result.t, y: result.y });
-      xMin = result.t;
-    }
-
-    return { id, label, color, points };
-  });
+  return targets.map(({ id, label, color }) => ({
+    id,
+    label,
+    color,
+    // Full retained ring in chronological order.
+    points: cache.getPoints(id),
+  }));
 }
 
 /**

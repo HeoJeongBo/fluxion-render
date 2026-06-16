@@ -1,4 +1,5 @@
 import { render } from "@testing-library/react";
+import { StrictMode } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { FluxionHost } from "../../../features/host";
 import { axisGridLayer } from "./layer-specs";
@@ -70,6 +71,21 @@ describe("useLayerConfig", () => {
     const spy = vi.spyOn(host, "configLayer");
     render(<Probe host={host} spec={axisGridLayer("axis")} />);
     expect(spy).not.toHaveBeenCalled();
+    host.dispose();
+  });
+
+  it("skips the duplicate send when the effect re-runs with identical config (StrictMode)", () => {
+    // StrictMode double-invokes the effect on mount: the second run sees an
+    // unchanged `serialized` and hits the `lastSentRef.current === serialized`
+    // early-return, so configLayer is still sent exactly once.
+    const { host } = makeHost();
+    const spy = vi.spyOn(host, "configLayer");
+    render(
+      <StrictMode>
+        <Probe host={host} spec={axisGridLayer("axis", { timeWindowMs: 5000 })} />
+      </StrictMode>,
+    );
+    expect(spy).toHaveBeenCalledTimes(1);
     host.dispose();
   });
 

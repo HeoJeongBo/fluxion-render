@@ -49,6 +49,7 @@ export function formatClock(epochMs: number, pattern: string): string {
         return String(d.getMilliseconds()).padStart(3, "0");
       case "S":
         return String(Math.floor(d.getMilliseconds() / 100));
+      /* v8 ignore next 2 -- unreachable: TOKEN_RE only matches the explicit tokens above, so every replaced token hits a named case; the default is a defensive fallback */
       default:
         return tok;
     }

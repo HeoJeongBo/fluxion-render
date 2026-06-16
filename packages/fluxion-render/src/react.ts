@@ -13,9 +13,14 @@ export {
   FluxionCrosshair,
   type FluxionCrosshairProps,
   HoverDataCache,
+  type UseFluxionCrosshairFromLayersOptions,
   type UseFluxionCrosshairOptions,
   type UseFluxionCrosshairResult,
+  type UseHoverDataCacheOptions,
+  type UseHoverDataCacheResult,
   useFluxionCrosshair,
+  useFluxionCrosshairFromLayers,
+  useHoverDataCache,
 } from "./features/crosshair";
 export {
   type UseFluxionExportOptions,
@@ -102,3 +107,14 @@ export {
   type UseMiniChartResult,
   useMiniChart,
 } from "./widgets/mini-chart/lib/use-mini-chart";
+export {
+  type MultiSeries,
+  type UseMultiSeriesChartOptions,
+  type UseMultiSeriesChartResult,
+  useMultiSeriesChart,
+} from "./widgets/multi-series-chart/lib/use-multi-series-chart";
+export {
+  type UseSimpleChartOptions,
+  type UseSimpleChartResult,
+  useSimpleChart,
+} from "./widgets/simple-chart/lib/use-simple-chart";

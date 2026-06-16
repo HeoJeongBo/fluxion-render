@@ -102,6 +102,28 @@ describe("HeatmapLayer", () => {
     expect((ctx.fillRect as ReturnType<typeof vi.fn>).mock.calls.length).toBe(2);
   });
 
+  it("draw auto-fills only maxValue when only minValue is configured", () => {
+    const layer = new HeatmapLayer("h1");
+    layer.setConfig({ minValue: 0 }); // maxValue stays undefined -> auto
+    const vp = makeViewport();
+    const { buffer, length } = makeData([100, 20, 0.2], [200, 40, 0.9]);
+    layer.setData(buffer, length, vp);
+    const ctx = makeCtx();
+    expect(() => layer.draw(ctx, vp)).not.toThrow();
+    expect((ctx.fillRect as ReturnType<typeof vi.fn>).mock.calls.length).toBe(2);
+  });
+
+  it("draw auto-fills only minValue when only maxValue is configured", () => {
+    const layer = new HeatmapLayer("h1");
+    layer.setConfig({ maxValue: 1 }); // minValue stays undefined -> auto
+    const vp = makeViewport();
+    const { buffer, length } = makeData([100, 20, 0.2], [200, 40, 0.9]);
+    layer.setData(buffer, length, vp);
+    const ctx = makeCtx();
+    expect(() => layer.draw(ctx, vp)).not.toThrow();
+    expect((ctx.fillRect as ReturnType<typeof vi.fn>).mock.calls.length).toBe(2);
+  });
+
   it("draw uses configured minValue and maxValue", () => {
     const layer = new HeatmapLayer("h1");
     layer.setConfig({ minValue: 0, maxValue: 10 });
@@ -173,6 +195,25 @@ describe("HeatmapLayer", () => {
     const layer = new HeatmapLayer("h1");
     const vp = makeViewport();
     const { buffer, length } = makeData([100, 10, 0.5], [200, 90, 0.8], [300, 50, 0.3]);
+    layer.setData(buffer, length, vp);
+    layer.scan(vp);
+    expect(vp.observedYMin).toBe(10);
+    expect(vp.observedYMax).toBe(90);
+  });
+
+  it("scan handles a mid-range y that is neither a new min nor a new max", () => {
+    const layer = new HeatmapLayer("h1");
+    const vp = makeViewport();
+    // y order 50, 10, 30, 90: 30 is neither < running min nor > running max,
+    // exercising the false side of both `y < localMin` and `y > localMax`.
+    // An extra trailing point keeps the scanned window inclusive of index 3.
+    const { buffer, length } = makeData(
+      [100, 50, 0.5],
+      [200, 10, 0.5],
+      [300, 30, 0.5],
+      [400, 90, 0.5],
+      [500, 40, 0.5],
+    );
     layer.setData(buffer, length, vp);
     layer.scan(vp);
     expect(vp.observedYMin).toBe(10);

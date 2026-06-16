@@ -86,6 +86,18 @@ describe("FluxionTable", () => {
     expect(screen.getByText("0")).toBeTruthy();
   });
 
+  it("renders an empty string for a null/undefined cell value", () => {
+    const { container } = render(
+      <FluxionTable
+        columns={[{ key: "label" as const, header: "L" }]}
+        // label is null → `row[col.key] ?? ""` takes the empty-string branch.
+        rows={[{ id: "x", value: 0, label: null as never }]}
+      />,
+    );
+    const cell = container.querySelector("tbody td");
+    expect(cell?.textContent).toBe("");
+  });
+
   it("applies style prop to root wrapper", () => {
     const { container } = render(
       <FluxionTable columns={COLUMNS} rows={[]} style={{ color: "red" }} />,

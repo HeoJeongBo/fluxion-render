@@ -257,4 +257,17 @@ describe("FluxionCrosshair — custom visual props", () => {
     const tooltipEl = container.querySelectorAll("div")[1] as HTMLElement;
     expect(tooltipEl.style.background).toBeTruthy();
   });
+
+  it("flips the tooltip to the left edge at a far-right cursor position", () => {
+    // pxX large enough to trip the flipX guard → tooltip anchored via `right`.
+    const farRight: CrosshairState = {
+      position: { pxX: 10000, pxY: 5 }, // pxY small → also trips flipY
+      points: VISIBLE_STATE.points,
+    };
+    const { container } = render(<FluxionCrosshair state={farRight} />);
+    const tooltipEl = container.querySelectorAll("div")[1] as HTMLElement;
+    // flipX → `right` is set and `left` is cleared.
+    expect(tooltipEl.style.right).not.toBe("");
+    expect(tooltipEl.style.left).toBe("");
+  });
 });

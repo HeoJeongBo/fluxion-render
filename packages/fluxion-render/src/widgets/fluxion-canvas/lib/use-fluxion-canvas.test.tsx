@@ -161,4 +161,29 @@ describe("useFluxionCanvas", () => {
       expect(configPosts(posts)).toHaveLength(0);
     });
   });
+
+  it("defers when the pool is disposed, then mounts once it is replaced (mountKey bump)", () => {
+    // StrictMode race: the first mount effect sees a disposed pool, bumps
+    // mountKey and bails; the mountKey-driven re-run sees a live pool and mounts.
+    // Flip isDisposed false after the first read so the retry settles (otherwise
+    // setMountKey would loop forever).
+    const { factory } = makeFakeWorkerFactory();
+    let disposed = true;
+    const pool = {
+      get isDisposed() {
+        const v = disposed;
+        disposed = false;
+        return v;
+      },
+      acquire: () => factory(),
+    } as never;
+    function PoolHarness() {
+      const { containerRef } = useFluxionCanvas({
+        layers: [{ id: "axis", kind: "axis-grid" }],
+        hostOptions: { pool },
+      });
+      return <div ref={containerRef} />;
+    }
+    expect(() => render(<PoolHarness />)).not.toThrow();
+  });
 });

@@ -274,6 +274,42 @@ describe("useAxisTicks", () => {
       expect(last.xTicks[1]!.label).toBe("1000ms");
     });
 
+    it("applies yTickFormat function to raw y values from worker", () => {
+      const layersWithFn: FluxionLayerSpec[] = [
+        {
+          id: "axis",
+          kind: "axis-grid",
+          config: {
+            xMode: "time",
+            timeWindowMs: 5000,
+            timeOrigin: 0,
+            yRange: [-1, 1],
+            yTickFormat: (v: number) => `${v * 100}%`,
+          },
+        },
+      ];
+      const host = makeHostStub();
+      const received: (AxisTickSet | null)[] = [];
+      render(
+        <Harness
+          layers={layersWithFn}
+          axisLayerId="axis"
+          host={host}
+          onTicks={(t) => received.push(t)}
+        />,
+      );
+      const rawY: SerializedTick[] = [
+        { value: 0.5, label: "0.5", fraction: 0.5 },
+        { value: 1, label: "1", fraction: 1 },
+      ];
+      act(() => {
+        host._fireTickUpdate(SAMPLE_X, rawY);
+      });
+      const last = received[received.length - 1]!;
+      expect(last.yTicks[0]!.label).toBe("50%");
+      expect(last.yTicks[1]!.label).toBe("100%");
+    });
+
     it("re-renders when fraction changes even if labels are the same", () => {
       const host = makeHostStub();
       const received: (AxisTickSet | null)[] = [];

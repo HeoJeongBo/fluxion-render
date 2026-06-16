@@ -122,6 +122,31 @@ describe("Scheduler", () => {
     (globalThis as any).cancelAnimationFrame = caf;
   });
 
+  it("stop() before start() is a no-op (no raf to cancel)", () => {
+    const tick = vi.fn();
+    const s = new Scheduler(tick);
+    // raf is null — the `this.raf != null` guard takes its false arm.
+    expect(() => s.stop()).not.toThrow();
+    expect(tick).not.toHaveBeenCalled();
+  });
+
+  it("a frame re-scheduled during a tick bails out once running is false", () => {
+    const tick = vi.fn(() => {
+      // Stopping mid-tick clears the in-flight handle, but loop() still
+      // re-schedules a fresh frame afterward; that frame must early-return.
+      s.stop();
+    });
+    const s = new Scheduler(tick);
+    s.start();
+    s.markDirty();
+    vi.advanceTimersByTime(20);
+    expect(tick).toHaveBeenCalledTimes(1);
+    // The re-scheduled frame fires with running=false → loop early-returns,
+    // so no further ticks.
+    vi.advanceTimersByTime(100);
+    expect(tick).toHaveBeenCalledTimes(1);
+  });
+
   it("uses clearTimeout when cancelAnimationFrame is undefined on stop", () => {
     const raf = (globalThis as any).requestAnimationFrame;
     const caf = (globalThis as any).cancelAnimationFrame;

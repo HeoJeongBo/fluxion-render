@@ -85,6 +85,18 @@ describe("ScatterColoredLayer", () => {
     ).not.toThrow();
   });
 
+  it("colormap=gradient without colors uses the default blue→red endpoints", () => {
+    const layer = new ScatterColoredLayer("sc1");
+    // No minColor/maxColor → `?? "#0000ff"` / `?? "#ff0000"` defaults.
+    layer.setConfig({ colormap: "gradient" });
+    const vp = makeViewport();
+    layer.setData(new Float32Array(makeSample(100, 5, 0.5, 0.5)).buffer, 4, vp);
+    const ctx = createFakeCtx();
+    expect(() =>
+      layer.draw(ctx as unknown as OffscreenCanvasRenderingContext2D, vp),
+    ).not.toThrow();
+  });
+
   it("setConfig updates gradient LUT when minColor changes after colormap=gradient is set", () => {
     const layer = new ScatterColoredLayer("sc1");
     layer.setConfig({ colormap: "gradient", minColor: "#000000", maxColor: "#ffffff" });
@@ -107,6 +119,18 @@ describe("ScatterColoredLayer", () => {
     expect(() =>
       layer.draw(ctx as unknown as OffscreenCanvasRenderingContext2D, vp),
     ).not.toThrow();
+  });
+
+  it("setConfig gradient expands 3-digit hex shorthand colors", () => {
+    const layer = new ScatterColoredLayer("sc1");
+    // 3-char hex hits the shorthand-expansion branch in hexToRgb.
+    layer.setConfig({ colormap: "gradient", minColor: "#00f", maxColor: "#f00" });
+    const vp = makeViewport();
+    layer.setData(new Float32Array(makeSample(100, 5, 1.0, 0.5)).buffer, 4, vp);
+    const ctx = createFakeCtx();
+    layer.draw(ctx as unknown as OffscreenCanvasRenderingContext2D, vp);
+    // colorVal=1 -> last LUT entry -> #f00 expanded to (255,0,0).
+    expect(ctx.fillStyle).toBe("rgb(255,0,0)");
   });
 
   it("setConfig auto-calculates capacity from retentionMs + maxHz", () => {

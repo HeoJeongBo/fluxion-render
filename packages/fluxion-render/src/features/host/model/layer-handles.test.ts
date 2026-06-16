@@ -482,6 +482,14 @@ describe("ScatterColoredHandle", () => {
     expect(pushes).toHaveLength(0);
   });
 
+  it("pushBatch fills default colorValue/size when omitted", () => {
+    const { sink, pushes } = makeFakeSink();
+    const h = new ScatterColoredHandle(sink, "sc");
+    h.pushBatch([{ t: 1, y: 0.1 }]); // no colorValue/size → ?? 0.5 defaults
+    expect(pushes[0].data[2]).toBeCloseTo(0.5);
+    expect(pushes[0].data[3]).toBeCloseTo(0.5);
+  });
+
   it("pushRaw forwards the buffer unchanged", () => {
     const { sink, pushes } = makeFakeSink();
     const h = new ScatterColoredHandle(sink, "sc");

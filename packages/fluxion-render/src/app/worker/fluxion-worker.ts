@@ -62,12 +62,17 @@ self.onmessage = (e: MessageEvent<HostMsg>) => {
 
     const engine = engines.get(hostId);
     if (!engine) {
-      console.warn(`[fluxion-worker] no engine for hostId="${hostId}"`);
+      console.warn(
+        `[fluxion-worker] no engine for hostId="${hostId}" (op=${msg.op}). ` +
+          "The host was likely disposed, or this message arrived after teardown " +
+          "(e.g. a late pushData on an unmounted chart). It is dropped.",
+      );
       return;
     }
     engine.dispatch(msg);
   } catch (err) {
-    console.error("[fluxion-worker] dispatch error:", err);
+    const op = (e.data as { op?: number } | null)?.op;
+    console.error(`[fluxion-worker] dispatch error (op=${op}):`, err);
   }
 };
 

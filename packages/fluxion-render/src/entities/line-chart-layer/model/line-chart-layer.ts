@@ -56,6 +56,8 @@ export class LineChartLayer implements Layer {
   private decimate = false;
   private maxGapMs: number | undefined;
   private ring: RingBuffer;
+  // One-shot guard for the undersized-capacity warning (see scan()).
+  private warnedUndersized = false;
 
   constructor(id: string) {
     this.id = id;
@@ -79,6 +81,9 @@ export class LineChartLayer implements Layer {
     }
     if (newCapacity !== undefined && newCapacity !== this.ring.capacity) {
       this.ring = new RingBuffer(newCapacity, 2);
+      // New ring — re-arm the undersized warning so a still-too-small capacity
+      // can warn again (and a now-adequate one simply won't).
+      this.warnedUndersized = false;
     }
   }
 
@@ -107,8 +112,10 @@ export class LineChartLayer implements Layer {
     const xMin = viewport.bounds.xMin;
     let localMin = viewport.observedYMin;
     let localMax = viewport.observedYMax;
-    this.ring.forEach((data, off) => {
+    let oldestT = Number.NaN;
+    this.ring.forEach((data, off, index) => {
       const t = data[off];
+      if (index === 0) oldestT = t;
       if (t < xMin) return;
       const y = data[off + 1];
       if (y < localMin) localMin = y;
@@ -116,6 +123,23 @@ export class LineChartLayer implements Layer {
     });
     viewport.observedYMin = localMin;
     viewport.observedYMax = localMax;
+
+    // Undersized-capacity guard (once). When the ring is full AND its oldest
+    // retained sample is still inside the visible window, older in-window
+    // samples have already been evicted — i.e. the window wants to show more
+    // than the ring can hold, so data is being dropped silently.
+    if (
+      !this.warnedUndersized &&
+      this.ring.length === this.ring.capacity &&
+      oldestT >= xMin
+    ) {
+      this.warnedUndersized = true;
+      console.warn(
+        `[fluxion] Layer "${this.id}": ring capacity (${this.ring.capacity}) is ` +
+          "smaller than the visible window holds — oldest samples are dropped before " +
+          "they scroll off. Increase capacity, or set retentionMs+maxHz.",
+      );
+    }
   }
 
   draw(ctx: OffscreenCanvasRenderingContext2D, viewport: Viewport): void {
@@ -208,6 +232,7 @@ export class LineChartLayer implements Layer {
       // curCol makes the column-change branch below start fresh without a
       // duplicate flush.
       if (gap !== undefined && !Number.isNaN(prevT) && t - prevT > gap) {
+        /* v8 ignore next -- curCol is always set here: reaching this gap branch requires a prior in-window sample (prevT non-NaN), which necessarily assigned curCol in the column block below. curCol is only reset to NaN inside this branch, after the flush. */
         if (!Number.isNaN(curCol)) flush(curCol);
         curCol = Number.NaN;
         first = true;

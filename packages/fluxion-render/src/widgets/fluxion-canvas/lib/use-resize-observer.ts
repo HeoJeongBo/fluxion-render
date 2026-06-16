@@ -69,6 +69,7 @@ export function useResizeObserver(
       cancelled = true;
       clearTimeout(timer);
       ro.disconnect();
+      /* v8 ignore next -- mql is always assigned by subscribeDpr() (called unconditionally on mount), so the false arm is unreachable at cleanup */
       if (mql) mql.removeEventListener("change", handleDpr);
     };
   }, [ref]);

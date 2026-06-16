@@ -248,6 +248,50 @@ describe("useFluxionBrush — host integration", () => {
   });
 });
 
+describe("useFluxionBrush — pxToTime edge extrapolation", () => {
+  it("extrapolates below the first tick and above the last tick", () => {
+    const { host, fireTickUpdate } = makeMockHost();
+    const onSelect = vi.fn();
+    const { svg } = renderBrush({ host, width: 400, onSelect });
+
+    // Ticks span only the middle [0.25, 0.75] of the axis, so drags to the
+    // far edges fall OUTSIDE every bracket → hits both extrapolation branches.
+    act(() => {
+      fireTickUpdate([
+        { value: 250, fraction: 0.25 },
+        { value: 750, fraction: 0.75 },
+      ] as any);
+    });
+
+    fireMouseDown(svg, 0); // fraction 0 < 0.25 → low-edge extrapolation
+    fireMouseUp(400); // fraction 1 > 0.75 → high-edge extrapolation
+
+    const sel = capturedResult!.selection;
+    expect(sel).not.toBeNull();
+    if (sel) {
+      // Extrapolated below 250 and above 750.
+      expect(sel.tStart).toBeLessThan(250);
+      expect(sel.tEnd).toBeGreaterThan(750);
+    }
+  });
+});
+
+describe("useFluxionBrush — mousemove guard", () => {
+  it("a mousemove without an active drag is a no-op (no selection)", () => {
+    renderBrush({ host: null });
+    act(() => {
+      window.dispatchEvent(new MouseEvent("mousemove", { bubbles: true, clientX: 123 }));
+    });
+    expect(capturedResult!.selection).toBeNull();
+  });
+
+  it("a mouseup without an active drag is a no-op", () => {
+    renderBrush({ host: null });
+    fireMouseUp(200); // no preceding mousedown
+    expect(capturedResult!.selection).toBeNull();
+  });
+});
+
 describe("useFluxionBrush — renderHook API", () => {
   it("returns a brushRef object from renderHook", () => {
     const { result } = renderHook(() => useFluxionBrush({ host: null }));

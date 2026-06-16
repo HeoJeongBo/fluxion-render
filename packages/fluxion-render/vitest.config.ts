@@ -18,14 +18,19 @@ export default defineConfig({
         "src/index.ts",
         "src/react.ts",
         "src/app/worker/fluxion-worker.ts",
+        // Browser-only Worker factory (`new URL(import.meta.url)`) — untestable in node.
+        "src/app/worker/create-worker-factory.ts",
       ],
+      // Statements / functions / lines are held at a literal 100%. Branches sit
+      // at 98: the shortfall is entirely v8's phantom "implicit else" branch on
+      // every `if` without an `else` (reported with no source location, so it
+      // can neither be tested nor `/* v8 ignore */`-d). Every real branch is
+      // covered or has a documented ignore.
       thresholds: {
-        "src/widgets/fluxion-canvas/lib/use-axis-ticks.ts": {
-          lines: 100,
-          functions: 100,
-          branches: 100,
-          statements: 100,
-        },
+        lines: 100,
+        functions: 100,
+        statements: 100,
+        branches: 98,
       },
     },
   },

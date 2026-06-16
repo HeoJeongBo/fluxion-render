@@ -17,6 +17,7 @@ export const Op = {
   SET_AXIS_CANVAS: 11,
   SET_AXIS_STYLE: 12,
   CLEAR_DATA: 13,
+  SET_VISIBLE: 14,
 } as const;
 export type Op = (typeof Op)[keyof typeof Op];
 
@@ -163,6 +164,18 @@ export interface ClearDataMsg {
   hostId?: string;
 }
 
+/**
+ * Page-visibility signal from the host. The worker has no `document`, so the
+ * main thread forwards `visibilitychange` here. While hidden, the engine drops
+ * out of continuous (follow-clock) rendering to save CPU/battery; on becoming
+ * visible it re-anchors the follow-clock window to the current wall clock.
+ */
+export interface SetVisibleMsg {
+  op: typeof Op.SET_VISIBLE;
+  visible: boolean;
+  hostId?: string;
+}
+
 /** Update axis rendering style (color, font, tick size, etc.). */
 export interface SetAxisStyleMsg {
   op: typeof Op.SET_AXIS_STYLE;
@@ -187,7 +200,8 @@ export type HostMsg =
   | PoolDisposeMsg
   | SetAxisCanvasMsg
   | SetAxisStyleMsg
-  | ClearDataMsg;
+  | ClearDataMsg
+  | SetVisibleMsg;
 
 /**
  * Stream-channel message for custom worker scripts.

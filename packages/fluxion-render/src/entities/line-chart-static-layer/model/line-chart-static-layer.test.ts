@@ -71,6 +71,29 @@ describe("LineChartStaticLayer", () => {
     expect(vp.latestT).toBe(42);
   });
 
+  it("xy layout with a single point (n < 2) draws no path", () => {
+    const layer = new LineChartStaticLayer("l");
+    layer.setConfig({ layout: "xy" });
+    const vp = makeViewport();
+    // length 3 passes the `this.length < 2` guard but n = 3 >> 1 = 1 < 2.
+    layer.setData(new Float32Array([0, 0, 1]).buffer, 3, vp);
+    const ctx = createFakeCtx();
+    layer.draw(ctx as unknown as OffscreenCanvasRenderingContext2D, vp);
+    expect(ctx.calls.some((c) => c.name === "moveTo")).toBe(false);
+    expect(ctx.calls.some((c) => c.name === "stroke")).toBe(false);
+  });
+
+  it("defaults to xy layout when no layout is configured", () => {
+    const layer = new LineChartStaticLayer("l");
+    // No setConfig at all — `this.layout` keeps its "xy" default.
+    const vp = makeViewport();
+    layer.setData(new Float32Array([0, 0, 1, 1, 2, 2]).buffer, 6, vp);
+    const ctx = createFakeCtx();
+    layer.draw(ctx as unknown as OffscreenCanvasRenderingContext2D, vp);
+    expect(ctx.calls.filter((c) => c.name === "moveTo").length).toBe(1);
+    expect(ctx.calls.filter((c) => c.name === "lineTo").length).toBe(2);
+  });
+
   it("dispose clears data", () => {
     const layer = new LineChartStaticLayer("l");
     const vp = makeViewport();

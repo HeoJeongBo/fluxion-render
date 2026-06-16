@@ -100,4 +100,19 @@ describe("FluxionCanvas", () => {
     );
     expect(container.querySelectorAll("div")).toHaveLength(1);
   });
+
+  it("collapses the external-axes x-axis row when xAxisHeight is 0", () => {
+    const { factory } = makeFakeWorkerFactory();
+    const { container } = render(
+      <FluxionCanvas
+        hostOptions={{ workerFactory: factory }}
+        layers={[{ id: "axis", kind: "axis-grid" }]}
+        // externalAxes default (true) → exercises the grid-layout ternary.
+        axisLayerId="axis"
+        xAxisHeight={0}
+      />,
+    );
+    // xAxisHeight 0 → `xAxisHeight > 0 ? "1fr Npx" : "1fr"` takes the false arm.
+    expect(container.firstChild).not.toBeNull();
+  });
 });

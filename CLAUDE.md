@@ -26,6 +26,15 @@ pnpm lint:fix    # biome check --write . (formatter + import sort; linter disabl
 - Draw-path tests use the `createFakeCtx()` call-recording pattern (assert `moveTo`/`lineTo`/`stroke` counts), `renderHook` + fake timers for hooks.
 - Data timestamps are host-relative ms (`Date.now() - timeOrigin`); never push absolute epoch ms (Float32 quantization).
 
+## Testing & coverage
+
+- Coverage runs per package (no root script): `cd packages/<pkg> && pnpm vitest run --coverage`. Build render first (`pnpm --filter @heojeongbo/fluxion-render build`) so replay resolves it.
+- Enforced thresholds (`vitest.config.ts`): render = 100% stmts/funcs/lines, 98% branches; worker = 100% stmts/funcs/lines, 90% branches; replay = 100% lines (binding).
+- Patterns: `createFakeCtx()` (`src/test/setup.ts`) for canvas draw tests; a stub host whose `line(id)` returns a handle with a spyable `push` (see `use-simple-chart.test.tsx` `makeStubHost`) for stream-hook tests.
+- React component tests run with vitest `globals:false` → testing-library auto-cleanup is OFF. Add `afterEach(cleanup)` or scope queries to the returned `container`, or you'll hit "Found multiple elements" across tests.
+- v8-ignore: `/* v8 ignore next */` does NOT suppress cond-expr (`a?b:c`), binary-expr (`a??b`), or `if`-statement branches — use `/* v8 ignore start */ … /* v8 ignore stop */` for those, always with `-- reason`. The render branch gate is 98 (not 100) because v8 emits an untargetable phantom "implicit else" on every `if` without an `else`.
+- replay `scenarios/09-*.test.ts` is timing-flaky ONLY under `--coverage` (v8 slowdown) — it carries per-test `testTimeout: 20_000`; don't touch VirtualClock/ReplayPlayer to "fix" it.
+
 ## Release
 
 Per-package release-it via root scripts: `release[:worker|:replay][:patch|:minor|:major][:dry]`.

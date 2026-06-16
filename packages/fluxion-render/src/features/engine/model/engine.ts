@@ -79,6 +79,10 @@ export class Engine {
   private readonly stack = new LayerStack();
   private readonly scheduler: Scheduler;
   private bgColor = "#0b0d12";
+  // Page visibility, driven by the host's `visibilitychange`. While false, the
+  // follow-clock continuous render loop is suspended (CPU/battery), regardless
+  // of whether an axis layer is following the clock.
+  private visible = true;
   private hostId: string | undefined;
   private lastSentYMin = Number.NaN;
   private lastSentYMax = Number.NaN;
@@ -169,6 +173,20 @@ export class Engine {
         this.scheduler.markDirty();
         break;
       }
+      case Op.SET_VISIBLE: {
+        this.visible = msg.visible;
+        if (msg.visible) {
+          // Re-anchor the follow-clock window to the current wall clock so it
+          // jumps once to true "now" (elapsed hidden time is real) instead of
+          // resuming from a stale anchor.
+          this.stack
+            .findFirst((l): l is AxisGridLayer => l instanceof AxisGridLayer)
+            ?.resetClockAnchor();
+          this.scheduler.markDirty();
+        }
+        this.syncContinuousMode();
+        break;
+      }
     }
   }
 
@@ -230,7 +248,9 @@ export class Engine {
 
   private render() {
     const ctx = this.ctx;
+    /* v8 ignore start -- render only runs via the scheduler after init; ctx/canvas are always set */
     if (!ctx || !this.canvas) return;
+    /* v8 ignore stop */
     // 2-pass: scan (orchestration: time window, observed y, bounds) then
     // draw. AxisGridLayer.scan writes bounds; LineChartLayer.scan reads
     // bounds and publishes observed y extents; AxisGridLayer.draw finishes
@@ -248,7 +268,11 @@ export class Engine {
     const { yMin, yMax } = this.viewport.bounds;
     const range = yMax - yMin || 1;
     const eps = range * Engine.BOUNDS_EPS;
+    // `lastSentYMin/Max` start as NaN; `Math.abs(y - NaN) > eps` is always false,
+    // which would suppress the very first BOUNDS_UPDATE forever. Treat an unset
+    // (NaN) baseline as "changed" so the initial bounds are reported.
     const boundsChanged =
+      Number.isNaN(this.lastSentYMin) ||
       Math.abs(yMin - this.lastSentYMin) > eps ||
       Math.abs(yMax - this.lastSentYMax) > eps;
     if (boundsChanged) {
@@ -343,7 +367,9 @@ export class Engine {
       this.stack
         .findFirst((l): l is AxisGridLayer => l instanceof AxisGridLayer)
         ?.isFollowingClock() ?? false;
-    this.scheduler.setContinuous(follow);
+    // Suspend the continuous loop while the page is hidden — no point scrolling
+    // an axis nobody can see, and it saves CPU/battery.
+    this.scheduler.setContinuous(this.visible && follow);
   }
 
   pushRaw(layerId: string, data: Float32Array): void {

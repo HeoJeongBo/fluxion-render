@@ -1,4 +1,9 @@
-import { formatTick } from "../../../shared/lib/axis-ticks";
+import {
+  formatTick,
+  formatYTick,
+  type XTickFormat,
+  type YTickFormat,
+} from "../../../shared/lib/axis-ticks";
 import { intervalTicks, niceTicks } from "../../../shared/lib/math";
 import type { Layer } from "../../../shared/model/layer";
 import type { Bounds, Viewport } from "../../../shared/model/viewport";
@@ -44,16 +49,23 @@ export interface AxisGridConfig {
   /**
    * Formatter for x tick labels.
    *
-   * - **Function** `(value: number) => string`: called directly for every
-   *   tick value regardless of `xMode`. Useful for simple numeric labels
-   *   (`v => String(v)`), units (`v => \`${v}ms\``), etc.
-   * - **String** clock-pattern (e.g. `"HH:mm:ss"`): used when
-   *   `xMode: "time"` AND `timeOrigin` is set. Supported tokens:
-   *   `HH / H / mm / m / ss / s / SSS / S`. Default `"HH:mm:ss"`.
-   *   Ignored when `timeOrigin` is not provided — elapsed-seconds fallback
-   *   (`"X.Xs"`) is used instead.
+   * - **String** clock-pattern (e.g. `"HH:mm:ss"`): used when `xMode: "time"`
+   *   AND `timeOrigin` is set. Tokens: `HH / H / mm / m / ss / s / SSS / S`.
+   *   Default `"HH:mm:ss"`. Ignored without `timeOrigin` — elapsed-seconds
+   *   fallback (`"X.Xs"`) is used instead.
+   * - **Object** `{ pattern?, precision?, suffix?, si? }`: serializable, so it
+   *   works in EVERY render path — the worker's in-canvas labels, the
+   *   external-axis canvas (`externalAxes`), and the React-side tick set. In
+   *   time mode with `timeOrigin` and `pattern` it renders wall-clock;
+   *   otherwise it formats the raw value numerically (precision/suffix/si).
+   *   Use this for non-time axes or worker-drawn numeric labels.
+   * - **Function** `(value: number) => string`: called for every tick value
+   *   regardless of `xMode`, but CANNOT cross the worker boundary (it is
+   *   stripped before postMessage), so it applies on the React side only
+   *   (`useAxisTicks`); worker-drawn labels fall back to the raw value. Prefer
+   *   the string or object form with `externalAxes`.
    */
-  xTickFormat?: string | ((v: number) => string);
+  xTickFormat?: XTickFormat;
 
   // ─── y scaling ────────────────────────────────────────────
   /**
@@ -77,6 +89,19 @@ export interface AxisGridConfig {
    * Example: `yAutoMinSpan: 0.1` ensures the axis always spans at least 0.1.
    */
   yAutoMinSpan?: number;
+  /**
+   * Formatter for y tick labels.
+   *
+   * - **Object** `{ precision?, suffix?, si? }`: serializable, so it works in
+   *   EVERY render path — the worker's in-canvas labels, the external-axis
+   *   canvas (`externalAxes`), and the React-side tick set. Use this for the
+   *   common cases (fixed precision, unit suffix, k/M/G scaling).
+   * - **Function** `(value: number) => string`: cannot cross the worker
+   *   boundary (it is stripped before postMessage), so it applies on the
+   *   React side only (`useAxisTicks`); worker-drawn labels fall back to
+   *   `String(value)`. Prefer the object form with `externalAxes`.
+   */
+  yTickFormat?: YTickFormat;
 
   // ─── Visual toggles (all default true) ────────────────────
   /** Show vertical grid lines at x ticks. */
@@ -136,7 +161,8 @@ export class AxisGridLayer implements Layer {
   private timeWindowMs = 5000;
   private timeOrigin: number | null = null;
   private followClock = false;
-  private xTickFormat: string | ((v: number) => string) = "HH:mm:ss";
+  private xTickFormat: XTickFormat = "HH:mm:ss";
+  private yTickFormat: YTickFormat | undefined;
   private yMode: "fixed" | "auto" = "fixed";
   private yAutoPadding = 0.1;
   private yAutoMin: number | undefined;
@@ -150,6 +176,13 @@ export class AxisGridLayer implements Layer {
   private gridDashArray: number[] = [];
   private yPadPx = 0;
   private xTickIntervalMs: number | undefined;
+  // Monotonic-clock anchor for follow-clock. Captured on the first `now()`
+  // call; thereafter the wall clock is derived from `performance.now()` deltas
+  // (see `now()`).
+  private epochAtAnchor: number | null = null;
+  private perfAtAnchor = 0;
+  // One-shot guard so a misconfigured follow-clock (no timeOrigin) warns once.
+  private warnedFollowNoOrigin = false;
 
   constructor(id: string) {
     this.id = id;
@@ -176,6 +209,7 @@ export class AxisGridLayer implements Layer {
     if (c.timeOrigin !== undefined) this.timeOrigin = c.timeOrigin;
     if (c.followClock !== undefined) this.followClock = c.followClock;
     if (c.xTickFormat !== undefined) this.xTickFormat = c.xTickFormat;
+    if (c.yTickFormat !== undefined) this.yTickFormat = c.yTickFormat;
     if (c.yMode !== undefined) this.yMode = c.yMode;
     if (c.yAutoPadding !== undefined) this.yAutoPadding = c.yAutoPadding;
     if (c.yAutoMin !== undefined) this.yAutoMin = c.yAutoMin;
@@ -189,6 +223,21 @@ export class AxisGridLayer implements Layer {
     if (c.gridDashArray !== undefined) this.gridDashArray = c.gridDashArray;
     if (c.yPadPx !== undefined) this.yPadPx = c.yPadPx;
     if (c.xTickIntervalMs !== undefined) this.xTickIntervalMs = c.xTickIntervalMs;
+
+    // followClock without timeOrigin silently falls back to data-driven
+    // `latestT` (no clock follow) — warn once so the misconfig is visible.
+    if (
+      !this.warnedFollowNoOrigin &&
+      this.followClock &&
+      this.xMode === "time" &&
+      this.timeOrigin == null
+    ) {
+      this.warnedFollowNoOrigin = true;
+      console.warn(
+        `[fluxion] axisGridLayer "${this.id}": followClock requires timeOrigin; ` +
+          "window falls back to latestT (no clock follow).",
+      );
+    }
   }
 
   setData(_buffer: ArrayBuffer, _length: number, _viewport: Viewport): void {}
@@ -218,9 +267,36 @@ export class AxisGridLayer implements Layer {
     }
   }
 
-  /** Indirection seam so tests can inject a deterministic wall clock. */
+  /**
+   * Monotonic wall clock for the follow-clock window. Anchors the relationship
+   * between epoch (`Date.now()`) and the monotonic `performance.now()` on first
+   * use, then derives "now" from `performance.now()` deltas. This keeps the
+   * window from jumping backward if `Date.now()` steps back (NTP/manual change)
+   * and survives the worker-vs-main `performance.now()` origin difference
+   * because only deltas are used.
+   *
+   * Trade-off: the epoch↔perf relationship is frozen for the session, so this
+   * does not self-correct slow real-clock drift (a few ms over a multi-hour
+   * session). "No jumps" is the right call for a scrolling axis.
+   *
+   * Stays a private method so tests can replace the whole seam via spyOn.
+   */
   private now(): number {
-    return Date.now();
+    if (this.epochAtAnchor === null) {
+      this.epochAtAnchor = Date.now();
+      this.perfAtAnchor = performance.now();
+    }
+    return this.epochAtAnchor + (performance.now() - this.perfAtAnchor);
+  }
+
+  /**
+   * Drop the monotonic-clock anchor so the next `now()` re-anchors to the
+   * current `Date.now()`. Used when a hidden tab becomes visible again: the
+   * window jumps once to true "now" (intended — elapsed time is real) instead
+   * of resuming from a stale anchor.
+   */
+  resetClockAnchor(): void {
+    this.epochAtAnchor = null;
   }
 
   /**
@@ -336,7 +412,7 @@ export class AxisGridLayer implements Layer {
         ctx.textBaseline = "middle";
         for (let i = 0; i < yTicks.length; i++) {
           const y = viewport.yToPx(yTicks[i]);
-          ctx.fillText(String(yTicks[i]), 2, y - 6);
+          ctx.fillText(formatYTick(yTicks[i], this.yTickFormat), 2, y - 6);
         }
       }
     }
@@ -366,12 +442,14 @@ export class AxisGridLayer implements Layer {
         value: v,
         label: isFnFormat
           ? ""
-          : formatTick(v, this.xMode, this.timeOrigin, this.xTickFormat as string),
+          : formatTick(v, this.xMode, this.timeOrigin, this.xTickFormat),
+        /* v8 ignore next -- empty span ⟹ niceTicks returns [], so this map body never runs */
         fraction: xSpan > 0 ? (v - this.bounds.xMin) / xSpan : 0,
       })),
       yTicks: yRaw.map((v) => ({
         value: v,
-        label: String(v),
+        label: formatYTick(v, this.yTickFormat),
+        /* v8 ignore next -- empty span ⟹ niceTicks returns [], so this map body never runs */
         fraction: ySpan > 0 ? (v - this.bounds.yMin) / ySpan : 0,
       })),
       xRawValues: isFnFormat ? xRaw : [],
@@ -406,7 +484,9 @@ export class AxisGridLayer implements Layer {
         : niceTicks(this.bounds.xMin, this.bounds.xMax, this.targetTicks);
     const xSpan = this.bounds.xMax - this.bounds.xMin;
 
+    /* v8 ignore start -- empty span ⟹ xRaw is [], so this map body never runs */
     const fractions = xRaw.map((v) => (xSpan > 0 ? (v - this.bounds.xMin) / xSpan : 0));
+    /* v8 ignore stop */
     const labels = xRaw.map((v) =>
       formatTick(v, this.xMode, this.timeOrigin, this.xTickFormat),
     );
@@ -456,8 +536,10 @@ export class AxisGridLayer implements Layer {
     const ySpan = this.bounds.yMax - this.bounds.yMin;
     const usableH = canvasH - yPadPx * 2;
 
+    /* v8 ignore start -- empty span ⟹ yRaw is [], so this map body never runs */
     const fractions = yRaw.map((v) => (ySpan > 0 ? (v - this.bounds.yMin) / ySpan : 0));
-    const labels = yRaw.map((v) => String(v));
+    /* v8 ignore stop */
+    const labels = yRaw.map((v) => formatYTick(v, this.yTickFormat));
 
     if (tickSize > 0) {
       ctx.strokeStyle = color;

@@ -540,4 +540,125 @@ describe("FluxionHost", () => {
     host.emitStream("sensor", new ArrayBuffer(8), 2);
     expect(posts).toHaveLength(0);
   });
+
+  it("pushData throws on an unsupported TypedArray with an actionable message", () => {
+    const { worker } = makeFakeWorker();
+    const host = new FluxionHost(makeCanvas(), { workerFactory: () => worker });
+    // Float64Array is not in the supported set → dtypeOf throws.
+    expect(() => host.pushData("x", new Float64Array([1, 2]) as never)).toThrow(
+      /unsupported TypedArray "Float64Array"/,
+    );
+    host.dispose();
+  });
+
+  it("strips function fields from layer config before postMessage", () => {
+    const { worker, posts } = makeFakeWorker();
+    const host = new FluxionHost(makeCanvas(), { workerFactory: () => worker });
+    posts.length = 0;
+    host.addLayer("axis", "axis-grid", {
+      xMode: "time",
+      // function formatter can't structuredClone → must be stripped.
+      xTickFormat: (v: number) => `${v}!`,
+      timeWindowMs: 1000,
+    });
+    const msg = posts[0].msg as { config: Record<string, unknown> };
+    expect(msg.config.xTickFormat).toBeUndefined();
+    expect(msg.config.timeWindowMs).toBe(1000);
+
+    posts.length = 0;
+    host.configLayer("axis", { yTickFormat: (v: number) => `${v}` });
+    const cfg = posts[0].msg as { config: Record<string, unknown> };
+    expect(cfg.config.yTickFormat).toBeUndefined();
+    host.dispose();
+  });
+
+  it("hostId is __solo__ in solo (workerFactory) mode", () => {
+    const { worker } = makeFakeWorker();
+    const host = new FluxionHost(makeCanvas(), { workerFactory: () => worker });
+    expect(host.hostId).toBe("__solo__");
+    host.dispose();
+  });
+
+  it("emitPoolStream posts a pool-stream message and is a no-op after dispose", () => {
+    const { worker, posts } = makeFakeWorker();
+    const host = new FluxionHost(makeCanvas(), { workerFactory: () => worker });
+    posts.length = 0;
+    const buf = new ArrayBuffer(8);
+    host.emitPoolStream([{ hostId: "h", layerId: "l" }], buf, 2);
+    expect((posts[0].msg as { mode: string }).mode).toBe("pool-stream");
+
+    host.dispose();
+    posts.length = 0;
+    host.emitPoolStream([{ hostId: "h", layerId: "l" }], new ArrayBuffer(8), 2);
+    expect(posts).toHaveLength(0);
+  });
+
+  it("forwards axis canvases and axisStyle into INIT-time messages", () => {
+    const { worker, posts } = makeFakeWorker();
+    const xAxisElement = makeCanvas(400, 30);
+    const yAxisElement = makeCanvas(60, 300);
+    const host = new FluxionHost(makeCanvas(), {
+      workerFactory: () => worker,
+      xAxisElement,
+      yAxisElement,
+      axisStyle: { color: "#abc", tickSize: 5 },
+    });
+    const ops = posts.map((p) => (p.msg as { op: number }).op);
+    expect(ops).toContain(Op.SET_AXIS_CANVAS);
+    expect(ops).toContain(Op.SET_AXIS_STYLE);
+    host.dispose();
+  });
+
+  it("uses an explicitly provided pool instead of a custom workerFactory", () => {
+    const { worker } = makeFakeWorker();
+    const acquire = vi.fn(() => worker);
+    const pool = { acquire } as unknown as import("../../worker-pool").FluxionWorkerPool;
+    const host = new FluxionHost(makeCanvas(), { pool });
+    expect(acquire).toHaveBeenCalledTimes(1);
+    host.dispose();
+  });
+
+  it("falls back to default INIT dimensions when the canvas has zero size", () => {
+    const { worker, posts } = makeFakeWorker();
+    const canvas = makeCanvas(0, 0); // width/height 0 → `|| 300` / `|| 150` fallbacks
+    const host = new FluxionHost(canvas, { workerFactory: () => worker });
+    const init = posts.find((p) => (p.msg as { op: number }).op === Op.INIT)!.msg as {
+      width: number;
+      height: number;
+    };
+    expect(init.width).toBe(300);
+    expect(init.height).toBe(150);
+    host.dispose();
+  });
+
+  it("registers a visibilitychange listener and forwards SET_VISIBLE; removes it on dispose", () => {
+    const docListeners: Record<string, EventListener[]> = {};
+    const addSpy = vi
+      .spyOn(document, "addEventListener")
+      .mockImplementation((type: string, fn: EventListenerOrEventListenerObject) => {
+        (docListeners[type] ??= []).push(fn as EventListener);
+      });
+    const removeSpy = vi
+      .spyOn(document, "removeEventListener")
+      .mockImplementation((type: string, fn: EventListenerOrEventListenerObject) => {
+        const arr = docListeners[type] ?? [];
+        const idx = arr.indexOf(fn as EventListener);
+        if (idx >= 0) arr.splice(idx, 1);
+      });
+
+    const { worker, posts } = makeFakeWorker();
+    const host = new FluxionHost(makeCanvas(), { workerFactory: () => worker });
+    expect(docListeners.visibilitychange).toHaveLength(1);
+
+    posts.length = 0;
+    // Fire the handler → posts a SET_VISIBLE message reflecting visibilityState.
+    docListeners.visibilitychange![0]!(new Event("visibilitychange"));
+    expect((posts[0].msg as { op: number }).op).toBe(Op.SET_VISIBLE);
+
+    host.dispose();
+    expect(docListeners.visibilitychange).toHaveLength(0);
+
+    addSpy.mockRestore();
+    removeSpy.mockRestore();
+  });
 });

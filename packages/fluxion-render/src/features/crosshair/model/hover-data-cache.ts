@@ -97,6 +97,23 @@ export class HoverDataCache {
     return bestDist === Infinity ? null : { t: bestT, y: bestY };
   }
 
+  /**
+   * Return every retained `{ t, y }` sample for a layer in chronological order
+   * (oldest → newest). Empty array for an unknown or empty layer. Used by data
+   * export to read the full ring without poking at internals.
+   */
+  getPoints(id: string): { t: number; y: number }[] {
+    const e = this._entries.get(id);
+    if (!e || e.count === 0) return [];
+    const out: { t: number; y: number }[] = new Array(e.count);
+    const start = e.count < e.capacity ? 0 : e.head;
+    for (let i = 0; i < e.count; i++) {
+      const slot = (start + i) % e.capacity;
+      out[i] = { t: e.data[slot * 2]!, y: e.data[slot * 2 + 1]! };
+    }
+    return out;
+  }
+
   /** Returns the t value of the most recently pushed point across all registered layers. */
   getLatestT(): number {
     let latest = -Infinity;

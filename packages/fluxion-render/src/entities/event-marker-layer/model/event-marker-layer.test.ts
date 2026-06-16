@@ -160,6 +160,18 @@ describe("EventMarkerLayer", () => {
     expect(ctx.calls.filter((c) => c.name === "stroke").length).toBe(2);
   });
 
+  it("falls back to the info color when severity is NaN", () => {
+    const layer = new EventMarkerLayer("evt1");
+    layer.setConfig({ colors: ["#111111", "#222222", "#333333"] });
+    const vp = makeViewport();
+    // NaN survives Math.round/min/max as NaN -> colors[NaN] is undefined,
+    // exercising the `?? this.colors[0]` fallback.
+    layer.setData(new Float32Array([100, Number.NaN]).buffer, 2, vp);
+    const ctx = createFakeCtx();
+    layer.draw(ctx as unknown as OffscreenCanvasRenderingContext2D, vp);
+    expect(ctx.strokeStyle).toBe("#111111");
+  });
+
   it("scan is a no-op (does not modify viewport)", () => {
     const layer = new EventMarkerLayer("evt1");
     const vp = makeViewport();
