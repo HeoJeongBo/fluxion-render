@@ -30,6 +30,37 @@ export interface LineChartConfig {
    * keeps the current behavior: every visible sample is connected.
    */
   maxGapMs?: number;
+  /**
+   * Canvas `setLineDash` pattern for the stroke, in CSS px. Default `[]`
+   * (solid). Use it to tell apart series whose values overlap — e.g.
+   * `[6, 4]` draws a dashed line that stays distinguishable even when it sits
+   * exactly on top of another series. Visual only: data, hover, and
+   * auto-scaling are unaffected.
+   */
+  dashArray?: number[];
+  /**
+   * Vertical offset added to every y at DRAW time, in DATA units. Default 0.
+   * Shifts this series' stroke up/down so overlapping series spread out
+   * vertically (waterfall). `scan()` widens the observed y-range by the same
+   * amount, so `yMode: "auto"` grows to fit and never clips the shifted line.
+   * Visual only: hover, export, and the underlying samples are unaffected.
+   * Ignored in lane mode (see `laneCount`).
+   */
+  yOffset?: number;
+  /**
+   * Lane (small-multiples) mode. When `laneCount >= 1`, this layer draws into
+   * a horizontal band `laneIndex` of `laneCount`, auto-normalized to ITS OWN
+   * visible y-range — so it no longer shares the chart's y-axis. Use it to
+   * stack several streams that would otherwise overlap, each readable in its
+   * own strip (ECG / oscilloscope style). The shared y-axis becomes
+   * meaningless in this mode (suppress it: `yMode:"fixed"`, `showYLabels:false`).
+   * `yOffset` is ignored while lane mode is active. Default off.
+   */
+  laneIndex?: number;
+  /** Total number of lanes. See {@link laneIndex}. Default 0 (lane mode off). */
+  laneCount?: number;
+  /** Gap between adjacent lanes, in CSS px. Default 6. */
+  laneGapPx?: number;
 }
 
 /**
@@ -55,6 +86,15 @@ export class LineChartLayer implements Layer {
   private visible = true;
   private decimate = false;
   private maxGapMs: number | undefined;
+  private dashArray: number[] = [];
+  private yOffset = 0;
+  private laneIndex = 0;
+  private laneCount = 0;
+  private laneGapPx = 6;
+  // Per-layer visible y-extent from the last scan() — used to normalize this
+  // layer's lane band independently of the shared viewport. NaN until scanned.
+  private scannedYMin = Number.NaN;
+  private scannedYMax = Number.NaN;
   private ring: RingBuffer;
   // One-shot guard for the undersized-capacity warning (see scan()).
   private warnedUndersized = false;
@@ -71,6 +111,11 @@ export class LineChartLayer implements Layer {
     if (c.visible !== undefined) this.visible = c.visible;
     if (c.decimate !== undefined) this.decimate = c.decimate;
     if (c.maxGapMs !== undefined) this.maxGapMs = c.maxGapMs;
+    if (c.dashArray !== undefined) this.dashArray = c.dashArray;
+    if (c.yOffset !== undefined) this.yOffset = c.yOffset;
+    if (c.laneIndex !== undefined) this.laneIndex = c.laneIndex;
+    if (c.laneCount !== undefined) this.laneCount = c.laneCount;
+    if (c.laneGapPx !== undefined) this.laneGapPx = c.laneGapPx;
     let newCapacity: number | undefined = c.capacity;
     if (
       newCapacity === undefined &&
@@ -110,19 +155,28 @@ export class LineChartLayer implements Layer {
   scan(viewport: Viewport): void {
     if (!this.visible || this.ring.length === 0) return;
     const xMin = viewport.bounds.xMin;
-    let localMin = viewport.observedYMin;
-    let localMax = viewport.observedYMax;
+    const lane = this.laneActive();
+    // Lane mode normalizes per-layer (own band), so it neither applies yOffset
+    // nor contributes to the shared observed range; it tracks its OWN extent.
+    const off0 = lane ? 0 : this.yOffset;
+    let localMin = lane ? Number.POSITIVE_INFINITY : viewport.observedYMin;
+    let localMax = lane ? Number.NEGATIVE_INFINITY : viewport.observedYMax;
     let oldestT = Number.NaN;
     this.ring.forEach((data, off, index) => {
       const t = data[off];
       if (index === 0) oldestT = t;
       if (t < xMin) return;
-      const y = data[off + 1];
+      const y = data[off + 1] + off0;
       if (y < localMin) localMin = y;
       if (y > localMax) localMax = y;
     });
-    viewport.observedYMin = localMin;
-    viewport.observedYMax = localMax;
+    if (lane) {
+      this.scannedYMin = localMin;
+      this.scannedYMax = localMax;
+    } else {
+      viewport.observedYMin = localMin;
+      viewport.observedYMax = localMax;
+    }
 
     // Undersized-capacity guard (once). When the ring is full AND its oldest
     // retained sample is still inside the visible window, older in-window
@@ -142,11 +196,41 @@ export class LineChartLayer implements Layer {
     }
   }
 
+  private laneActive(): boolean {
+    return this.laneCount > 0;
+  }
+
+  /**
+   * Map a data `y` into this layer's lane band, normalized to its own scanned
+   * y-range — independent of the shared `viewport.yToPx`.
+   */
+  private yToBandPx(y: number, viewport: Viewport): number {
+    const pad = viewport.yPadPx;
+    const usable = viewport.heightPx - pad * 2;
+    const bandH = usable / this.laneCount;
+    const gap = this.laneGapPx;
+    const top = pad + this.laneIndex * bandH + gap / 2;
+    const bottom = pad + (this.laneIndex + 1) * bandH - gap / 2;
+    let lo = this.scannedYMin;
+    let hi = this.scannedYMax;
+    if (!(hi > lo)) {
+      // Flat or single-value series — give the band some vertical room.
+      lo -= 0.5;
+      hi += 0.5;
+    }
+    const frac = (y - lo) / (hi - lo);
+    return bottom - frac * (bottom - top);
+  }
+
   draw(ctx: OffscreenCanvasRenderingContext2D, viewport: Viewport): void {
     if (!this.visible || this.ring.length < 2) return;
+    // Lane mode needs an in-window y-extent from scan; skip if none this frame.
+    if (this.laneActive() && !Number.isFinite(this.scannedYMin)) return;
 
     ctx.strokeStyle = this.color;
     ctx.lineWidth = this.lineWidth;
+    const dashed = this.dashArray.length > 0;
+    if (dashed) ctx.setLineDash(this.dashArray);
     ctx.beginPath();
 
     // Sample filter: skip records older than the current x-window. Combined
@@ -161,17 +245,21 @@ export class LineChartLayer implements Layer {
     if (this.decimate && this.ring.length > viewport.widthPx * 2) {
       this._drawDecimated(ctx, viewport, xMin);
       ctx.stroke();
+      if (dashed) ctx.setLineDash([]);
       return;
     }
 
     const gap = this.maxGapMs;
+    const lane = this.laneActive();
     let first = true;
     let prevT = 0;
     this.ring.forEach((data, off) => {
       const t = data[off];
       if (t < xMin) return;
       const px = viewport.xToPx(t);
-      const py = viewport.yToPx(data[off + 1]);
+      const py = lane
+        ? this.yToBandPx(data[off + 1], viewport)
+        : viewport.yToPx(data[off + 1] + this.yOffset);
       // Break the stroke across a time gap larger than maxGapMs — the
       // silence shows as a real hole instead of a bridging diagonal.
       if (first || (gap !== undefined && t - prevT > gap)) {
@@ -183,6 +271,7 @@ export class LineChartLayer implements Layer {
       prevT = t;
     });
     ctx.stroke();
+    if (dashed) ctx.setLineDash([]);
   }
 
   /**
@@ -196,6 +285,7 @@ export class LineChartLayer implements Layer {
     viewport: Viewport,
     xMin: number,
   ): void {
+    const lane = this.laneActive();
     let first = true;
     let curCol = Number.NaN;
     // Per-column accumulators (y in data space; converted to px on flush).
@@ -210,7 +300,9 @@ export class LineChartLayer implements Layer {
       const pts = [firstY, minY, maxY, lastY];
       for (let k = 0; k < pts.length; k++) {
         if (k > 0 && pts[k] === pts[k - 1]) continue;
-        const py = viewport.yToPx(pts[k]);
+        const py = lane
+          ? this.yToBandPx(pts[k], viewport)
+          : viewport.yToPx(pts[k] + this.yOffset);
         if (first) {
           ctx.moveTo(colPx, py);
           first = false;

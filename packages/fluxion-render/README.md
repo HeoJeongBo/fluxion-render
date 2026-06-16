@@ -98,6 +98,7 @@ remount — config changes are reconciled, structural ones aren't.)
 const { layers, setHost } = useMultiSeriesChart({
   hz: 60,
   windowMs: 5000,
+  distinguishBy: 'dash', // ← solid / dashed / dotted across the series
   series: [
     { id: 'a', color: '#4fc3f7', sample: (t) => Math.sin(t / 500) },
     { id: 'b', color: '#ffb060', sample: (t) => Math.cos(t / 400) },
@@ -105,6 +106,43 @@ const { layers, setHost } = useMultiSeriesChart({
 });
 return <FluxionCanvas key={2} layers={layers} onReady={setHost} />;
 ```
+
+**Overlapping series?** When values sit on top of each other (flat or
+slowly-varying signals), color alone can't separate the lines. `distinguishBy`
+keeps them readable, deterministically (no runtime overlap detection):
+
+- `distinguishBy: 'dash'` — each series gets a distinct dash pattern, cycling
+  the exported `DASH_PATTERNS` palette (`dashPatternFor(i)`). Honest about
+  position.
+- `distinguishBy: 'offset'` (with `offsetStep` in data units) — spreads the
+  series vertically (waterfall), lifting series *i* by `i * offsetStep`.
+- Combine: `distinguishBy: ['dash', 'offset']`.
+
+Both are color-independent and skip any series that sets the matching field
+itself (`dashArray` / `yOffset`). It's pure styling — hover, export, and the
+underlying samples are unaffected; with `'offset'`, auto-scaling grows to fit
+the shifted lines so nothing clips. (You can also set `dashArray` / `yOffset`
+directly on any `lineLayer` / `areaLayer` / `stepLayer`.)
+
+**Heavily overlapping? Use lanes.** `'offset'` keeps one shared y-axis, so a
+big spread makes the axis labels misleading. For genuinely overlapping streams,
+`layout: 'lanes'` draws **each series in its own horizontal band**, auto-
+normalized to *its own* range (small multiples / ECG style) — there is no
+shared y-axis to lie about. The helper suppresses the y grid/labels and ignores
+`offset` in this mode (`dash` still works per lane).
+
+```tsx
+const { layers, setHost } = useMultiSeriesChart({
+  hz: 60, windowMs: 5000, layout: 'lanes',
+  series: [
+    { id: 'a', color: '#4fc3f7', sample: (t) => Math.sin(t / 500) },
+    { id: 'b', color: '#ffb060', sample: (t) => 0.5 + Math.sin(t / 510) * 0.02 },
+  ],
+});
+```
+
+Low-level: set `laneIndex` / `laneCount` (+ optional `laneGapPx`) on any
+`lineLayer` / `areaLayer` / `stepLayer` to band it yourself.
 
 ### Vanilla JS
 
@@ -190,6 +228,18 @@ lineLayer('signal', {
   maxGapMs?: number,     // break the stroke when consecutive samples are farther apart
                          // than this (bursty/intermittent streams show real holes
                          // instead of a bridging diagonal); also on area/step layers
+  dashArray?: number[],  // setLineDash pattern in CSS px, default [] (solid). Use to
+                         // distinguish overlapping series, e.g. [6, 4]; also on
+                         // area/step layers (area dashes the outline, not the fill).
+                         // Visual only — data, hover, and auto-scaling are unaffected.
+  yOffset?: number,      // vertical offset added to every y at draw time, in DATA
+                         // units, default 0. Lifts the series up/down to spread
+                         // overlapping lines (waterfall); auto-scale grows to fit.
+                         // Also on area/step layers. Visual only (hover/export = raw y).
+  laneIndex?: number,    // lane (small-multiples) mode: draw this series in band
+  laneCount?: number,    // `laneIndex` of `laneCount`, auto-normalized to its OWN
+  laneGapPx?: number,    // y-range (own band, no shared y-axis). gap default 6 px.
+                         // Also on area/step. See useMultiSeriesChart layout:'lanes'.
 })
 ```
 

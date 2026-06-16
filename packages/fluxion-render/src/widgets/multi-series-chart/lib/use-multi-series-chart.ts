@@ -2,6 +2,7 @@ import { useCallback, useMemo, useRef, useState } from "react";
 import type { HoverDataCache } from "../../../features/crosshair";
 import type { FluxionHost } from "../../../features/host";
 import { useTimeOrigin } from "../../../features/synced-time";
+import { dashPatternFor } from "../../../shared/lib/dash-patterns";
 import { axisGridLayer, lineLayer } from "../../fluxion-canvas/lib/layer-specs";
 import type { FluxionLayerSpec } from "../../fluxion-canvas/lib/use-fluxion-canvas";
 import { useFluxionStream } from "../../fluxion-canvas/lib/use-fluxion-stream";
@@ -17,6 +18,16 @@ export interface MultiSeries {
   lineWidth?: number;
   /** Human label (legend / crosshair). */
   label?: string;
+  /**
+   * Explicit `setLineDash` pattern for this series (CSS px). Takes precedence
+   * over `distinguishBy: "dash"`. Omit to let it assign one.
+   */
+  dashArray?: number[];
+  /**
+   * Explicit vertical offset for this series (DATA units). Takes precedence
+   * over `distinguishBy: "offset"`. Omit to let it assign one.
+   */
+  yOffset?: number;
 }
 
 export interface UseMultiSeriesChartOptions {
@@ -30,6 +41,38 @@ export interface UseMultiSeriesChartOptions {
   timeOrigin?: number;
   /** Axis layer id. Default `"axis"`. */
   axisLayerId?: string;
+  /**
+   * How to keep overlapping series distinguishable. Deterministic, color-
+   * independent, and skipped for any series that sets the matching field
+   * itself. Combine with an array, e.g. `["dash", "offset"]`.
+   *
+   * - `"dash"`   — each series gets a distinct dash pattern (cycling
+   *   {@link dashPatternFor}). Honest about position. Skipped per series that
+   *   sets `dashArray`.
+   * - `"offset"` — spread series vertically (waterfall), evenly spaced by
+   *   `offsetStep` (DATA units). Requires `offsetStep`; without it nothing is
+   *   offset and a one-time warning fires. Skipped per series that sets
+   *   `yOffset`.
+   */
+  distinguishBy?: "dash" | "offset" | ("dash" | "offset")[];
+  /**
+   * Spacing (DATA units) between series when `distinguishBy` includes
+   * `"offset"`. Series i is lifted by `i * offsetStep`. Required for the
+   * offset mode to do anything (the hook can't know your data scale).
+   */
+  offsetStep?: number;
+  /**
+   * `"overlay"` (default): all series share one y-axis. `"lanes"`: each series
+   * gets its own horizontal band, auto-normalized to its own range (small
+   * multiples / ECG style) — the honest fix when overlapping values make the
+   * shared axis useless. In lane mode the shared y-axis is suppressed
+   * (`yMode:"fixed"`, no y grid/labels) and `distinguishBy:"offset"` /
+   * per-series `yOffset` are ignored (lanes supersede them); `"dash"` still
+   * works within each lane.
+   */
+  layout?: "overlay" | "lanes";
+  /** Gap between lanes in CSS px when `layout: "lanes"`. Default 6. */
+  laneGapPx?: number;
   /** Override/extend the axis-grid config (merged after the managed fields). */
   axis?: Parameters<typeof axisGridLayer>[1];
   /**
@@ -80,31 +123,84 @@ export function useMultiSeriesChart(
   const fallbackOrigin = useTimeOrigin();
   const timeOrigin = opts.timeOrigin ?? fallbackOrigin;
 
+  const modes = Array.isArray(opts.distinguishBy)
+    ? opts.distinguishBy
+    : opts.distinguishBy
+      ? [opts.distinguishBy]
+      : [];
+  const byDash = modes.includes("dash");
+  const lanes = opts.layout === "lanes";
+  // Lanes supersede the waterfall offset; ignore offset mode when laned.
+  const byOffset = !lanes && modes.includes("offset");
+  const offsetStep = opts.offsetStep;
+  const laneGapPx = opts.laneGapPx;
+  // offset mode is inert without a step (we can't guess the data scale).
+  const warnedRef = useRef(false);
+  if (byOffset && offsetStep === undefined && !warnedRef.current) {
+    warnedRef.current = true;
+    console.warn(
+      '[fluxion] useMultiSeriesChart: distinguishBy "offset" needs `offsetStep` ' +
+        "(data units) — no vertical spread applied.",
+    );
+  }
+
   // Stable signature so the layers/pump only rebuild on a real structural or
   // visual change (not on every render of an inline series array).
-  const sig = series.map((s) => `${s.id}|${s.color}|${s.lineWidth ?? ""}`).join(",");
+  const sig = series
+    .map(
+      (s) =>
+        `${s.id}|${s.color}|${s.lineWidth ?? ""}|${(s.dashArray ?? []).join(" ")}|${s.yOffset ?? ""}`,
+    )
+    .join(",");
 
   const layers = useMemo<FluxionLayerSpec[]>(
     () => [
       axisGridLayer(axisLayerId, {
         xMode: "time",
         timeWindowMs: windowMs,
+        // Lane mode: each series owns its band, so the shared y-axis is
+        // meaningless — fix it and hide y grid/labels/zero-axis.
+        ...(lanes
+          ? ({
+              yMode: "fixed",
+              showYGrid: false,
+              showYLabels: false,
+              showAxes: false,
+            } as const)
+          : { yMode: "auto" as const }),
         timeOrigin,
-        yMode: "auto",
         ...axis,
       }),
-      ...series.map((s) =>
+      ...series.map((s, i) =>
         lineLayer(s.id, {
           color: s.color,
           lineWidth: s.lineWidth ?? 1.5,
           retentionMs: windowMs,
           maxHz: hz,
+          // Explicit per-series field wins; otherwise distinguishBy assigns one.
+          dashArray: s.dashArray ?? (byDash ? dashPatternFor(i) : undefined),
+          yOffset:
+            s.yOffset ??
+            (byOffset && offsetStep !== undefined ? i * offsetStep : undefined),
+          ...(lanes ? { laneIndex: i, laneCount: series.length, laneGapPx } : undefined),
         }),
       ),
     ],
-    // sig captures id/color/lineWidth; axis/timeOrigin/window drive the rest.
+    // sig captures id/color/lineWidth/dash/offset; the rest are listed.
     // biome-ignore lint/correctness/useExhaustiveDependencies: sig stands in for series identity
-    [sig, axisLayerId, windowMs, timeOrigin, hz, axis],
+    [
+      sig,
+      axisLayerId,
+      windowMs,
+      timeOrigin,
+      hz,
+      axis,
+      byDash,
+      byOffset,
+      offsetStep,
+      lanes,
+      laneGapPx,
+    ],
   );
 
   const [host, setHost] = useState<FluxionHost | null>(null);

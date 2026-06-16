@@ -768,4 +768,223 @@ describe("LineChartLayer (streaming)", () => {
       warn.mockRestore();
     });
   });
+
+  describe("dashArray", () => {
+    it("sets the dash before stroking and resets it after", () => {
+      const layer = new LineChartLayer("l");
+      layer.setConfig({ dashArray: [6, 4] });
+      const vp = makeViewport();
+      layer.setData(new Float32Array([0, 0, 100, 0.5, 200, -0.3]).buffer, 6, vp);
+      const ctx = createFakeCtx();
+      layer.draw(ctx as unknown as OffscreenCanvasRenderingContext2D, vp);
+
+      const names = ctx.calls.map((c) => c.name);
+      const setDash = ctx.calls.filter((c) => c.name === "setLineDash");
+      // One set (with the pattern) before stroke, one reset (to []) after.
+      expect(setDash[0]!.args[0]).toEqual([6, 4]);
+      expect(setDash[1]!.args[0]).toEqual([]);
+      const firstSet = names.indexOf("setLineDash");
+      const stroke = names.indexOf("stroke");
+      const lastSet = names.lastIndexOf("setLineDash");
+      expect(firstSet).toBeLessThan(stroke);
+      expect(lastSet).toBeGreaterThan(stroke);
+    });
+
+    it("does not call setLineDash when no dash is configured (solid)", () => {
+      const layer = new LineChartLayer("l");
+      const vp = makeViewport();
+      layer.setData(new Float32Array([0, 0, 100, 0.5]).buffer, 4, vp);
+      const ctx = createFakeCtx();
+      layer.draw(ctx as unknown as OffscreenCanvasRenderingContext2D, vp);
+      expect(ctx.calls.some((c) => c.name === "setLineDash")).toBe(false);
+    });
+
+    it("applies + resets the dash on the decimated draw path", () => {
+      const layer = new LineChartLayer("l");
+      layer.setConfig({ decimate: true, capacity: 8000, dashArray: [3, 3] });
+      // Narrow viewport so ring.length > widthPx * 2 triggers decimation.
+      const vp = new Viewport();
+      vp.setSize(10, 100, 1);
+      vp.setBounds({ xMin: 0, xMax: 5000, yMin: -1, yMax: 1 });
+      const n = 100;
+      const arr = new Float32Array(n * 2);
+      for (let i = 0; i < n; i++) {
+        arr[i * 2] = i * 10;
+        arr[i * 2 + 1] = Math.sin(i);
+      }
+      layer.setData(arr.buffer, arr.length, vp);
+      const ctx = createFakeCtx();
+      layer.draw(ctx as unknown as OffscreenCanvasRenderingContext2D, vp);
+      const setDash = ctx.calls.filter((c) => c.name === "setLineDash");
+      expect(setDash[0]!.args[0]).toEqual([3, 3]);
+      expect(setDash.at(-1)!.args[0]).toEqual([]);
+    });
+  });
+
+  describe("yOffset", () => {
+    /** First (moveTo) py drawn for a layer with the given offset. */
+    function firstPy(offset: number): number {
+      const layer = new LineChartLayer("l");
+      layer.setConfig({ yOffset: offset });
+      const vp = makeViewport();
+      layer.setData(new Float32Array([100, 0, 200, 0]).buffer, 4, vp);
+      const ctx = createFakeCtx();
+      layer.draw(ctx as unknown as OffscreenCanvasRenderingContext2D, vp);
+      const move = ctx.calls.find((c) => c.name === "moveTo")!;
+      return move.args[1] as number;
+    }
+
+    it("shifts the drawn y by yToPx(y + offset)", () => {
+      const vp = makeViewport(); // yMin -1, yMax 1, height 100 (no pad)
+      const expected = vp.yToPx(0 + 0.5);
+      expect(firstPy(0.5)).toBeCloseTo(expected);
+      // A positive data offset moves the stroke UP (smaller py).
+      expect(firstPy(0.5)).toBeLessThan(firstPy(0));
+    });
+
+    it("publishes the SHIFTED y to observedYMin/Max so auto-scale fits it", () => {
+      const layer = new LineChartLayer("l");
+      layer.setConfig({ yOffset: 2 });
+      const vp = makeViewport();
+      vp.setBounds({ xMin: 0, xMax: 5000, yMin: -10, yMax: 10 });
+      layer.setData(new Float32Array([100, 0.5, 200, -0.5]).buffer, 4, vp);
+      vp.beginScan();
+      layer.scan(vp);
+      // Raw [-0.5, 0.5] + offset 2 → observed [1.5, 2.5].
+      expect(vp.observedYMin).toBeCloseTo(1.5);
+      expect(vp.observedYMax).toBeCloseTo(2.5);
+    });
+
+    it("offset 0 is identical to no offset", () => {
+      expect(firstPy(0)).toBeCloseTo(firstPy(0));
+      const vp = makeViewport();
+      expect(firstPy(0)).toBeCloseTo(vp.yToPx(0));
+    });
+  });
+
+  describe("lane mode", () => {
+    function makeLaneVp() {
+      const v = new Viewport();
+      v.setSize(1000, 100, 1); // height 100, no pad
+      v.setBounds({ xMin: 0, xMax: 5000, yMin: -1, yMax: 1 });
+      return v;
+    }
+
+    /** Run scan+draw for a layer in lane (index/count), return drawn py values. */
+    function laneDraw(laneIndex: number, laneCount: number, gap = 0) {
+      const layer = new LineChartLayer("l");
+      layer.setConfig({ laneIndex, laneCount, laneGapPx: gap });
+      const vp = makeLaneVp();
+      // y ramps 0 → 1 so the band spans its full height.
+      layer.setData(new Float32Array([100, 0, 200, 0.5, 300, 1]).buffer, 6, vp);
+      vp.beginScan();
+      layer.scan(vp);
+      const ctx = createFakeCtx();
+      layer.draw(ctx as unknown as OffscreenCanvasRenderingContext2D, vp);
+      return {
+        vp,
+        pys: ctx.calls
+          .filter((c) => c.name === "moveTo" || c.name === "lineTo")
+          .map((c) => c.args[1] as number),
+      };
+    }
+
+    it("does NOT touch the shared observed range (per-layer normalization)", () => {
+      const layer = new LineChartLayer("l");
+      layer.setConfig({ laneIndex: 0, laneCount: 2 });
+      const vp = makeLaneVp();
+      layer.setData(new Float32Array([100, 5, 200, 9]).buffer, 4, vp);
+      vp.beginScan();
+      layer.scan(vp);
+      // Shared aggregate stays at the begin-scan sentinels.
+      expect(vp.observedYMin).toBe(Number.POSITIVE_INFINITY);
+      expect(vp.observedYMax).toBe(Number.NEGATIVE_INFINITY);
+    });
+
+    it("draws lane 0 into the TOP band and lane 1 into the BOTTOM band", () => {
+      const top = laneDraw(0, 2);
+      const bottom = laneDraw(1, 2);
+      // height 100, 2 lanes → top band [0,50], bottom band [50,100].
+      for (const py of top.pys) expect(py).toBeLessThanOrEqual(50.0001);
+      for (const py of bottom.pys) expect(py).toBeGreaterThanOrEqual(49.9999);
+    });
+
+    it("normalizes the lane to the series' own range (min→band bottom, max→band top)", () => {
+      const { pys } = laneDraw(0, 1); // single full-height lane, no gap
+      // y went 0→0.5→1; min(0) maps to band bottom (~100), max(1) to top (~0).
+      expect(Math.max(...pys)).toBeCloseTo(100, 0);
+      expect(Math.min(...pys)).toBeCloseTo(0, 0);
+    });
+
+    it("a flat (constant) series does not divide by zero", () => {
+      const layer = new LineChartLayer("l");
+      layer.setConfig({ laneIndex: 0, laneCount: 1 });
+      const vp = makeLaneVp();
+      layer.setData(new Float32Array([100, 7, 200, 7]).buffer, 4, vp);
+      vp.beginScan();
+      layer.scan(vp);
+      const ctx = createFakeCtx();
+      expect(() =>
+        layer.draw(ctx as unknown as OffscreenCanvasRenderingContext2D, vp),
+      ).not.toThrow();
+      const pys = ctx.calls
+        .filter((c) => c.name === "moveTo" || c.name === "lineTo")
+        .map((c) => c.args[1] as number);
+      for (const py of pys) expect(Number.isFinite(py)).toBe(true);
+    });
+
+    it("lane mode ignores yOffset", () => {
+      const a = laneDraw(0, 1, 0); // no offset
+      const layer = new LineChartLayer("l");
+      layer.setConfig({ laneIndex: 0, laneCount: 1, laneGapPx: 0, yOffset: 1000 });
+      const vp = makeLaneVp();
+      layer.setData(new Float32Array([100, 0, 200, 0.5, 300, 1]).buffer, 6, vp);
+      vp.beginScan();
+      layer.scan(vp);
+      const ctx = createFakeCtx();
+      layer.draw(ctx as unknown as OffscreenCanvasRenderingContext2D, vp);
+      const pys = ctx.calls
+        .filter((c) => c.name === "moveTo" || c.name === "lineTo")
+        .map((c) => c.args[1] as number);
+      // Same as without offset — lane normalization is offset-independent.
+      expect(pys).toEqual(a.pys);
+    });
+
+    it("maps into the band on the decimated draw path too", () => {
+      const layer = new LineChartLayer("l");
+      layer.setConfig({ laneIndex: 1, laneCount: 2, laneGapPx: 0, decimate: true });
+      const vp = new Viewport();
+      vp.setSize(10, 100, 1); // tiny width forces decimation
+      vp.setBounds({ xMin: 0, xMax: 5000, yMin: -1, yMax: 1 });
+      const n = 100;
+      const arr = new Float32Array(n * 2);
+      for (let i = 0; i < n; i++) {
+        arr[i * 2] = i * 10;
+        arr[i * 2 + 1] = Math.sin(i);
+      }
+      layer.setData(arr.buffer, arr.length, vp);
+      vp.beginScan();
+      layer.scan(vp);
+      const ctx = createFakeCtx();
+      layer.draw(ctx as unknown as OffscreenCanvasRenderingContext2D, vp);
+      const ys = ctx.calls
+        .filter((c) => c.name === "moveTo" || c.name === "lineTo")
+        .map((c) => c.args[1] as number);
+      // Lane 1 of 2 → bottom band [50, 100].
+      for (const y of ys) expect(y).toBeGreaterThanOrEqual(49.999);
+    });
+
+    it("skips draw when the lane has no in-window samples this frame", () => {
+      const layer = new LineChartLayer("l");
+      layer.setConfig({ laneIndex: 0, laneCount: 2 });
+      const vp = makeLaneVp();
+      layer.setData(new Float32Array([0, 1, 100, 2]).buffer, 4, vp);
+      vp.setBounds({ xMin: 5000, xMax: 6000, yMin: -1, yMax: 1 }); // all samples behind window
+      vp.beginScan();
+      layer.scan(vp); // scannedY* stay ±Infinity (nothing in window)
+      const ctx = createFakeCtx();
+      layer.draw(ctx as unknown as OffscreenCanvasRenderingContext2D, vp);
+      expect(ctx.calls.some((c) => c.name === "stroke")).toBe(false);
+    });
+  });
 });

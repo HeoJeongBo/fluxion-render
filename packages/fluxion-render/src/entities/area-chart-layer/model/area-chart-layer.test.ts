@@ -228,4 +228,117 @@ describe("AreaChartLayer", () => {
       expect(ctx.calls.filter((c) => c.name === "moveTo").length).toBe(2);
     });
   });
+
+  describe("dashArray", () => {
+    it("dashes the outline stroke (after the fill) and resets afterward", () => {
+      const layer = new AreaChartLayer("a");
+      layer.setConfig({ dashArray: [6, 4] });
+      const vp = makeViewport();
+      layer.setData(new Float32Array([0, 1, 100, 2, 200, 3]).buffer, 6, vp);
+      const ctx = createFakeCtx();
+      layer.draw(ctx as unknown as OffscreenCanvasRenderingContext2D, vp);
+
+      const names = ctx.calls.map((c) => c.name);
+      const setDash = ctx.calls.filter((c) => c.name === "setLineDash");
+      expect(setDash[0]!.args[0]).toEqual([6, 4]);
+      expect(setDash[1]!.args[0]).toEqual([]);
+      // Dash turns on AFTER the fill (the fill is never dashed), before the
+      // stroke, and resets after it.
+      const fill = names.indexOf("fill");
+      const firstSet = names.indexOf("setLineDash");
+      const stroke = names.indexOf("stroke");
+      expect(fill).toBeLessThan(firstSet);
+      expect(firstSet).toBeLessThan(stroke);
+      expect(names.lastIndexOf("setLineDash")).toBeGreaterThan(stroke);
+    });
+
+    it("does not call setLineDash when solid", () => {
+      const layer = new AreaChartLayer("a");
+      const vp = makeViewport();
+      layer.setData(new Float32Array([0, 1, 100, 2]).buffer, 4, vp);
+      const ctx = createFakeCtx();
+      layer.draw(ctx as unknown as OffscreenCanvasRenderingContext2D, vp);
+      expect(ctx.calls.some((c) => c.name === "setLineDash")).toBe(false);
+    });
+  });
+
+  describe("yOffset", () => {
+    it("lifts the area (fill + outline) by yToPx(y + offset), baseline unshifted", () => {
+      const layer = new AreaChartLayer("a");
+      layer.setConfig({ yOffset: 3 });
+      const vp = makeViewport(); // yMin -10, yMax 10
+      layer.setData(new Float32Array([0, 0, 100, 0]).buffer, 4, vp);
+      const ctx = createFakeCtx();
+      layer.draw(ctx as unknown as OffscreenCanvasRenderingContext2D, vp);
+      // Fill pass starts with moveTo at the shifted curve (y=0 + 3).
+      const move = ctx.calls.find((c) => c.name === "moveTo")!;
+      expect(move.args[1]).toBeCloseTo(vp.yToPx(3));
+      // Baseline lineTo stays at y=0 (unshifted).
+      const baselineY = vp.yToPx(0);
+      expect(ctx.calls.some((c) => c.name === "lineTo" && c.args[1] === baselineY)).toBe(
+        true,
+      );
+    });
+
+    it("publishes the shifted y to observed extents", () => {
+      const layer = new AreaChartLayer("a");
+      layer.setConfig({ yOffset: 5 });
+      const vp = makeViewport();
+      layer.setData(new Float32Array([0, 1, 100, 2]).buffer, 4, vp);
+      vp.beginScan();
+      layer.scan(vp);
+      expect(vp.observedYMin).toBeCloseTo(6); // 1 + 5
+      expect(vp.observedYMax).toBeCloseTo(7); // 2 + 5
+    });
+  });
+
+  describe("lane mode", () => {
+    it("does not touch the shared observed range and draws into its band", () => {
+      const layer = new AreaChartLayer("a");
+      layer.setConfig({ laneIndex: 1, laneCount: 2, laneGapPx: 0 });
+      const vp = makeViewport(); // height 400, no pad
+      layer.setData(new Float32Array([0, 1, 100, 2, 200, 3]).buffer, 6, vp);
+      vp.beginScan();
+      layer.scan(vp);
+      expect(vp.observedYMin).toBe(Number.POSITIVE_INFINITY); // untouched
+      const ctx = createFakeCtx();
+      layer.draw(ctx as unknown as OffscreenCanvasRenderingContext2D, vp);
+      // 2 lanes → bottom band is [200, 400]; every drawn y is in that band.
+      const ys = ctx.calls
+        .filter((c) => c.name === "moveTo" || c.name === "lineTo")
+        .map((c) => c.args[1] as number);
+      for (const y of ys) expect(y).toBeGreaterThanOrEqual(199.999);
+      expect(ctx.calls.some((c) => c.name === "fill")).toBe(true);
+    });
+
+    it("skips draw with no in-window samples", () => {
+      const layer = new AreaChartLayer("a");
+      layer.setConfig({ laneIndex: 0, laneCount: 2 });
+      const vp = makeViewport();
+      layer.setData(new Float32Array([0, 1, 100, 2]).buffer, 4, vp);
+      vp.setBounds({ xMin: 9000, xMax: 9999, yMin: -10, yMax: 10 });
+      vp.beginScan();
+      layer.scan(vp);
+      const ctx = createFakeCtx();
+      layer.draw(ctx as unknown as OffscreenCanvasRenderingContext2D, vp);
+      expect(ctx.calls.some((c) => c.name === "fill")).toBe(false);
+    });
+
+    it("a flat series in a lane does not divide by zero", () => {
+      const layer = new AreaChartLayer("a");
+      layer.setConfig({ laneIndex: 0, laneCount: 1 });
+      const vp = makeViewport();
+      layer.setData(new Float32Array([0, 5, 100, 5]).buffer, 4, vp); // constant
+      vp.beginScan();
+      layer.scan(vp);
+      const ctx = createFakeCtx();
+      expect(() =>
+        layer.draw(ctx as unknown as OffscreenCanvasRenderingContext2D, vp),
+      ).not.toThrow();
+      const ys = ctx.calls
+        .filter((c) => c.name === "moveTo" || c.name === "lineTo")
+        .map((c) => c.args[1] as number);
+      for (const y of ys) expect(Number.isFinite(y)).toBe(true);
+    });
+  });
 });

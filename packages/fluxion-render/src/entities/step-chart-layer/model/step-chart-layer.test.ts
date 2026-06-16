@@ -222,4 +222,106 @@ describe("StepChartLayer", () => {
       expect(ctx.calls.filter((c) => c.name === "lineTo").length).toBe(6);
     });
   });
+
+  describe("dashArray", () => {
+    it("sets the dash before stroking and resets it after", () => {
+      const layer = new StepChartLayer("s");
+      layer.setConfig({ dashArray: [6, 4] });
+      const vp = makeViewport();
+      layer.setData(new Float32Array([0, 1, 100, 2, 200, 3]).buffer, 6, vp);
+      const ctx = createFakeCtx();
+      layer.draw(ctx as unknown as OffscreenCanvasRenderingContext2D, vp);
+
+      const names = ctx.calls.map((c) => c.name);
+      const setDash = ctx.calls.filter((c) => c.name === "setLineDash");
+      expect(setDash[0]!.args[0]).toEqual([6, 4]);
+      expect(setDash[1]!.args[0]).toEqual([]);
+      const firstSet = names.indexOf("setLineDash");
+      const stroke = names.indexOf("stroke");
+      expect(firstSet).toBeLessThan(stroke);
+      expect(names.lastIndexOf("setLineDash")).toBeGreaterThan(stroke);
+    });
+
+    it("does not call setLineDash when solid", () => {
+      const layer = new StepChartLayer("s");
+      const vp = makeViewport();
+      layer.setData(new Float32Array([0, 1, 100, 2]).buffer, 4, vp);
+      const ctx = createFakeCtx();
+      layer.draw(ctx as unknown as OffscreenCanvasRenderingContext2D, vp);
+      expect(ctx.calls.some((c) => c.name === "setLineDash")).toBe(false);
+    });
+  });
+
+  describe("yOffset", () => {
+    it("shifts the staircase by yToPx(y + offset)", () => {
+      const layer = new StepChartLayer("s");
+      layer.setConfig({ yOffset: 4 });
+      const vp = makeViewport(); // yMin -10, yMax 10
+      layer.setData(new Float32Array([0, 0, 100, 0]).buffer, 4, vp);
+      const ctx = createFakeCtx();
+      layer.draw(ctx as unknown as OffscreenCanvasRenderingContext2D, vp);
+      const move = ctx.calls.find((c) => c.name === "moveTo")!;
+      expect(move.args[1]).toBeCloseTo(vp.yToPx(4));
+    });
+
+    it("publishes the shifted y to observed extents", () => {
+      const layer = new StepChartLayer("s");
+      layer.setConfig({ yOffset: -2 });
+      const vp = makeViewport();
+      layer.setData(new Float32Array([0, 1, 100, 3]).buffer, 4, vp);
+      vp.beginScan();
+      layer.scan(vp);
+      expect(vp.observedYMin).toBeCloseTo(-1); // 1 - 2
+      expect(vp.observedYMax).toBeCloseTo(1); // 3 - 2
+    });
+  });
+
+  describe("lane mode", () => {
+    it("draws the staircase into its band without touching shared observed range", () => {
+      const layer = new StepChartLayer("s");
+      layer.setConfig({ laneIndex: 0, laneCount: 2, laneGapPx: 0 });
+      const vp = makeViewport(); // height 400, no pad
+      layer.setData(new Float32Array([0, 1, 100, 2, 200, 3]).buffer, 6, vp);
+      vp.beginScan();
+      layer.scan(vp);
+      expect(vp.observedYMin).toBe(Number.POSITIVE_INFINITY); // untouched
+      const ctx = createFakeCtx();
+      layer.draw(ctx as unknown as OffscreenCanvasRenderingContext2D, vp);
+      // 2 lanes → top band is [0, 200]; every drawn y is within it.
+      const ys = ctx.calls
+        .filter((c) => c.name === "moveTo" || c.name === "lineTo")
+        .map((c) => c.args[1] as number);
+      for (const y of ys) expect(y).toBeLessThanOrEqual(200.001);
+    });
+
+    it("skips draw with no in-window samples", () => {
+      const layer = new StepChartLayer("s");
+      layer.setConfig({ laneIndex: 0, laneCount: 2 });
+      const vp = makeViewport();
+      layer.setData(new Float32Array([0, 1, 100, 2]).buffer, 4, vp);
+      vp.setBounds({ xMin: 9000, xMax: 9999, yMin: -10, yMax: 10 });
+      vp.beginScan();
+      layer.scan(vp);
+      const ctx = createFakeCtx();
+      layer.draw(ctx as unknown as OffscreenCanvasRenderingContext2D, vp);
+      expect(ctx.calls.some((c) => c.name === "stroke")).toBe(false);
+    });
+
+    it("a flat series in a lane does not divide by zero", () => {
+      const layer = new StepChartLayer("s");
+      layer.setConfig({ laneIndex: 0, laneCount: 1 });
+      const vp = makeViewport();
+      layer.setData(new Float32Array([0, 5, 100, 5]).buffer, 4, vp); // constant
+      vp.beginScan();
+      layer.scan(vp);
+      const ctx = createFakeCtx();
+      expect(() =>
+        layer.draw(ctx as unknown as OffscreenCanvasRenderingContext2D, vp),
+      ).not.toThrow();
+      const ys = ctx.calls
+        .filter((c) => c.name === "moveTo" || c.name === "lineTo")
+        .map((c) => c.args[1] as number);
+      for (const y of ys) expect(Number.isFinite(y)).toBe(true);
+    });
+  });
 });

@@ -54,6 +54,7 @@ export {
   useSyncedTimeWindow,
   useTimeOrigin,
 } from "./features/synced-time";
+export { DASH_PATTERNS, dashPatternFor } from "./shared/lib/dash-patterns";
 export type { LayerKind } from "./shared/protocol";
 export {
   areaLayer,

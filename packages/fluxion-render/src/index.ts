@@ -95,6 +95,7 @@ export type {
   YTickFormatOptions,
 } from "./shared/lib/axis-ticks";
 export { computeAxisTicks, formatTick, formatYTick } from "./shared/lib/axis-ticks";
+export { DASH_PATTERNS, dashPatternFor } from "./shared/lib/dash-patterns";
 export type { TickFormatter } from "./shared/lib/time-format";
 export { formatClock, makeClockFormatter } from "./shared/lib/time-format";
 export type { DType, FluxionPoolStreamMsg, HostMsg, LayerKind } from "./shared/protocol";
