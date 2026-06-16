@@ -12,10 +12,10 @@ Built for robotics and sensor systems: streaming line charts, LiDAR point clouds
 
 | Package | Version | Description |
 |---------|---------|-------------|
-| [`packages/fluxion-worker`](packages/fluxion-worker) | `0.3.0` | Generic worker pool infrastructure — [`@heojeongbo/fluxion-worker`](https://www.npmjs.com/package/@heojeongbo/fluxion-worker) |
-| [`packages/fluxion-render`](packages/fluxion-render) | `0.8.2` | Core rendering library — [`@heojeongbo/fluxion-render`](https://www.npmjs.com/package/@heojeongbo/fluxion-render) |
-| [`packages/fluxion-replay`](packages/fluxion-replay) | `0.3.0` | Time-travel replay engine — [`@heojeongbo/fluxion-replay`](https://www.npmjs.com/package/@heojeongbo/fluxion-replay) |
-| [`examples/vite-demo`](examples/vite-demo) | — | Rendering demo — Stream, Multi-stream, Static XY, LiDAR, Pool |
+| [`packages/fluxion-worker`](packages/fluxion-worker) | `0.5.1` | Generic worker pool infrastructure — [`@heojeongbo/fluxion-worker`](https://www.npmjs.com/package/@heojeongbo/fluxion-worker) |
+| [`packages/fluxion-render`](packages/fluxion-render) | `0.17.1` | Core rendering library — [`@heojeongbo/fluxion-render`](https://www.npmjs.com/package/@heojeongbo/fluxion-render) |
+| [`packages/fluxion-replay`](packages/fluxion-replay) | `0.11.3` | Time-travel replay engine — [`@heojeongbo/fluxion-replay`](https://www.npmjs.com/package/@heojeongbo/fluxion-replay) |
+| [`examples/vite-demo`](examples/vite-demo) | — | Rendering demo — Basic charts (line/area/step/bar/scatter/candlestick/heatmap/pie), DX helpers (helper hooks + dash, axis formatters), robot-specific (event markers, gauge, pose arrows, brush+export), and infrastructure (LiDAR 30k, 40-chart pool) routes |
 | [`examples/fluxion-replay-demo`](examples/fluxion-replay-demo) | — | Replay demo — DVR/screen capture, metrics, logs, time-travel scrubber, plus a 40-chart DVR route with scrub-then-play UX |
 
 ---

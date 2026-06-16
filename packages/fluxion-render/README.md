@@ -144,6 +144,28 @@ const { layers, setHost } = useMultiSeriesChart({
 Low-level: set `laneIndex` / `laneCount` (+ optional `laneGapPx`) on any
 `lineLayer` / `areaLayer` / `stepLayer` to band it yourself.
 
+#### Dash palette (`DASH_PATTERNS` / `dashPatternFor`)
+
+`distinguishBy: 'dash'` cycles a deterministic 5-entry palette. Import it to set
+`dashArray` on a layer by hand, or to mirror the palette in a legend:
+
+```ts
+import { DASH_PATTERNS, dashPatternFor } from '@heojeongbo/fluxion-render';
+
+dashPatternFor(i); // → a fresh copy of DASH_PATTERNS[i % 5], safe to pass to a config
+```
+
+| `i` | pattern | look |
+|----|---------|------|
+| 0 | `[]` | solid |
+| 1 | `[6, 4]` | dashed |
+| 2 | `[2, 3]` | dotted |
+| 3 | `[10, 4, 2, 4]` | dash-dot |
+| 4 | `[8, 3]` | long dash |
+
+`DASH_PATTERNS` is `readonly`; `dashPatternFor(i)` returns a mutable copy so it
+can be handed straight to `lineLayer({ dashArray })`.
+
 ### Vanilla JS
 
 ```ts
@@ -181,6 +203,10 @@ import { configureDefaultPool } from '@heojeongbo/fluxion-render';
 
 configureDefaultPool({ size: 2 }); // use 2 workers instead of 4
 ```
+
+`getDefaultPool()` returns the current singleton pool (lazily created on first
+use), and `configureDefaultPool({ size?, workerFactory? })` replaces it (disposing
+the old one) — call it before creating any host.
 
 **Scoped pool** (React) — useful when a page needs its own isolated pool:
 
@@ -336,6 +362,49 @@ handle.pushRaw(float32Array);
 handle.push([{ x: 1.2, y: -0.4, z: 0, intensity: 0.8 }]);
 ```
 
+### `area` / `step` — Filled / stepped time-series
+
+Same streaming `{ t, y }` model and config as `line` (including `capacity` /
+`retentionMs` / `maxHz`, `decimate`, `maxGapMs`, `dashArray`, `yOffset`, and the
+`laneIndex` / `laneCount` / `laneGapPx` lane fields). `areaLayer` fills below the
+stroke (dash applies to the outline, not the fill); `stepLayer` draws a
+sample-and-hold staircase. Handles `AreaLayerHandle` / `StepLayerHandle` push the
+same way as `LineLayerHandle` (`push` / `pushBatch` / `reset`).
+
+```ts
+areaLayer('a', { color: '#4fc3f7', /* …same fields as lineLayer */ });
+stepLayer('s', { color: '#80ffa0' });
+```
+
+### More chart layers
+
+The same `host.addLayer(id, kind, config)` / factory-spec pattern covers a family
+of additional layer types. Each takes a `Float32Array` (or a typed handle method)
+in the layout shown below; `t` is host-relative ms for streaming layers.
+
+| Factory | `kind` | Data layout (stride) | Flow | Handle → key methods |
+|---------|--------|----------------------|------|----------------------|
+| `barLayer` | `bar` | `[x,y,…]` (2) or `[y,…]` (1, `layout:'y'`) | static | `BarLayerHandle` → `setXY` / `setY` |
+| `scatterLayer` | `scatter` | `[t,y,…]` (2) | stream | `ScatterLayerHandle` → `push` / `pushBatch` / `reset` |
+| `scatterColoredLayer` | `scatter-colored` | `[t,y,color,size,…]` (4, color/size 0–1) | stream | `ScatterColoredHandle` → `push` / `pushBatch` / `reset` |
+| `candlestickLayer` | `candlestick` | `[t,open,high,low,close,…]` (5) | stream | `CandlestickLayerHandle` → `push` / `pushBatch` / `reset` |
+| `eventMarkerLayer` | `event-marker` | `[t,severity,…]` (2; sev 0/1/2) | static | `EventMarkerHandle` → `setEvents` / `clearEvents` |
+| `heatmapLayer` | `heatmap` | `[x,y,value,…]` (3) | static | `HeatmapLayerHandle` → `setGrid` |
+| `heatmapStreamLayer` | `heatmap-stream` | `[t, v0…v_{yBins-1}]` (yBins+1) | stream | `HeatmapStreamHandle` → `pushColumn(t, values)` |
+| `poseArrowLayer` | `pose-arrow` | `[t,y,theta,…]` (3; θ rad) | stream | `PoseArrowHandle` → `push` / `pushBatch` / `reset` |
+| `referenceLineLayer` | `reference-line` | config-only (no data) | config | `ReferenceLineHandle` → `setReference(config)` |
+
+Notable config fields (all have sensible defaults):
+
+- **`barLayer`** — `color`, `barWidth`=8, `layout`=`'xy'|'y'`, `xRange`=`[0,1]` (for `'y'`).
+- **`scatterLayer`** — `color`, `pointSize`=3, `shape`=`'square'|'circle'`, ring sizing via `capacity`=2048 / `retentionMs` / `maxHz`.
+- **`scatterColoredLayer`** — `colormap`=`'viridis'|'plasma'|'hot'|'gradient'` (+ `minColor`/`maxColor` for `'gradient'`), `minSize`=2 / `maxSize`=8, `shape`=`'circle'`.
+- **`candlestickLayer`** — `upColor`=`#26a69a`, `downColor`=`#ef5350`, `bodyWidth`=6.
+- **`eventMarkerLayer`** — `colors`=`[info, warning, error]`, `markerSize`=8, `lineWidth`=1.
+- **`heatmapLayer`** / **`heatmapStreamLayer`** — `colormap`=`'viridis'|'plasma'|'hot'`, optional `minValue`/`maxValue` (auto if omitted); stream adds `yBins`=32, `maxCols`=256, `yRange`=`[0,1]`.
+- **`poseArrowLayer`** — `arrowLength`=14, `arrowWidth`=5, `color`.
+- **`referenceLineLayer`** — `y` (required), optional `bandMin`/`bandMax` (+ `bandOpacity`=0.12), `color`, `label`, `lineWidth`=1.5.
+
 ### `axis-grid` — Axes and grid
 
 Controls the viewport bounds for all layers. Does not receive data — configure via `axisGridLayer()` or `host.configLayer()`.
@@ -391,6 +460,18 @@ React side. Use the **string** or **object** form for worker-drawn labels:
 
 For non-time axes or numeric labels, prefer the object form:
 `xTickFormat: { precision: 1, suffix: 'ms' }`, `yTickFormat: { si: true, suffix: 'B' }`.
+
+For wall-clock strings outside the axis (HUDs, table cells), `formatClock` and
+`makeClockFormatter` apply the same pattern tokens (`HH` `H` `mm` `m` `ss` `s`
+`SSS` `S`; anything else is literal):
+
+```ts
+import { formatClock, makeClockFormatter } from '@heojeongbo/fluxion-render';
+
+formatClock(Date.now(), 'HH:mm:ss.SSS');     // → "14:07:32.481"
+const fmt = makeClockFormatter('HH:mm:ss');   // reusable formatter
+fmt(epochMs);
+```
 
 ---
 
@@ -657,6 +738,121 @@ function MiniChart({ color }: { color: string }) {
 ```
 
 Override the axis or line config with the optional `axis` / `line` fields when you need labels, custom grid colours, etc.
+
+### `useHoverDataCache(options?)`
+
+Creates a stable ring-buffer cache of `[t, y]` samples per layer, used to drive a
+crosshair tooltip that shows **real** values (raw `y`, lane/offset-independent).
+Pass `layers` to auto-register every hoverable layer (axis-grid is skipped), then
+feed it samples via the returned `push` / `pushBatch` (or hand `cache` to a hook
+like `useSimpleChart` / `useMultiSeriesChart`, which populate it for you).
+
+```ts
+const { cache, push, pushBatch } = useHoverDataCache({
+  layers,                                  // auto-register; or omit and registerLayer manually
+  overrides: { s1: { capacity: 4096, label: 'Signal A', color: '#4fc3f7' } },
+});
+
+push('s1', tMs, y);                        // single sample
+pushBatch('s1', new Float32Array([t0, y0, t1, y1])); // interleaved [t,y,…]
+```
+
+The returned `cache` (a `HoverDataCache`) exposes:
+
+| Method | Purpose |
+|--------|---------|
+| `registerLayer(id, opts?)` | register a layer (capacity default 2048, label, color) |
+| `push(id, t, y)` / `pushBatch(id, arr)` | append samples |
+| `findNearest(id, targetT, xMin)` | nearest `{ t, y }` at/after `xMin` (crosshair lookup) |
+| `getPoints(id)` | all buffered `{ t, y }` for a layer, chronological |
+| `getLatestT()` | most recent `t` across all layers |
+| `getLayers()` | registered `{ id, label, color }[]` |
+| `clear(id?)` | clear one layer, or all when `id` omitted |
+
+### `useFluxionCrosshairFromLayers(options)`
+
+Convenience wrapper over the crosshair that reads its time-window config
+(`xMode` / `timeWindowMs` / `timeOrigin` / `xRange`) straight from the axis-grid
+layer in `layers` — no need to repeat the axis props. Returns a `chartRef` for
+the pointer-capture `<div>` and a `state` to feed `<FluxionCrosshair>`.
+
+```tsx
+const cache = useHoverDataCache({ layers });
+const { chartRef, state } = useFluxionCrosshairFromLayers({
+  host,                 // FluxionHost | null
+  cache: cache.cache,
+  layers,               // same array passed to <FluxionCanvas>
+  axisLayerId: 'axis',  // default 'axis'
+  yPadPx: 8,            // match the axis layer's yPadPx
+  yFormat: (y) => y.toFixed(3),
+});
+
+return (
+  <div style={{ position: 'relative' }}>
+    <FluxionCanvas layers={layers} onReady={setHost} />
+    <div ref={chartRef} style={{ position: 'absolute', inset: 0 }} />
+    <FluxionCrosshair state={state} style={{ position: 'absolute', inset: 0 }} />
+  </div>
+);
+```
+
+`state.points[]` carries one `{ layerId, label, color, t, y, xLabel, yLabel }` per
+hoverable layer. Note: in `layout: 'lanes'` the reported `y` values are correct,
+but the marker's vertical pixel position is approximate (the crosshair is
+lane-unaware).
+
+### `<FluxionCrosshair>`
+
+Renders the dashed crosshair lines + a value tooltip from a crosshair `state`.
+
+| Prop | Type | Default | Description |
+|------|------|---------|-------------|
+| `state` | `CrosshairState` | required | From `useFluxionCrosshair` / `…FromLayers` |
+| `lineColor` | `string` | `rgba(255,255,255,0.45)` | Crosshair line color |
+| `lineWidth` | `number` | `1` | Crosshair line width |
+| `tooltipBg` / `tooltipColor` | `string` | dark / `#e2e8f0` | Tooltip colors |
+| `tooltipFontSize` | `number` | `11` | Tooltip font size (px) |
+| `style` / `className` | — | — | Applied to the overlay |
+
+### `<FluxionBrush>`
+
+SVG drag-to-select overlay (pair with `useFluxionBrush`), e.g. for range export.
+
+| Prop | Type | Default | Description |
+|------|------|---------|-------------|
+| `brushRef` | from `useFluxionBrush` | required | Ref for the overlay |
+| `selection` | `BrushSelection \| null` | required | Current selection |
+| `width` / `height` | `number` | required | Overlay size (px) |
+| `selectionColor` | `string` | `rgba(100,149,237,0.2)` | Selected-region fill |
+| `borderColor` | `string` | `#6495ed` | Selection border |
+
+### `<FluxionGauge>`
+
+SVG gauge — arc, ring, or horizontal bar — with color-coded threshold zones.
+
+```tsx
+<FluxionGauge value={72} min={0} max={100} type="arc"
+  thresholds={[{ value: 0, color: '#26a69a' }, { value: 60, color: '#ffb060' }, { value: 80, color: '#ef5350' }]}
+  label="CPU" valueFormat={(v) => `${v.toFixed(0)}%`} />
+```
+
+Key props: `value` (required), `min`=0 / `max`=100, `type`=`'arc'|'circle'|'bar'`,
+`thresholds`, `size`=120, `showValue`=true, `valueFormat`, `label`.
+
+### `<FluxionPieChart>`
+
+Animated SVG pie / donut chart with optional labels, legend, and center text.
+
+```tsx
+<FluxionPieChart
+  data={[{ name: 'A', value: 40 }, { name: 'B', value: 35 }, { name: 'C', value: 25 }]}
+  innerRadius={40} outerRadius={80} label="percent" legend
+/>
+```
+
+Key props: `data: { name, value, fill? }[]` (required), `innerRadius`=0 (>0 = donut),
+`outerRadius`=80, `paddingAngle`, `label` (`true|'name'|'percent'|'value'|fn`),
+`legend`, `centerLabel` / `centerValue`, `animationDuration`=600.
 
 ### `<FluxionCanvas>`
 
