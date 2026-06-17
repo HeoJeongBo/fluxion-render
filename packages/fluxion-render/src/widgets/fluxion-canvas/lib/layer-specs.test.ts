@@ -7,6 +7,7 @@ import {
   eventMarkerLayer,
   heatmapLayer,
   heatmapStreamLayer,
+  histogramLayer,
   lidarLayer,
   lineLayer,
   lineStaticLayer,
@@ -188,6 +189,14 @@ describe("occupancyGridLayer", () => {
   });
 });
 
+describe("histogramLayer", () => {
+  it("returns kind=histogram with given id", () => {
+    const spec = histogramLayer("hg");
+    expect(spec.kind).toBe("histogram");
+    expect(spec.id).toBe("hg");
+  });
+});
+
 describe("all layer factories", () => {
   it("each factory returns an object with id, kind, and config properties", () => {
     const factories = [
@@ -208,6 +217,7 @@ describe("all layer factories", () => {
       poseArrowLayer("o"),
       trajectoryLayer("p"),
       occupancyGridLayer("q"),
+      histogramLayer("r"),
     ];
 
     for (const spec of factories) {
@@ -237,6 +247,7 @@ describe("all layer factories", () => {
       poseArrowLayer(id),
       trajectoryLayer(id),
       occupancyGridLayer(id),
+      histogramLayer(id),
     ];
 
     for (const spec of specs) {

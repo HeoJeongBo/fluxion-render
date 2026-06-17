@@ -7,6 +7,7 @@ import {
   type FluxionDataSink,
   HeatmapLayerHandle,
   HeatmapStreamHandle,
+  HistogramHandle,
   LidarLayerHandle,
   LineLayerHandle,
   LineStaticLayerHandle,
@@ -266,6 +267,25 @@ describe("TrajectoryHandle", () => {
     const h = new TrajectoryHandle(sink, "tj");
     h.reset(500);
     expect(clears[0]).toEqual({ id: "tj", opts: { latestT: 500 } });
+  });
+});
+
+describe("HistogramHandle", () => {
+  it("setValues copies the raw value array", () => {
+    const { sink, pushes } = makeFakeSink();
+    const h = new HistogramHandle(sink, "hg");
+    h.setValues([1, 2, 3, 4]);
+    expect(pushes).toHaveLength(1);
+    expect(pushes[0].id).toBe("hg");
+    expect(Array.from(pushes[0].data)).toEqual([1, 2, 3, 4]);
+  });
+
+  it("pushRaw forwards the buffer unchanged", () => {
+    const { sink, pushes } = makeFakeSink();
+    const h = new HistogramHandle(sink, "hg");
+    const raw = new Float32Array([5, 6, 7]);
+    h.pushRaw(raw);
+    expect(pushes[0].data).toBe(raw);
   });
 });
 

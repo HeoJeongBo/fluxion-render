@@ -38,7 +38,8 @@ export type LayerKind =
   | "reference-line"
   | "pose-arrow"
   | "trajectory"
-  | "occupancy-grid";
+  | "occupancy-grid"
+  | "histogram";
 
 export type DType = "f32" | "u8" | "i16" | "u16" | "i32";
 

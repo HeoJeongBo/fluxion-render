@@ -75,6 +75,7 @@ export {
   type FluxionTableProps,
   heatmapLayer,
   heatmapStreamLayer,
+  histogramLayer,
   type LegendItem,
   lidarLayer,
   lineLayer,

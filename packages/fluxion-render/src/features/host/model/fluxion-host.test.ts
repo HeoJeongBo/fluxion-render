@@ -337,6 +337,7 @@ describe("FluxionHost", () => {
     expect(host.poseArrow("n").id).toBe("n");
     expect(host.trajectory("o").id).toBe("o");
     expect(host.occupancyGrid("p").id).toBe("p");
+    expect(host.histogram("q").id).toBe("q");
     host.dispose();
   });
 

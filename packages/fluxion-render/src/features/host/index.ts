@@ -17,6 +17,7 @@ export {
   HeatmapLayerHandle,
   type HeatmapPoint,
   HeatmapStreamHandle,
+  HistogramHandle,
   LidarLayerHandle,
   type LidarPoint,
   type LidarStride,

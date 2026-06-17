@@ -6,6 +6,7 @@ export type { CandlestickConfig } from "./entities/candlestick-layer";
 export type { EventMarkerConfig } from "./entities/event-marker-layer";
 export type { HeatmapConfig } from "./entities/heatmap-layer";
 export type { HeatmapStreamConfig } from "./entities/heatmap-stream-layer";
+export type { HistogramConfig } from "./entities/histogram-layer";
 export type { LidarScatterConfig } from "./entities/lidar-scatter-layer";
 export type { LineChartConfig } from "./entities/line-chart-layer";
 export type { LineChartStaticConfig } from "./entities/line-chart-static-layer";
@@ -70,6 +71,7 @@ export {
   getDefaultPool,
   HeatmapLayerHandle,
   HeatmapStreamHandle,
+  HistogramHandle,
   LidarLayerHandle,
   LineLayerHandle,
   LineStaticLayerHandle,
@@ -113,6 +115,7 @@ export {
   eventMarkerLayer,
   heatmapLayer,
   heatmapStreamLayer,
+  histogramLayer,
   lidarLayer,
   lineLayer,
   lineStaticLayer,

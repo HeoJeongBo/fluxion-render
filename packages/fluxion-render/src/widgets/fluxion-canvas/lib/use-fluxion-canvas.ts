@@ -6,6 +6,7 @@ import type { CandlestickConfig } from "../../../entities/candlestick-layer";
 import type { EventMarkerConfig } from "../../../entities/event-marker-layer";
 import type { HeatmapConfig } from "../../../entities/heatmap-layer";
 import type { HeatmapStreamConfig } from "../../../entities/heatmap-stream-layer";
+import type { HistogramConfig } from "../../../entities/histogram-layer";
 import type { LidarScatterConfig } from "../../../entities/lidar-scatter-layer";
 import type { LineChartConfig } from "../../../entities/line-chart-layer";
 import type { LineChartStaticConfig } from "../../../entities/line-chart-static-layer";
@@ -44,7 +45,8 @@ export type FluxionLayerSpec =
   | { id: string; kind: "reference-line"; config?: ReferenceLineConfig }
   | { id: string; kind: "pose-arrow"; config?: PoseArrowConfig }
   | { id: string; kind: "trajectory"; config?: TrajectoryConfig }
-  | { id: string; kind: "occupancy-grid"; config?: OccupancyGridConfig };
+  | { id: string; kind: "occupancy-grid"; config?: OccupancyGridConfig }
+  | { id: string; kind: "histogram"; config?: HistogramConfig };
 
 export interface UseFluxionCanvasOptions {
   layers: FluxionLayerSpec[];

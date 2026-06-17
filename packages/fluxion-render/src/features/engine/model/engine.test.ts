@@ -626,6 +626,7 @@ describe("Engine", () => {
       "pose-arrow",
       "trajectory",
       "occupancy-grid",
+      "histogram",
     ] as const;
     for (const kind of kinds) {
       expect(() => engine.dispatch({ op: Op.ADD_LAYER, id: kind, kind })).not.toThrow();

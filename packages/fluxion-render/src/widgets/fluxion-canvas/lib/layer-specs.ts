@@ -5,6 +5,7 @@ import type { CandlestickConfig } from "../../../entities/candlestick-layer";
 import type { EventMarkerConfig } from "../../../entities/event-marker-layer";
 import type { HeatmapConfig } from "../../../entities/heatmap-layer";
 import type { HeatmapStreamConfig } from "../../../entities/heatmap-stream-layer";
+import type { HistogramConfig } from "../../../entities/histogram-layer";
 import type { LidarScatterConfig } from "../../../entities/lidar-scatter-layer";
 import type { LineChartConfig } from "../../../entities/line-chart-layer";
 import type { LineChartStaticConfig } from "../../../entities/line-chart-static-layer";
@@ -119,4 +120,8 @@ export function occupancyGridLayer(
   config?: OccupancyGridConfig,
 ): FluxionLayerSpec {
   return { id, kind: "occupancy-grid", config };
+}
+
+export function histogramLayer(id: string, config?: HistogramConfig): FluxionLayerSpec {
+  return { id, kind: "histogram", config };
 }

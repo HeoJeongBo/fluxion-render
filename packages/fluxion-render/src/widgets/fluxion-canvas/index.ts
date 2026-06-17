@@ -6,6 +6,7 @@ export {
   eventMarkerLayer,
   heatmapLayer,
   heatmapStreamLayer,
+  histogramLayer,
   lidarLayer,
   lineLayer,
   lineStaticLayer,

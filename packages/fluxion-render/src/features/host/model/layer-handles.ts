@@ -582,6 +582,32 @@ export class TrajectoryHandle {
 }
 
 // ────────────────────────────────────────────────────────────────────────────
+// Histogram — data layout: [v0, v1, v2, ...] raw values (binned in the layer)
+// ────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Handle for `kind: "histogram"` layers. `setValues` replaces the sample set;
+ * the layer bins the raw values internally per its `binCount` / `range` config.
+ */
+export class HistogramHandle {
+  constructor(
+    private readonly sink: FluxionDataSink,
+    readonly id: string,
+  ) {}
+
+  setValues(values: ArrayLike<number>): void {
+    const n = values.length;
+    const buf = new Float32Array(n);
+    for (let i = 0; i < n; i++) buf[i] = values[i]!;
+    this.sink.pushData(this.id, buf);
+  }
+
+  pushRaw(data: Float32Array): void {
+    this.sink.pushData(this.id, data);
+  }
+}
+
+// ────────────────────────────────────────────────────────────────────────────
 // OccupancyGrid — header + row-major cells:
 // [originX, originY, resolution, cols, rows, c0, c1, …]
 // cell value: -1 = unknown, 0..100 = occupancy probability

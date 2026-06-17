@@ -5,6 +5,7 @@ import { CandlestickLayer } from "../../../entities/candlestick-layer";
 import { EventMarkerLayer } from "../../../entities/event-marker-layer";
 import { HeatmapLayer } from "../../../entities/heatmap-layer";
 import { HeatmapStreamLayer } from "../../../entities/heatmap-stream-layer";
+import { HistogramLayer } from "../../../entities/histogram-layer";
 import { LayerStack } from "../../../entities/layer-stack";
 import { LidarScatterLayer } from "../../../entities/lidar-scatter-layer";
 import { LineChartLayer } from "../../../entities/line-chart-layer";
@@ -64,6 +65,8 @@ function createLayer(id: string, kind: LayerKind): Layer {
       return new TrajectoryLayer(id);
     case "occupancy-grid":
       return new OccupancyGridLayer(id);
+    case "histogram":
+      return new HistogramLayer(id);
   }
 }
 

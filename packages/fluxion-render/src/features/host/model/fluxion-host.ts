@@ -24,6 +24,7 @@ import {
   EventMarkerHandle,
   HeatmapLayerHandle,
   HeatmapStreamHandle,
+  HistogramHandle,
   LidarLayerHandle,
   type LidarStride,
   LineLayerHandle,
@@ -426,6 +427,10 @@ export class FluxionHost {
 
   occupancyGrid(id: string): OccupancyGridHandle {
     return new OccupancyGridHandle(this, id);
+  }
+
+  histogram(id: string): HistogramHandle {
+    return new HistogramHandle(this, id);
   }
 
   /**
