@@ -405,6 +405,31 @@ Notable config fields (all have sensible defaults):
 - **`poseArrowLayer`** — `arrowLength`=14, `arrowWidth`=5, `color`.
 - **`referenceLineLayer`** — `y` (required), optional `bandMin`/`bandMax` (+ `bandOpacity`=0.12), `color`, `label`, `lineWidth`=1.5.
 
+### Robot & distribution layers
+
+Domain layers for robot dashboards and statistics. `t` is host-relative ms;
+world-coordinate layers expect `axisGridLayer({ xMode: "fixed" })`.
+
+| Factory | `kind` | Data layout (stride) | Flow | Handle → key methods |
+|---------|--------|----------------------|------|----------------------|
+| `trajectoryLayer` | `trajectory` | `[x,y,t,…]` (3; world x/y) | stream | `TrajectoryHandle` → `push` / `pushBatch` / `reset` |
+| `occupancyGridLayer` | `occupancy-grid` | `[originX,originY,res,cols,rows,…cells]` | static | `OccupancyGridHandle` → `setGrid` |
+| `histogramLayer` | `histogram` | `[v0,v1,…]` raw values (binned in-layer) | static | `HistogramHandle` → `setValues` |
+| `stackedAreaLayer` | `stacked-area` | `[t,y0,y1,…]` (seriesCount+1) | stream | `StackedAreaHandle` → `push` / `pushBatch` / `reset` |
+| `boxPlotLayer` | `box-plot` | `[x,min,q1,median,q3,max,…]` (6) | static | `BoxPlotHandle` → `setBoxes` |
+| `polarLayer` | `polar` | `[theta,r,…]` (2; θ rad, r≥0) | static | `PolarHandle` → `setPoints` |
+| `spectrogramLayer` | (`heatmap-stream` preset) | columns via `pushColumn(t, magnitudes)` | stream | `HeatmapStreamHandle` → `pushColumn` |
+
+Notable config fields:
+
+- **`trajectoryLayer`** — `color`, `colorByTime` (+ `colormap`=`'viridis'|'plasma'|'hot'`), `headMarker`=true / `headMarkerSize`=4, `fadeOlderMs`=0, ring sizing via `capacity`/`retentionMs`/`maxHz`.
+- **`occupancyGridLayer`** — `occupiedColor`/`freeColor`/`unknownColor` (cell `-1`=unknown, `0..100`=probability), `showGridLines`, `gridLineColor`.
+- **`histogramLayer`** — `binCount`=20, fixed or auto `range`, `density`, `gapPx`=1, `color`.
+- **`stackedAreaLayer`** — `seriesCount` (sets stride), `colors[]`, `fillOpacity`=0.85, `normalize` (percent-stacked), `lineWidth`.
+- **`boxPlotLayer`** — `color`/`lineColor`, `fillOpacity`=0.35, `boxWidth`=24, `capRatio`=0.5, `lineWidth`=1.5.
+- **`polarLayer`** — `rMax` (auto if omitted), `closed`=true, `fillOpacity`, `showPoints`/`pointSize`, `showRings`=true / `ringCount`=4, `gridColor`, `insetPx`=8. Self-contained polar→pixel mapping (give it its own canvas; ignores cartesian y-scaling).
+- **`spectrogramLayer`** — `freqBins`=64, `freqRange`=`[0,1]`, `maxCols`=256, `colormap`, `minDb`/`maxDb`. Thin preset over `heatmap-stream` (push a magnitude/dB column per frame).
+
 ### `axis-grid` — Axes and grid
 
 Controls the viewport bounds for all layers. Does not receive data — configure via `axisGridLayer()` or `host.configLayer()`.
