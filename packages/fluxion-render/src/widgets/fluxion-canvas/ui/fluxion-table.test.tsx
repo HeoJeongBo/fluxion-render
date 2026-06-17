@@ -188,4 +188,72 @@ describe("FluxionTable", () => {
     const th = container.querySelector("th") as HTMLElement;
     expect(th.style.position).toBe("sticky");
   });
+
+  describe("virtual scrolling", () => {
+    const manyRows: Row[] = Array.from({ length: 1000 }, (_, i) => ({
+      id: `r${i}`,
+      value: i,
+      label: `row ${i}`,
+    }));
+
+    function bodyRows(container: HTMLElement): HTMLElement[] {
+      // Exclude the aria-hidden spacer rows.
+      return Array.from(container.querySelectorAll("tbody tr")).filter(
+        (tr) => !tr.hasAttribute("aria-hidden"),
+      ) as HTMLElement[];
+    }
+
+    it("renders only the visible window plus overscan, not all rows", () => {
+      const { container } = render(
+        <FluxionTable
+          columns={COLUMNS}
+          rows={manyRows}
+          virtual={{ rowHeight: 20, height: 200, overscan: 2 }}
+        />,
+      );
+      // ~10 visible + 2 overscan (top clamped at 0) → far fewer than 1000.
+      const rendered = bodyRows(container);
+      expect(rendered.length).toBeGreaterThan(0);
+      expect(rendered.length).toBeLessThan(30);
+    });
+
+    it("adds a bottom spacer row to preserve scroll height", () => {
+      const { container } = render(
+        <FluxionTable
+          columns={COLUMNS}
+          rows={manyRows}
+          virtual={{ rowHeight: 20, height: 200 }}
+        />,
+      );
+      const spacers = container.querySelectorAll("tbody tr[aria-hidden]");
+      // At scrollTop 0 there is no top spacer but there is a bottom spacer.
+      expect(spacers.length).toBe(1);
+      const spacerCell = spacers[0]!.querySelector("td") as HTMLElement;
+      expect(spacerCell.getAttribute("colspan")).toBe(String(COLUMNS.length));
+    });
+
+    it("shifts the window and adds a top spacer on scroll", () => {
+      const { container } = render(
+        <FluxionTable
+          columns={COLUMNS}
+          rows={manyRows}
+          virtual={{ rowHeight: 20, height: 200, overscan: 1 }}
+        />,
+      );
+      const root = container.firstChild as HTMLElement;
+      fireEvent.scroll(root, { target: { scrollTop: 2000 } }); // 100 rows down
+      // first rendered data row should be around index 99 (100 - overscan).
+      const firstRow = bodyRows(container)[0]!;
+      expect(firstRow.textContent).toContain("row 9"); // r99/row 99 region
+      // both top and bottom spacers now present
+      expect(container.querySelectorAll("tbody tr[aria-hidden]").length).toBe(2);
+    });
+
+    it("renders all rows when virtual is omitted", () => {
+      const { container } = render(
+        <FluxionTable columns={COLUMNS} rows={manyRows.slice(0, 50)} />,
+      );
+      expect(bodyRows(container).length).toBe(50);
+    });
+  });
 });

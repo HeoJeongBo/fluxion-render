@@ -1,5 +1,20 @@
 import { type CSSProperties, type ReactNode, useMemo, useState } from "react";
 
+/** Compute the visible row window [start, end) for virtual scrolling. */
+function virtualWindow(
+  scrollTop: number,
+  rowHeight: number,
+  viewportHeight: number,
+  total: number,
+  overscan: number,
+): { start: number; end: number } {
+  const first = Math.floor(scrollTop / rowHeight);
+  const visible = Math.ceil(viewportHeight / rowHeight);
+  const start = Math.max(0, first - overscan);
+  const end = Math.min(total, first + visible + overscan);
+  return { start, end };
+}
+
 export interface FluxionTableColumn<R extends Record<string, unknown>> {
   key: keyof R & string;
   header: string;
@@ -29,6 +44,13 @@ export interface FluxionTableProps<R extends Record<string, unknown>> {
    * false.
    */
   stickyHeader?: boolean;
+  /**
+   * Virtualize rows: only the visible window (plus overscan) is rendered, so
+   * thousands of rows stay smooth. Requires a fixed `rowHeight` and viewport
+   * `height` in px. Implies a scroll container; pair with `stickyHeader` to keep
+   * the header visible. Omit for the default (render-all) behavior.
+   */
+  virtual?: { rowHeight: number; height: number; overscan?: number };
 }
 
 const S = {
@@ -92,8 +114,10 @@ export function FluxionTable<R extends Record<string, unknown>>({
   classNames = {},
   style,
   stickyHeader = false,
+  virtual,
 }: FluxionTableProps<R>) {
   const [sort, setSort] = useState<{ key: string; dir: 1 | -1 } | null>(null);
+  const [scrollTop, setScrollTop] = useState(0);
 
   const sortedRows = useMemo(() => {
     if (!sort) return rows;
@@ -120,10 +144,36 @@ export function FluxionTable<R extends Record<string, unknown>>({
     );
   };
 
+  // Virtual scrolling: render only the visible slice + overscan, with spacer
+  // rows above and below to preserve total scroll height.
+  const win = virtual
+    ? virtualWindow(
+        scrollTop,
+        virtual.rowHeight,
+        virtual.height,
+        sortedRows.length,
+        virtual.overscan ?? 4,
+      )
+    : { start: 0, end: sortedRows.length };
+  const visibleRows = virtual ? sortedRows.slice(win.start, win.end) : sortedRows;
+  const padTop = virtual ? win.start * virtual.rowHeight : 0;
+  const padBottom = virtual ? (sortedRows.length - win.end) * virtual.rowHeight : 0;
+
+  const rootStyle: CSSProperties = classNames.root
+    ? { ...(virtual ? { height: virtual.height, overflowY: "auto" } : null), ...style }
+    : {
+        ...S.root,
+        ...(virtual ? { height: virtual.height, overflowY: "auto" } : null),
+        ...style,
+      };
+
   return (
     <div
       className={classNames.root}
-      style={classNames.root ? style : { ...S.root, ...style }}
+      style={rootStyle}
+      onScroll={
+        virtual ? (e) => setScrollTop((e.target as HTMLDivElement).scrollTop) : undefined
+      }
     >
       <table className={classNames.table} style={classNames.table ? undefined : S.table}>
         <thead className={classNames.thead}>
@@ -159,26 +209,39 @@ export function FluxionTable<R extends Record<string, unknown>>({
           </tr>
         </thead>
         <tbody className={classNames.tbody}>
-          {sortedRows.map((row, i) => (
-            // eslint-disable-next-line react/no-array-index-key
-            <tr
-              key={i}
-              className={classNames.tr}
-              style={classNames.tr ? undefined : i % 2 === 0 ? S.trEven : S.trOdd}
-            >
-              {columns.map((col) => (
-                <td
-                  key={col.key}
-                  className={classNames.td}
-                  style={classNames.td ? undefined : S.td}
-                >
-                  {col.render
-                    ? col.render(row[col.key], row)
-                    : String(row[col.key] ?? "")}
-                </td>
-              ))}
+          {padTop > 0 && (
+            <tr aria-hidden style={{ height: padTop }}>
+              <td colSpan={columns.length} style={{ padding: 0, border: "none" }} />
             </tr>
-          ))}
+          )}
+          {visibleRows.map((row, vi) => {
+            const i = win.start + vi; // absolute row index (striping/key)
+            return (
+              // eslint-disable-next-line react/no-array-index-key
+              <tr
+                key={i}
+                className={classNames.tr}
+                style={classNames.tr ? undefined : i % 2 === 0 ? S.trEven : S.trOdd}
+              >
+                {columns.map((col) => (
+                  <td
+                    key={col.key}
+                    className={classNames.td}
+                    style={classNames.td ? undefined : S.td}
+                  >
+                    {col.render
+                      ? col.render(row[col.key], row)
+                      : String(row[col.key] ?? "")}
+                  </td>
+                ))}
+              </tr>
+            );
+          })}
+          {padBottom > 0 && (
+            <tr aria-hidden style={{ height: padBottom }}>
+              <td colSpan={columns.length} style={{ padding: 0, border: "none" }} />
+            </tr>
+          )}
         </tbody>
       </table>
     </div>
