@@ -3,6 +3,7 @@ import { AllDemoPage } from "../pages/all-demo";
 import { AreaDemoPage } from "../pages/area-demo";
 import { AxisFormatDemoPage } from "../pages/axis-format-demo";
 import { BarDemoPage } from "../pages/bar-demo";
+import { BoxPlotDemoPage } from "../pages/box-plot-demo";
 import { BrushDemoPage } from "../pages/brush-demo";
 import { CandlestickDemoPage } from "../pages/candlestick-demo";
 import { CrosshairDemoPage } from "../pages/crosshair-demo";
@@ -14,21 +15,26 @@ import { GaugeDemoPage } from "../pages/gauge-demo";
 import { HeatmapDemoPage } from "../pages/heatmap-demo";
 import { HelpersDemoPage } from "../pages/helpers-demo";
 import { HighRateDemoPage } from "../pages/high-rate-demo";
+import { HistogramDemoPage } from "../pages/histogram-demo";
 import { HistoricalDemoPage } from "../pages/historical-demo";
 import { LidarDemoPage } from "../pages/lidar-demo";
 import { LineDemoPage } from "../pages/line-demo";
+import { OccupancyGridDemoPage } from "../pages/occupancy-grid-demo";
 import { PieDemoPage } from "../pages/pie-demo";
+import { PolarDemoPage } from "../pages/polar-demo";
 import { PoolDemoPage } from "../pages/pool-demo";
 import { PoseArrowDemoPage } from "../pages/pose-arrow-demo";
 import { ReferenceLineDemoPage } from "../pages/reference-line-demo";
 import { RobotDashboardPage } from "../pages/robot-dashboard";
 import { ScatterColoredDemoPage } from "../pages/scatter-colored-demo";
 import { ScatterDemoPage } from "../pages/scatter-demo";
+import { StackedAreaDemoPage } from "../pages/stacked-area-demo";
 import { StaticXyDemoPage } from "../pages/static-xy-demo";
 import { StepDemoPage } from "../pages/step-demo";
 import { StreamDemoPage } from "../pages/stream-demo";
 import { StreamWorkerDemoPage } from "../pages/stream-worker-demo";
 import { TableDemoPage } from "../pages/table-demo";
+import { TrajectoryDemoPage } from "../pages/trajectory-demo";
 
 /** One demo: its URL slug, sidebar label, and page component. */
 export interface DemoEntry {
@@ -76,6 +82,9 @@ export const DEMO_GROUPS: readonly DemoGroup[] = [
       { slug: "bar", label: "Bar", component: BarDemoPage },
       { slug: "candlestick", label: "Candlestick", component: CandlestickDemoPage },
       { slug: "heatmap", label: "Heatmap", component: HeatmapDemoPage },
+      { slug: "histogram", label: "Histogram", component: HistogramDemoPage },
+      { slug: "stacked-area", label: "Stacked Area", component: StackedAreaDemoPage },
+      { slug: "box-plot", label: "Box Plot", component: BoxPlotDemoPage },
       { slug: "pie", label: "Pie Chart", component: PieDemoPage },
       { slug: "table", label: "Table", component: TableDemoPage },
     ],
@@ -103,6 +112,13 @@ export const DEMO_GROUPS: readonly DemoGroup[] = [
         component: ReferenceLineDemoPage,
       },
       { slug: "pose-arrow", label: "Pose Arrow", component: PoseArrowDemoPage },
+      { slug: "trajectory", label: "Trajectory", component: TrajectoryDemoPage },
+      {
+        slug: "occupancy-grid",
+        label: "Occupancy Grid",
+        component: OccupancyGridDemoPage,
+      },
+      { slug: "polar", label: "Polar / LiDAR", component: PolarDemoPage },
       { slug: "brush", label: "Brush + Export", component: BrushDemoPage },
     ],
   },
