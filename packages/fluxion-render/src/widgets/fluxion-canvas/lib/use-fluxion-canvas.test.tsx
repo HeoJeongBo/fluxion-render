@@ -162,6 +162,114 @@ describe("useFluxionCanvas", () => {
     });
   });
 
+  describe("structural reconciliation", () => {
+    function ConfigHarness({
+      workerFactory,
+      layers,
+    }: {
+      workerFactory: () => Worker;
+      layers: FluxionLayerSpec[];
+    }) {
+      const { containerRef } = useFluxionCanvas({
+        layers,
+        hostOptions: { workerFactory },
+      });
+      return <div ref={containerRef} style={{ width: 200, height: 100 }} />;
+    }
+
+    const opsOf = (posts: RecordedPost[], op: number) =>
+      posts.filter((p) => (p.msg as { op: number }).op === op);
+
+    it("posts ADD_LAYER when a layer is added without a remount", () => {
+      const { factory, posts } = makeFakeWorkerFactory();
+      const { rerender } = render(
+        <ConfigHarness
+          workerFactory={factory}
+          layers={[{ id: "axis", kind: "axis-grid" }]}
+        />,
+      );
+      const before = opsOf(posts, Op.ADD_LAYER).length;
+      rerender(
+        <ConfigHarness
+          workerFactory={factory}
+          layers={[
+            { id: "axis", kind: "axis-grid" },
+            { id: "line", kind: "line", config: { color: "#fff" } },
+          ]}
+        />,
+      );
+      const added = opsOf(posts, Op.ADD_LAYER);
+      expect(added.length).toBe(before + 1);
+      expect(added.at(-1)!.msg).toMatchObject({
+        op: Op.ADD_LAYER,
+        id: "line",
+        kind: "line",
+      });
+    });
+
+    it("posts REMOVE_LAYER when a layer is dropped", () => {
+      const { factory, posts } = makeFakeWorkerFactory();
+      const { rerender } = render(
+        <ConfigHarness
+          workerFactory={factory}
+          layers={[
+            { id: "axis", kind: "axis-grid" },
+            { id: "line", kind: "line", config: { color: "#fff" } },
+          ]}
+        />,
+      );
+      rerender(
+        <ConfigHarness
+          workerFactory={factory}
+          layers={[{ id: "axis", kind: "axis-grid" }]}
+        />,
+      );
+      const removed = opsOf(posts, Op.REMOVE_LAYER);
+      expect(removed).toHaveLength(1);
+      expect(removed[0]!.msg).toMatchObject({ op: Op.REMOVE_LAYER, id: "line" });
+    });
+
+    it("swaps a layer (REMOVE + ADD) when its kind changes", () => {
+      const { factory, posts } = makeFakeWorkerFactory();
+      const { rerender } = render(
+        <ConfigHarness
+          workerFactory={factory}
+          layers={[{ id: "chart", kind: "line", config: { color: "#fff" } }]}
+        />,
+      );
+      const addBefore = opsOf(posts, Op.ADD_LAYER).length;
+      rerender(
+        <ConfigHarness
+          workerFactory={factory}
+          layers={[{ id: "chart", kind: "area", config: { color: "#fff" } }]}
+        />,
+      );
+      expect(opsOf(posts, Op.REMOVE_LAYER).at(-1)!.msg).toMatchObject({ id: "chart" });
+      const lastAdd = opsOf(posts, Op.ADD_LAYER).at(-1)!.msg;
+      expect(opsOf(posts, Op.ADD_LAYER).length).toBe(addBefore + 1);
+      expect(lastAdd).toMatchObject({ op: Op.ADD_LAYER, id: "chart", kind: "area" });
+    });
+
+    it("does not touch structure when only configs change", () => {
+      const { factory, posts } = makeFakeWorkerFactory();
+      const { rerender } = render(
+        <ConfigHarness
+          workerFactory={factory}
+          layers={[{ id: "line", kind: "line", config: { color: "#fff" } }]}
+        />,
+      );
+      const adds = opsOf(posts, Op.ADD_LAYER).length;
+      rerender(
+        <ConfigHarness
+          workerFactory={factory}
+          layers={[{ id: "line", kind: "line", config: { color: "#f00" } }]}
+        />,
+      );
+      expect(opsOf(posts, Op.ADD_LAYER).length).toBe(adds);
+      expect(opsOf(posts, Op.REMOVE_LAYER)).toHaveLength(0);
+    });
+  });
+
   it("defers when the pool is disposed, then mounts once it is replaced (mountKey bump)", () => {
     // StrictMode race: the first mount effect sees a disposed pool, bumps
     // mountKey and bails; the mountKey-driven re-run sees a live pool and mounts.

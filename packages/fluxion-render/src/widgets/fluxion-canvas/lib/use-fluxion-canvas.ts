@@ -104,13 +104,13 @@ function makeAxisCanvas(container: HTMLDivElement): HTMLCanvasElement {
  *  3. Observes container size / DPR and forwards resize messages
  *  4. Terminates the worker + removes the canvas on unmount
  *
- * Layer CONFIGS inside `layers` are live: when the `layers` array reference
- * changes (memoize it and list your config inputs as deps), each layer's
- * config is diffed by content and only changed ones are re-sent via
- * `configLayer`. Structural changes — adding/removing layers or changing a
- * layer's `kind` — are NOT reconciled; `hostOptions` and `onReady` are also
- * mount-only. Swap the `key` on the host element if you need a full
- * re-initialization.
+ * The `layers` array is reconciled when its reference changes (memoize it and
+ * list your config inputs as deps): added layers are created, removed layers
+ * are dropped, a changed `kind` swaps the layer, and changed configs are
+ * re-sent via `configLayer` — no `key` remount needed for structural changes.
+ * Re-ORDERING existing layers is not reconciled (draw order follows insertion);
+ * `hostOptions` and `onReady` remain mount-only. Swap the `key` for a full
+ * re-initialization (e.g. to reorder or change the worker pool).
  */
 export function useFluxionCanvas(
   options: UseFluxionCanvasOptions,
@@ -131,6 +131,9 @@ export function useFluxionCanvas(
   // Seeded at mount (addLayer carries the initial config) so the reconcile
   // effect below doesn't re-send what the worker already has.
   const lastAppliedRef = useRef<Map<string, string>>(new Map());
+  // Layer kind currently present in the worker, keyed by id. Drives the
+  // structural reconcile (add / remove / kind-change) below.
+  const lastKindsRef = useRef<Map<string, FluxionLayerSpec["kind"]>>(new Map());
 
   useEffect(() => {
     const container = containerRef.current;
@@ -175,6 +178,7 @@ export function useFluxionCanvas(
     lastAppliedRef.current = new Map(
       current.layers.map((l) => [l.id, JSON.stringify(l.config)]),
     );
+    lastKindsRef.current = new Map(current.layers.map((l) => [l.id, l.kind]));
     setHost(instance);
     current.onReady?.(instance);
 
@@ -192,21 +196,51 @@ export function useFluxionCanvas(
     };
   }, [mountKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Reconcile layer configs when the `layers` array reference changes.
-  // Memoize `layers` in the consumer so this only fires on intentional
-  // changes; the serialization guard additionally prevents config spam when
-  // it isn't memoized. Structural changes (adding/removing layers, changing
-  // `kind`) are NOT handled — remount via `key` instead.
+  // Reconcile the `layers` array against what the worker holds whenever the
+  // reference changes. Memoize `layers` in the consumer and list config inputs
+  // as deps. Handles three structural cases plus config diffing:
+  //   • added layer (new id)            → addLayer
+  //   • removed layer (id gone)         → removeLayer
+  //   • changed kind (same id, new kind)→ removeLayer + addLayer
+  //   • changed config (same id+kind)   → configLayer
+  // Re-ORDERING existing layers is not reconciled (draw order is insertion
+  // order); remount via `key` if you must reorder.
   const layers = options.layers;
   useEffect(() => {
     if (!host) return;
     const applied = lastAppliedRef.current;
+    const kinds = lastKindsRef.current;
+    const nextIds = new Set(layers.map((l) => l.id));
+
+    // 1. Remove layers that are no longer present.
+    for (const id of [...kinds.keys()]) {
+      if (!nextIds.has(id)) {
+        host.removeLayer(id);
+        kinds.delete(id);
+        applied.delete(id);
+      }
+    }
+
+    // 2. Add / replace / reconfigure.
     for (const spec of layers) {
-      if (spec.config === undefined) continue;
+      const prevKind = kinds.get(spec.id);
       const serialized = JSON.stringify(spec.config);
-      if (applied.get(spec.id) === serialized) continue;
-      applied.set(spec.id, serialized);
-      host.configLayer(spec.id, spec.config);
+      if (prevKind === undefined) {
+        // New layer.
+        host.addLayer(spec.id, spec.kind, spec.config);
+        kinds.set(spec.id, spec.kind);
+        applied.set(spec.id, serialized);
+      } else if (prevKind !== spec.kind) {
+        // Kind changed → drop and re-add so the worker swaps the layer class.
+        host.removeLayer(spec.id);
+        host.addLayer(spec.id, spec.kind, spec.config);
+        kinds.set(spec.id, spec.kind);
+        applied.set(spec.id, serialized);
+      } else if (spec.config !== undefined && applied.get(spec.id) !== serialized) {
+        // Same kind, changed config.
+        applied.set(spec.id, serialized);
+        host.configLayer(spec.id, spec.config);
+      }
     }
   }, [host, layers]);
 
