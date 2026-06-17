@@ -38,14 +38,16 @@ function Probe<T>({
   setup,
   tick,
   onRate,
+  shared,
 }: {
   host: FluxionHost | null;
   intervalMs: number;
   setup: (h: FluxionHost) => T;
   tick: (t: number, s: T) => number;
   onRate?: (r: number) => void;
+  shared?: boolean;
 }) {
-  const { rate } = useFluxionStream({ host, intervalMs, setup, tick });
+  const { rate } = useFluxionStream({ host, intervalMs, setup, tick, shared });
   onRate?.(rate);
   return <div data-testid="rate">{rate}</div>;
 }
@@ -80,6 +82,41 @@ describe("useFluxionStream", () => {
     vi.advanceTimersByTime(55);
     expect(setup).toHaveBeenCalledTimes(1);
     expect(tick.mock.calls.length).toBeGreaterThanOrEqual(5);
+    host.dispose();
+  });
+
+  it("pumps via the shared ticker and reports rate when shared=true", () => {
+    const host = makeHost();
+    const setup = vi.fn(() => ({ n: 0 }));
+    const tick = vi.fn((_t: number, s: { n: number }) => {
+      s.n++;
+      return 2;
+    });
+    let latestRate = 0;
+    const { unmount } = render(
+      // Unique interval so the shared registry bucket is isolated to this test.
+      <Probe
+        host={host}
+        intervalMs={7}
+        setup={setup}
+        tick={tick}
+        shared
+        onRate={(r) => {
+          latestRate = r;
+        }}
+      />,
+    );
+    act(() => {
+      vi.advanceTimersByTime(525);
+    });
+    expect(setup).toHaveBeenCalledTimes(1);
+    expect(tick.mock.calls.length).toBeGreaterThan(0);
+    expect(latestRate).toBeGreaterThan(0);
+    // Unmount must tear down the shared subscription (no further ticks).
+    unmount();
+    const before = tick.mock.calls.length;
+    vi.advanceTimersByTime(100);
+    expect(tick.mock.calls.length).toBe(before);
     host.dispose();
   });
 

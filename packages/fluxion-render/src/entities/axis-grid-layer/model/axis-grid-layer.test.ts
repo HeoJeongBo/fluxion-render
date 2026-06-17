@@ -48,6 +48,33 @@ describe("AxisGridLayer", () => {
     expect(ctx.calls.filter((c) => c.name === "fillText").length).toBeGreaterThan(0);
   });
 
+  it("uses gridLineWidth for the grid stroke (default 1, configurable)", () => {
+    // The grid stroke is the first `stroke` call in the draw; capture the
+    // ctx.lineWidth at that moment for both default and configured widths.
+    const captureFirstStrokeWidth = (cfgWidth?: number): number => {
+      const layer = new AxisGridLayer("axis");
+      layer.setConfig({
+        xRange: [-10, 10],
+        yRange: [-10, 10],
+        ...(cfgWidth !== undefined ? { gridLineWidth: cfgWidth } : {}),
+      });
+      const ctx = createFakeCtx();
+      let widthAtGridStroke = Number.NaN;
+      const origStroke = ctx.stroke;
+      ctx.stroke = () => {
+        if (Number.isNaN(widthAtGridStroke)) widthAtGridStroke = ctx.lineWidth;
+        origStroke();
+      };
+      const v = makeViewport();
+      v.beginScan();
+      layer.scan?.(v);
+      layer.draw(ctx as unknown as OffscreenCanvasRenderingContext2D, v);
+      return widthAtGridStroke;
+    };
+    expect(captureFirstStrokeWidth()).toBe(1);
+    expect(captureFirstStrokeWidth(2.5)).toBe(2.5);
+  });
+
   it("draws zero axes only when 0 is inside the range", () => {
     const layer = new AxisGridLayer("axis");
     layer.setConfig({ xRange: [1, 10], yRange: [1, 10] });

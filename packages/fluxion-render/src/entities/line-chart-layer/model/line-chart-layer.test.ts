@@ -45,6 +45,62 @@ describe("LineChartLayer (streaming)", () => {
     expect(ctx.calls.some((c) => c.name === "stroke")).toBe(true);
   });
 
+  it("applies opacity at stroke time and restores globalAlpha after draw", () => {
+    const layer = new LineChartLayer("l");
+    layer.setConfig({ capacity: 8, opacity: 0.4 });
+    const vp = makeViewport();
+    layer.setData(new Float32Array([0, 0, 100, 0.5]).buffer, 4, vp);
+    const ctx = createFakeCtx();
+    let alphaAtStroke = Number.NaN;
+    const origStroke = ctx.stroke;
+    ctx.stroke = () => {
+      alphaAtStroke = ctx.globalAlpha;
+      origStroke();
+    };
+    ctx.globalAlpha = 0.9; // pre-existing frame alpha that must be restored.
+    layer.draw(ctx as unknown as OffscreenCanvasRenderingContext2D, vp);
+    expect(alphaAtStroke).toBe(0.4);
+    expect(ctx.globalAlpha).toBe(0.9);
+  });
+
+  it("leaves globalAlpha untouched when opacity is the default 1", () => {
+    const layer = new LineChartLayer("l");
+    layer.setConfig({ capacity: 8 });
+    const vp = makeViewport();
+    layer.setData(new Float32Array([0, 0, 100, 0.5]).buffer, 4, vp);
+    const ctx = createFakeCtx();
+    let alphaAtStroke = Number.NaN;
+    const origStroke = ctx.stroke;
+    ctx.stroke = () => {
+      alphaAtStroke = ctx.globalAlpha;
+      origStroke();
+    };
+    ctx.globalAlpha = 0.9;
+    layer.draw(ctx as unknown as OffscreenCanvasRenderingContext2D, vp);
+    expect(alphaAtStroke).toBe(0.9);
+    expect(ctx.globalAlpha).toBe(0.9);
+  });
+
+  it("applies opacity on the decimated draw path too", () => {
+    const layer = new LineChartLayer("l");
+    // Many samples + decimate so the decimated branch (separate stroke) runs.
+    layer.setConfig({ capacity: 4096, decimate: true, opacity: 0.5 });
+    const vp = makeViewport();
+    const samples: number[] = [];
+    for (let i = 0; i < 4000; i++) samples.push(i, Math.sin(i));
+    layer.setData(new Float32Array(samples).buffer, samples.length, vp);
+    const ctx = createFakeCtx();
+    let alphaAtStroke = Number.NaN;
+    const origStroke = ctx.stroke;
+    ctx.stroke = () => {
+      alphaAtStroke = ctx.globalAlpha;
+      origStroke();
+    };
+    layer.draw(ctx as unknown as OffscreenCanvasRenderingContext2D, vp);
+    expect(alphaAtStroke).toBe(0.5);
+    expect(ctx.globalAlpha).toBe(1);
+  });
+
   it("advances viewport.latestT to the newest timestamp", () => {
     const layer = new LineChartLayer("l");
     const vp = makeViewport();

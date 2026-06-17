@@ -567,3 +567,69 @@ describe("multiple layers", () => {
     expect(lastState.points[0]!.layerId).toBe("x");
   });
 });
+
+// ─── throttleMs ──────────────────────────────────────────────────────────────
+
+describe("throttleMs", () => {
+  it("suppresses moves within the window and emits once it elapses", () => {
+    const nowSpy = vi.spyOn(Date, "now");
+    try {
+      const cache = makeCache();
+      const onState = vi.fn();
+      const { container } = render(
+        <Harness
+          host={null}
+          cache={cache}
+          xMode="fixed"
+          xRange={[0, 200]}
+          throttleMs={50}
+          onState={onState}
+        />,
+      );
+      const el = container.firstChild as HTMLElement;
+      stubRect(el, { left: 0, top: 0, width: 200, height: 100 });
+
+      const positions = (): Array<{ pxX: number; pxY: number } | null> =>
+        onState.mock.calls.map((c) => (c[0] as CrosshairState).position);
+
+      // t=0: first move emits (lastEmit was 0, but 0 - 0 = 0 < 50 → suppressed
+      // only if a prior emit happened; the very first move at t=1000 emits).
+      nowSpy.mockReturnValue(1000);
+      firePointerMove(el, 20, 10);
+      expect(positions().at(-1)).toEqual({ pxX: 20, pxY: 10 });
+
+      // t=1020 (<50ms later): suppressed — position unchanged.
+      nowSpy.mockReturnValue(1020);
+      firePointerMove(el, 80, 40);
+      expect(positions().at(-1)).toEqual({ pxX: 20, pxY: 10 });
+
+      // t=1100 (>50ms after last emit): emits the new position.
+      nowSpy.mockReturnValue(1100);
+      firePointerMove(el, 120, 60);
+      expect(positions().at(-1)).toEqual({ pxX: 120, pxY: 60 });
+    } finally {
+      nowSpy.mockRestore();
+    }
+  });
+
+  it("updates on every move when throttleMs is 0 (default)", () => {
+    const cache = makeCache();
+    const onState = vi.fn();
+    const { container } = render(
+      <Harness
+        host={null}
+        cache={cache}
+        xMode="fixed"
+        xRange={[0, 200]}
+        onState={onState}
+      />,
+    );
+    const el = container.firstChild as HTMLElement;
+    stubRect(el, { left: 0, top: 0, width: 200, height: 100 });
+
+    firePointerMove(el, 20, 10);
+    firePointerMove(el, 80, 40);
+    const last = onState.mock.calls.at(-1)![0] as CrosshairState;
+    expect(last.position).toEqual({ pxX: 80, pxY: 40 });
+  });
+});

@@ -27,6 +27,13 @@ export interface UseFluxionCrosshairOptions {
   yPadPx?: number;
   xFormat?: (t: number) => string;
   yFormat?: (y: number) => string;
+  /**
+   * Minimum ms between crosshair `setState` updates while the pointer moves.
+   * Default 0 (update on every `pointermove`). Set e.g. `16` to cap updates
+   * to ~60fps when many series make per-event re-renders expensive. The
+   * `pointerleave` reset is never throttled.
+   */
+  throttleMs?: number;
 }
 
 export interface UseFluxionCrosshairResult {
@@ -49,6 +56,7 @@ export function useFluxionCrosshair(
     yPadPx = 0,
     xFormat,
     yFormat,
+    throttleMs = 0,
   } = opts;
 
   const chartRef = useRef<HTMLDivElement>(null);
@@ -73,6 +81,10 @@ export function useFluxionCrosshair(
   timeWindowMsRef.current = timeWindowMs;
   const xRangeRef = useRef(xRange);
   xRangeRef.current = xRange;
+  const throttleMsRef = useRef(throttleMs);
+  throttleMsRef.current = throttleMs;
+  // Timestamp of the last emitted move update (for throttling).
+  const lastEmitRef = useRef(0);
 
   // Subscribe to host bounds updates.
   useEffect(() => {
@@ -128,6 +140,12 @@ export function useFluxionCrosshair(
     const defaultYFormat = (y: number): string => y.toFixed(4);
 
     const handleMove = (e: PointerEvent): void => {
+      const throttle = throttleMsRef.current;
+      if (throttle > 0) {
+        const now = Date.now();
+        if (now - lastEmitRef.current < throttle) return;
+        lastEmitRef.current = now;
+      }
       const rect = el.getBoundingClientRect();
       const pxX = e.clientX - rect.left;
       const pxY = e.clientY - rect.top;

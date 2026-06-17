@@ -26,6 +26,41 @@ describe("ScatterChartLayer", () => {
     expect(ctx.fillStyle).toBe("#ff0000");
   });
 
+  it("applies opacity at fill time and restores globalAlpha after draw", () => {
+    const layer = new ScatterChartLayer("sc1");
+    layer.setConfig({ opacity: 0.3 });
+    const vp = makeViewport();
+    layer.setData(new Float32Array([100, 3, 200, 5]).buffer, 4, vp);
+    const ctx = createFakeCtx();
+    let alphaAtFill = Number.NaN;
+    const origFill = ctx.fill;
+    ctx.fill = () => {
+      alphaAtFill = ctx.globalAlpha;
+      origFill();
+    };
+    ctx.globalAlpha = 0.8;
+    layer.draw(ctx as unknown as OffscreenCanvasRenderingContext2D, vp);
+    expect(alphaAtFill).toBe(0.3);
+    expect(ctx.globalAlpha).toBe(0.8);
+  });
+
+  it("leaves globalAlpha untouched when opacity is the default 1", () => {
+    const layer = new ScatterChartLayer("sc1");
+    const vp = makeViewport();
+    layer.setData(new Float32Array([100, 3, 200, 5]).buffer, 4, vp);
+    const ctx = createFakeCtx();
+    let alphaAtFill = Number.NaN;
+    const origFill = ctx.fill;
+    ctx.fill = () => {
+      alphaAtFill = ctx.globalAlpha;
+      origFill();
+    };
+    ctx.globalAlpha = 0.8;
+    layer.draw(ctx as unknown as OffscreenCanvasRenderingContext2D, vp);
+    expect(alphaAtFill).toBe(0.8);
+    expect(ctx.globalAlpha).toBe(0.8);
+  });
+
   it("setConfig clamps pointSize to minimum 1", () => {
     const layer = new ScatterChartLayer("sc1");
     layer.setConfig({ pointSize: 0 });

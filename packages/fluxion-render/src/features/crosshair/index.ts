@@ -1,5 +1,11 @@
 export type { CachedLayerOptions } from "./model/hover-data-cache";
 export { HoverDataCache } from "./model/hover-data-cache";
+export { pushPacketToCache } from "./model/push-packet-to-cache";
+export type {
+  UseBroadcastCrosshairCacheOptions,
+  UseBroadcastCrosshairCacheResult,
+} from "./model/use-broadcast-crosshair-cache";
+export { useBroadcastCrosshairCache } from "./model/use-broadcast-crosshair-cache";
 export type {
   CrosshairPoint,
   CrosshairState,

@@ -140,6 +140,9 @@ export type TickUpdateListener = (
   yTicks: SerializedTick[],
 ) => void;
 
+/** Callback shape for `onMetricsUpdate`. Receives a fresh metrics snapshot. */
+export type MetricsListener = (metrics: FluxionMetrics) => void;
+
 /**
  * Functions can't structuredClone (postMessage throws DataCloneError). Layer
  * configs may carry main-thread-only formatter functions (`xTickFormat` /
@@ -183,6 +186,9 @@ export class FluxionHost {
   private lastBounds: { yMin: number; yMax: number; latestT: number } | null = null;
   private workerMsgHandler: EventListener | null = null;
   private visibilityHandler: (() => void) | null = null;
+  // Polled metrics subscription — one shared interval drives all listeners.
+  private metricsListeners: MetricsListener[] = [];
+  private metricsTimer: ReturnType<typeof setInterval> | null = null;
 
   constructor(canvas: HTMLCanvasElement, opts: FluxionHostOptions = {}) {
     if (opts.workerFactory) {
@@ -343,6 +349,41 @@ export class FluxionHost {
   configLayer(id: string, config: unknown): void;
   configLayer(id: string, config: unknown): void {
     this.post({ op: Op.CONFIG, id, config: stripFunctionFields(config) });
+  }
+
+  /**
+   * Batch several layer-config updates into a single postMessage. Equivalent to
+   * calling `configLayer` once per entry, but the worker applies them all and
+   * recomputes/redraws once — much cheaper than N separate messages when
+   * toggling many series at once (e.g. a grid of charts). Empty arrays no-op.
+   */
+  configLayers(entries: Array<{ id: string; config: unknown }>): void {
+    if (entries.length === 0) return;
+    this.post({
+      op: Op.CONFIG_BATCH,
+      entries: entries.map((e) => ({
+        id: e.id,
+        config: stripFunctionFields(e.config),
+      })),
+    });
+  }
+
+  /**
+   * Convenience for toggling layer visibility. Pass `(id, visible)` for one
+   * layer, or a `{ [id]: visible }` map for many. Map form sends a single
+   * batched message via {@link configLayers}.
+   */
+  setLayerVisibility(id: string, visible: boolean): void;
+  setLayerVisibility(visibility: Record<string, boolean>): void;
+  setLayerVisibility(idOrMap: string | Record<string, boolean>, visible?: boolean): void {
+    const entries =
+      typeof idOrMap === "string"
+        ? [{ id: idOrMap, config: { visible: !!visible } }]
+        : Object.entries(idOrMap).map(([id, v]) => ({
+            id,
+            config: { visible: v },
+          }));
+    this.configLayers(entries);
   }
 
   // ──────────────────────────────────────────────────────────────────────
@@ -527,6 +568,30 @@ export class FluxionHost {
   }
 
   /**
+   * Subscribe to periodic metrics snapshots (for perf dashboards). All
+   * subscribers share a single interval; it starts on the first subscription
+   * and stops when the last unsubscribes (or on `dispose`). Returns an
+   * unsubscribe function. `intervalMs` of the FIRST subscriber sets the rate.
+   */
+  onMetricsUpdate(cb: MetricsListener, opts?: { intervalMs?: number }): () => void {
+    this.metricsListeners.push(cb);
+    if (this.metricsTimer === null) {
+      this.metricsTimer = setInterval(() => {
+        const snapshot = this.getMetrics();
+        for (const fn of this.metricsListeners) fn(snapshot);
+      }, opts?.intervalMs ?? 250);
+    }
+    return () => {
+      const idx = this.metricsListeners.indexOf(cb);
+      if (idx >= 0) this.metricsListeners.splice(idx, 1);
+      if (this.metricsListeners.length === 0 && this.metricsTimer !== null) {
+        clearInterval(this.metricsTimer);
+        this.metricsTimer = null;
+      }
+    };
+  }
+
+  /**
    * Transfer a raw Float32Array to the custom worker's `streamHandler` (zero-copy).
    * After this call, `buffer` is detached — do not read it again.
    *
@@ -596,6 +661,11 @@ export class FluxionHost {
       document.removeEventListener("visibilitychange", this.visibilityHandler);
     }
     this.visibilityHandler = null;
+    if (this.metricsTimer !== null) {
+      clearInterval(this.metricsTimer);
+      this.metricsTimer = null;
+    }
+    this.metricsListeners.length = 0;
     this.boundsListeners.length = 0;
     this.tickListeners.length = 0;
     try {

@@ -266,6 +266,10 @@ lineLayer('signal', {
   laneCount?: number,    // `laneIndex` of `laneCount`, auto-normalized to its OWN
   laneGapPx?: number,    // y-range (own band, no shared y-axis). gap default 6 px.
                          // Also on area/step. See useMultiSeriesChart layout:'lanes'.
+  opacity?: number,      // global stroke opacity 0–1, default 1. De-emphasize a
+                         // series or let overlapping lines show through. Saved/
+                         // restored around the draw so it never leaks into other
+                         // layers. Also on `scatterLayer`. Visual only.
 })
 ```
 
@@ -281,7 +285,7 @@ window). The rendered line stays visually identical — every peak/trough is pre
 display resolution — while `lineTo` calls drop from O(samples) to O(width). The ring buffer
 still retains **every** sample, so hover, scan (y-auto bounds), and export are unaffected.
 
-**Toggling series visibility** — use `visible` with `useLayerConfig` to show/hide a layer without reinitialising the host or losing buffered data:
+**Toggling series visibility** — set `visible` to show/hide a layer without reinitialising the host or losing buffered data. For a single layer, `useLayerConfig` sends one lightweight CONFIG message:
 
 ```tsx
 const [enabled, setEnabled] = useState({ s1: true, s2: true, s3: false });
@@ -294,10 +298,29 @@ const layers = useMemo(() => [
   lineLayer('s3', { color: '#ffb060' }),
 ], []);
 
-// only a lightweight CONFIG message is sent to the worker on each toggle
 useLayerConfig(host, lineLayer('s1', { visible: enabled.s1 }));
-useLayerConfig(host, lineLayer('s2', { visible: enabled.s2 }));
-useLayerConfig(host, lineLayer('s3', { visible: enabled.s3 }));
+```
+
+**Toggling many series at once** — calling `useLayerConfig` per layer fires N postMessages and trips the rules-of-hooks lint when done in a loop. Use **`useLayersConfig`** (plural): it diffs the whole array and sends a **single batched** `CONFIG_BATCH` message containing only the changed layers:
+
+```tsx
+// One message per toggle, no matter how many series — and loop-friendly.
+useLayersConfig(
+  host,
+  keys.map((k) => lineLayer(k, { visible: enabled[k] })),
+);
+```
+
+Outside React, the host exposes the same batching directly:
+
+```ts
+host.configLayers([
+  { id: 's1', config: { visible: false } },
+  { id: 's2', config: { lineWidth: 2 } },
+]);                                    // one postMessage, applied + redrawn once
+
+host.setLayerVisibility('s1', false);  // single-layer convenience
+host.setLayerVisibility({ s1: true, s2: false, s3: true }); // map → one batch
 ```
 
 ```ts
@@ -397,7 +420,7 @@ in the layout shown below; `t` is host-relative ms for streaming layers.
 Notable config fields (all have sensible defaults):
 
 - **`barLayer`** — `color`, `barWidth`=8, `layout`=`'xy'|'y'`, `xRange`=`[0,1]` (for `'y'`).
-- **`scatterLayer`** — `color`, `pointSize`=3, `shape`=`'square'|'circle'`, ring sizing via `capacity`=2048 / `retentionMs` / `maxHz`.
+- **`scatterLayer`** — `color`, `pointSize`=3, `shape`=`'square'|'circle'`, `opacity`=1 (global point opacity 0–1), ring sizing via `capacity`=2048 / `retentionMs` / `maxHz`.
 - **`scatterColoredLayer`** — `colormap`=`'viridis'|'plasma'|'hot'|'gradient'` (+ `minColor`/`maxColor` for `'gradient'`), `minSize`=2 / `maxSize`=8, `shape`=`'circle'`.
 - **`candlestickLayer`** — `upColor`=`#26a69a`, `downColor`=`#ef5350`, `bodyWidth`=6.
 - **`eventMarkerLayer`** — `colors`=`[info, warning, error]`, `markerSize`=8, `lineWidth`=1.
@@ -459,6 +482,7 @@ axisGridLayer('axis', {
 
   // Appearance
   gridColor?: string,
+  gridLineWidth?: number,     // grid line width in CSS px (default 1)
   axisColor?: string,
   labelColor?: string,
   font?: string,
@@ -538,10 +562,30 @@ const { rate } = useFluxionStream({
   intervalMs: number,     // e.g. 1000/60 for 60Hz
   setup: (host) => T,     // called once — resolve typed handles here
   tick: (tMs, state) => number, // called every interval, return sample count
+  shared?: boolean,       // opt into the shared ticker (default false) — see below
 });
 ```
 
 `tMs` is milliseconds since the first tick (not `Date.now()`). Use it as the `t` value for line samples.
+
+**Many streams at the same rate?** Pass `shared: true`. Instead of each stream
+owning its own `setInterval`, all same-`intervalMs` streams coalesce onto **one**
+process-wide timer that fans out to every subscriber — and it **pauses while the
+page is hidden** (`document.hidden`), so background tabs stop pumping. This cuts
+timer overhead dramatically on dashboards with dozens of small charts. Default
+`false` preserves the original one-interval-per-stream behavior exactly.
+
+Need the shared timer outside `useFluxionStream`? Use the primitive directly:
+
+```ts
+import { useSharedTicker, subscribeTicker } from '@heojeongbo/fluxion-render/react';
+
+// React: subscribe for the component's lifetime
+useSharedTicker(1000 / 60, (now) => { /* … */ });
+
+// Imperative: returns an unsubscribe; timer is cleared when the last sub leaves
+const unsubscribe = subscribeTicker(1000 / 60, (now) => { /* … */ });
+```
 
 ### `useTimeOrigin()`
 
@@ -743,6 +787,17 @@ const [windowMs, setWindowMs] = useState(5000);
 useLayerConfig(host, axisGridLayer('axis', { timeWindowMs: windowMs }));
 ```
 
+### `useLayersConfig(host, layerSpecs)`
+
+Plural `useLayerConfig`. Diffs an **array** of specs and emits a single batched
+`host.configLayers(...)` for only the entries whose config changed — replacing
+the `useLayerConfig`-in-a-loop pattern (which fires N postMessages and trips the
+rules-of-hooks lint). Ideal for toggling visibility across a grid of series:
+
+```ts
+useLayersConfig(host, keys.map((k) => lineLayer(k, { visible: visible.has(k) })));
+```
+
 ### `useMiniChart(options)`
 
 The `axis-grid + line` factory every "small chart in a grid" demo kept rewriting. Returns a memoised `layers` array ready for `<FluxionCanvas>`; sets up time-mode axis + ring-sized line layer from a single options object.
@@ -826,6 +881,35 @@ hoverable layer. Note: in `layout: 'lanes'` the reported `y` values are correct,
 but the marker's vertical pixel position is approximate (the crosshair is
 lane-unaware).
 
+Both crosshair hooks accept an optional **`throttleMs`** (default `0` = update on
+every `pointermove`). Set e.g. `throttleMs: 16` to cap crosshair `setState` to
+~60fps when many series make per-event re-renders expensive; the `pointerleave`
+reset is never throttled.
+
+#### Managed-pool charts: `useBroadcastCrosshairCache`
+
+The crosshair reads from a main-thread `HoverDataCache`. In the **pool fan-out**
+path (`pool.broadcastStream` / `host.emitPoolStream`), per-sample data is decoded
+inside the worker and never reaches the main thread — so a pooled chart's
+crosshair would have nothing to look up. `useBroadcastCrosshairCache` closes that
+gap: it returns a stable `cache` plus a `mirror` callback. Call `mirror` with the
+same packet + target layer ids **just before** the transfer (the buffer detaches
+on transfer), then wire `cache` into the crosshair as usual.
+
+```tsx
+const { cache, mirror } = useBroadcastCrosshairCache({ layers });
+
+// in the broadcast tick, BEFORE pool.broadcastStream / emitPoolStream:
+mirror(targets.map((t) => t.layerId), new Float32Array(buffer));
+pool.broadcastStream(targets, buffer, length);
+
+// crosshair reads the mirrored samples like any other chart:
+const { chartRef, state } = useFluxionCrosshair({ host, cache, xMode: 'time', timeWindowMs, timeOrigin });
+```
+
+The lower-level `pushPacketToCache(cache, layerIds, packet)` is exported too, if
+you manage the cache yourself.
+
 ### `<FluxionCrosshair>`
 
 Renders the dashed crosshair lines + a value tooltip from a crosshair `state`.
@@ -907,6 +991,8 @@ const host = new FluxionHost(canvas, opts?: FluxionHostOptions);
 host.addLayer(id, kind, config?)
 host.removeLayer(id)
 host.configLayer(id, config)
+host.configLayers([{ id, config }, …])  // batch many config updates in ONE postMessage
+host.setLayerVisibility(id, visible)     // or setLayerVisibility({ [id]: visible }) — one batch
 host.clearLayer(id, { latestT? })   // drop ring data; optionally rewind viewport.latestT
 
 // Typed helpers — add layer and return a handle
@@ -932,6 +1018,27 @@ host.dispose()
 **All ring-based streaming handles expose `.reset(latestT?)`** as a typed alternative — `LineLayerHandle`, `AreaLayerHandle`, `ScatterLayerHandle`, `StepLayerHandle`, `CandlestickLayerHandle`, `ScatterColoredHandle`, and `PoseArrowHandle`. They all delegate to `host.clearLayer` internally so the worker-side semantics are identical.
 
 Custom layers can opt into `Op.CLEAR_DATA` by implementing the optional `clearData()` method on the `Layer` interface — the built-ins listed above already do.
+
+#### Diagnostics: `getMetrics()` / `onMetricsUpdate()`
+
+`host.getMetrics()` returns a cheap, side-effect-free snapshot of main-thread
+activity — useful for perf HUDs and "is data flowing?" checks:
+
+```ts
+const m = host.getMetrics();
+// { pushCount, sampleCount, bytesTransferred,
+//   pushesByLayer: { [id]: count }, lastPushAt, bounds: { yMin, yMax, latestT } | null }
+```
+
+For a live feed, `host.onMetricsUpdate(cb, { intervalMs? })` calls `cb` with a
+fresh snapshot on an interval (default 250ms). All subscribers share one timer;
+it stops when the last unsubscribes (and on `dispose`). Returns an unsubscribe:
+
+```ts
+const stop = host.onMetricsUpdate((m) => setHud(m), { intervalMs: 500 });
+// …later
+stop();
+```
 
 ### `FluxionWorkerPool`
 

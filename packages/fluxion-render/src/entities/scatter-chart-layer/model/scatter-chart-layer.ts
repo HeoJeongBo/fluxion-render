@@ -17,6 +17,12 @@ export interface ScatterChartConfig {
   maxHz?: number;
   /** When false, skip draw and scan. Default true. */
   visible?: boolean;
+  /**
+   * Global point opacity in `[0, 1]`. Default 1 (opaque). Multiplies the canvas
+   * alpha for this layer's points only; saved/restored so it never leaks into
+   * other layers. Visual only — data/hover/scaling are unaffected.
+   */
+  opacity?: number;
 }
 
 /**
@@ -34,6 +40,7 @@ export class ScatterChartLayer implements Layer {
   private pointSize = 3;
   private shape: "square" | "circle" = "square";
   private visible = true;
+  private opacity = 1;
   private ring: RingBuffer;
 
   constructor(id: string) {
@@ -47,6 +54,7 @@ export class ScatterChartLayer implements Layer {
     if (c.pointSize !== undefined) this.pointSize = Math.max(1, c.pointSize);
     if (c.shape !== undefined) this.shape = c.shape;
     if (c.visible !== undefined) this.visible = c.visible;
+    if (c.opacity !== undefined) this.opacity = c.opacity;
     let newCapacity: number | undefined = c.capacity;
     if (
       newCapacity === undefined &&
@@ -93,6 +101,9 @@ export class ScatterChartLayer implements Layer {
     const half = size / 2;
     const xMin = viewport.bounds.xMin;
 
+    const faded = this.opacity !== 1;
+    const prevAlpha = ctx.globalAlpha;
+    if (faded) ctx.globalAlpha = this.opacity;
     ctx.fillStyle = this.color;
     ctx.beginPath();
 
@@ -116,6 +127,7 @@ export class ScatterChartLayer implements Layer {
     }
 
     ctx.fill();
+    if (faded) ctx.globalAlpha = prevAlpha;
   }
 
   clearData(): void {

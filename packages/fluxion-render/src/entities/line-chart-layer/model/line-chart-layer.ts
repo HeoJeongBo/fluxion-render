@@ -61,6 +61,14 @@ export interface LineChartConfig {
   laneCount?: number;
   /** Gap between adjacent lanes, in CSS px. Default 6. */
   laneGapPx?: number;
+  /**
+   * Global stroke opacity in `[0, 1]`. Default 1 (fully opaque). Multiplies the
+   * canvas alpha for this layer's stroke only — useful to de-emphasize a series
+   * or let overlapping lines show through. Visual only: data, hover, and
+   * auto-scaling are unaffected. The alpha is saved and restored around the
+   * draw so it never leaks into other layers sharing the frame.
+   */
+  opacity?: number;
 }
 
 /**
@@ -91,6 +99,7 @@ export class LineChartLayer implements Layer {
   private laneIndex = 0;
   private laneCount = 0;
   private laneGapPx = 6;
+  private opacity = 1;
   // Per-layer visible y-extent from the last scan() — used to normalize this
   // layer's lane band independently of the shared viewport. NaN until scanned.
   private scannedYMin = Number.NaN;
@@ -116,6 +125,7 @@ export class LineChartLayer implements Layer {
     if (c.laneIndex !== undefined) this.laneIndex = c.laneIndex;
     if (c.laneCount !== undefined) this.laneCount = c.laneCount;
     if (c.laneGapPx !== undefined) this.laneGapPx = c.laneGapPx;
+    if (c.opacity !== undefined) this.opacity = c.opacity;
     let newCapacity: number | undefined = c.capacity;
     if (
       newCapacity === undefined &&
@@ -227,6 +237,9 @@ export class LineChartLayer implements Layer {
     // Lane mode needs an in-window y-extent from scan; skip if none this frame.
     if (this.laneActive() && !Number.isFinite(this.scannedYMin)) return;
 
+    const faded = this.opacity !== 1;
+    const prevAlpha = ctx.globalAlpha;
+    if (faded) ctx.globalAlpha = this.opacity;
     ctx.strokeStyle = this.color;
     ctx.lineWidth = this.lineWidth;
     const dashed = this.dashArray.length > 0;
@@ -246,6 +259,7 @@ export class LineChartLayer implements Layer {
       this._drawDecimated(ctx, viewport, xMin);
       ctx.stroke();
       if (dashed) ctx.setLineDash([]);
+      if (faded) ctx.globalAlpha = prevAlpha;
       return;
     }
 
@@ -272,6 +286,7 @@ export class LineChartLayer implements Layer {
     });
     ctx.stroke();
     if (dashed) ctx.setLineDash([]);
+    if (faded) ctx.globalAlpha = prevAlpha;
   }
 
   /**

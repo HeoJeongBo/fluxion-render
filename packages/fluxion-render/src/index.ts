@@ -58,6 +58,7 @@ export type {
   LidarStride,
   LineSample,
   MarkerEvent,
+  MetricsListener,
   OccupancyGrid,
   PolarPoint,
   PoseArrowSample,

@@ -14,6 +14,8 @@ export interface AxisGridConfig {
   xRange?: [number, number];
   yRange?: [number, number];
   gridColor?: string;
+  /** Grid line width in CSS px. Default 1. */
+  gridLineWidth?: number;
   axisColor?: string;
   labelColor?: string;
   font?: string;
@@ -151,6 +153,7 @@ export interface AxisGridConfig {
 export class AxisGridLayer implements Layer {
   readonly id: string;
   private gridColor = "rgba(255,255,255,0.08)";
+  private gridLineWidth = 1;
   private axisColor = "rgba(255,255,255,0.4)";
   private labelColor = "rgba(255,255,255,0.7)";
   private font = "10px sans-serif";
@@ -199,6 +202,7 @@ export class AxisGridLayer implements Layer {
       this.bounds.yMax = c.yRange[1];
     }
     if (c.gridColor) this.gridColor = c.gridColor;
+    if (c.gridLineWidth !== undefined) this.gridLineWidth = c.gridLineWidth;
     if (c.axisColor) this.axisColor = c.axisColor;
     if (c.labelColor) this.labelColor = c.labelColor;
     if (c.font) this.font = c.font;
@@ -355,7 +359,7 @@ export class AxisGridLayer implements Layer {
     // ── Grid lines ──
     if (this.showXGrid || this.showYGrid) {
       ctx.strokeStyle = this.gridColor;
-      ctx.lineWidth = 1;
+      ctx.lineWidth = this.gridLineWidth;
       if (this.gridDashArray.length > 0) ctx.setLineDash(this.gridDashArray);
       ctx.beginPath();
       if (this.showXGrid) {

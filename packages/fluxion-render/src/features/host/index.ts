@@ -5,6 +5,7 @@ export type {
   FluxionHostOptions,
   FluxionMetrics,
   FluxionTypedArray,
+  MetricsListener,
 } from "./model/fluxion-host";
 export { FluxionHost } from "./model/fluxion-host";
 export {

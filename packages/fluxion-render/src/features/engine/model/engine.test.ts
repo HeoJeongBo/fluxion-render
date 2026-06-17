@@ -193,6 +193,56 @@ describe("Engine", () => {
     engine.dispatch({ op: Op.DISPOSE });
   });
 
+  it("CONFIG_BATCH applies config to known ids and ignores unknown ones", () => {
+    const engine = new Engine();
+    const canvas = newCanvas(100, 100);
+    engine.dispatch({ op: Op.INIT, canvas, width: 100, height: 100, dpr: 1 });
+    engine.dispatch({
+      op: Op.ADD_LAYER,
+      id: "plot",
+      kind: "line",
+      config: { color: "#0ff", yRange: [0, 10] },
+    });
+    // Interleaved [t, y] samples spanning the default time window.
+    const ty = new Float32Array([0, 1, 100, 5, 200, 2]);
+    engine.dispatch({
+      op: Op.DATA,
+      id: "plot",
+      buffer: ty.buffer,
+      dtype: "f32",
+      length: ty.length,
+    });
+    flushFrame();
+    const ctx = (canvas as unknown as { getContext: () => FakeCtx }).getContext();
+    expect(ctx.calls.some((c) => c.name === "stroke")).toBe(true);
+
+    // Batch: hide the plot + target a non-existent layer in one message.
+    engine.dispatch({
+      op: Op.CONFIG_BATCH,
+      entries: [
+        { id: "plot", config: { visible: false } },
+        { id: "ghost", config: { visible: true } },
+      ],
+    });
+    ctx.calls.length = 0;
+    flushFrame();
+    expect(ctx.calls.some((c) => c.name === "stroke")).toBe(false);
+    engine.dispatch({ op: Op.DISPOSE });
+  });
+
+  it("CONFIG_BATCH with only unknown ids is a no-op (no throw)", () => {
+    const engine = new Engine();
+    const canvas = newCanvas(100, 100);
+    engine.dispatch({ op: Op.INIT, canvas, width: 100, height: 100, dpr: 1 });
+    expect(() =>
+      engine.dispatch({
+        op: Op.CONFIG_BATCH,
+        entries: [{ id: "ghost", config: { visible: false } }],
+      }),
+    ).not.toThrow();
+    engine.dispatch({ op: Op.DISPOSE });
+  });
+
   it("RESIZE updates canvas backbuffer and viewport", () => {
     const engine = new Engine();
     const canvas = newCanvas(100, 100);

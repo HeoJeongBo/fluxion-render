@@ -432,6 +432,71 @@ describe("FluxionHost", () => {
     });
   });
 
+  describe("onMetricsUpdate", () => {
+    it("fires a snapshot on the interval and stops on unsubscribe", () => {
+      vi.useFakeTimers();
+      try {
+        const { worker } = makeFakeWorker();
+        const host = new FluxionHost(makeCanvas(), { workerFactory: () => worker });
+        const cb = vi.fn();
+        const unsub = host.onMetricsUpdate(cb, { intervalMs: 100 });
+
+        host.pushData("a", new Float32Array([1, 2, 3, 4]));
+        vi.advanceTimersByTime(100);
+        expect(cb).toHaveBeenCalledTimes(1);
+        expect(cb.mock.calls[0]![0].sampleCount).toBe(4);
+
+        unsub();
+        vi.advanceTimersByTime(300);
+        expect(cb).toHaveBeenCalledTimes(1); // no more fires after unsubscribe
+        host.dispose();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it("shares one interval across multiple subscribers (default rate)", () => {
+      vi.useFakeTimers();
+      try {
+        const setIntervalSpy = vi.spyOn(globalThis, "setInterval");
+        const { worker } = makeFakeWorker();
+        const host = new FluxionHost(makeCanvas(), { workerFactory: () => worker });
+        const a = vi.fn();
+        const b = vi.fn();
+        const unsubA = host.onMetricsUpdate(a);
+        const unsubB = host.onMetricsUpdate(b);
+        // Only the first subscriber starts the timer.
+        const timerStarts = setIntervalSpy.mock.calls.length;
+        expect(timerStarts).toBe(1);
+
+        vi.advanceTimersByTime(250);
+        expect(a).toHaveBeenCalledTimes(1);
+        expect(b).toHaveBeenCalledTimes(1);
+
+        unsubA();
+        unsubB();
+        host.dispose();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it("dispose clears the metrics interval", () => {
+      vi.useFakeTimers();
+      try {
+        const { worker } = makeFakeWorker();
+        const host = new FluxionHost(makeCanvas(), { workerFactory: () => worker });
+        const cb = vi.fn();
+        host.onMetricsUpdate(cb, { intervalMs: 100 });
+        host.dispose();
+        vi.advanceTimersByTime(300);
+        expect(cb).not.toHaveBeenCalled();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+  });
+
   it("onBoundsChange fires when worker sends BOUNDS_UPDATE", () => {
     const { worker } = makeFakeWorker();
     let messageHandler: ((evt: Event) => void) | null = null;
@@ -631,6 +696,75 @@ describe("FluxionHost", () => {
     host.configLayer("axis", { yTickFormat: (v: number) => `${v}` });
     const cfg = posts[0].msg as { config: Record<string, unknown> };
     expect(cfg.config.yTickFormat).toBeUndefined();
+    host.dispose();
+  });
+
+  it("configLayers posts a single CONFIG_BATCH with all entries", () => {
+    const { worker, posts } = makeFakeWorker();
+    const host = new FluxionHost(makeCanvas(), { workerFactory: () => worker });
+    posts.length = 0;
+    host.configLayers([
+      { id: "a", config: { visible: false } },
+      { id: "b", config: { lineWidth: 2 } },
+    ]);
+    expect(posts).toHaveLength(1);
+    const msg = posts[0].msg as {
+      op: number;
+      entries: Array<{ id: string; config: unknown }>;
+    };
+    expect(msg.op).toBe(Op.CONFIG_BATCH);
+    expect(msg.entries.map((e) => e.id)).toEqual(["a", "b"]);
+    host.dispose();
+  });
+
+  it("configLayers with an empty array posts nothing", () => {
+    const { worker, posts } = makeFakeWorker();
+    const host = new FluxionHost(makeCanvas(), { workerFactory: () => worker });
+    posts.length = 0;
+    host.configLayers([]);
+    expect(posts).toHaveLength(0);
+    host.dispose();
+  });
+
+  it("configLayers strips function fields per entry", () => {
+    const { worker, posts } = makeFakeWorker();
+    const host = new FluxionHost(makeCanvas(), { workerFactory: () => worker });
+    posts.length = 0;
+    host.configLayers([
+      { id: "axis", config: { yTickFormat: (v: number) => `${v}`, gridLineWidth: 2 } },
+    ]);
+    const msg = posts[0].msg as {
+      entries: Array<{ config: Record<string, unknown> }>;
+    };
+    expect(msg.entries[0].config.yTickFormat).toBeUndefined();
+    expect(msg.entries[0].config.gridLineWidth).toBe(2);
+    host.dispose();
+  });
+
+  it("setLayerVisibility (single + map) delegates to one CONFIG_BATCH", () => {
+    const { worker, posts } = makeFakeWorker();
+    const host = new FluxionHost(makeCanvas(), { workerFactory: () => worker });
+
+    posts.length = 0;
+    host.setLayerVisibility("a", true);
+    expect(posts).toHaveLength(1);
+    const single = posts[0].msg as {
+      op: number;
+      entries: Array<{ id: string; config: { visible: boolean } }>;
+    };
+    expect(single.op).toBe(Op.CONFIG_BATCH);
+    expect(single.entries).toEqual([{ id: "a", config: { visible: true } }]);
+
+    posts.length = 0;
+    host.setLayerVisibility({ a: false, b: true });
+    expect(posts).toHaveLength(1);
+    const map = posts[0].msg as {
+      entries: Array<{ id: string; config: { visible: boolean } }>;
+    };
+    expect(map.entries).toEqual([
+      { id: "a", config: { visible: false } },
+      { id: "b", config: { visible: true } },
+    ]);
     host.dispose();
   });
 

@@ -18,6 +18,7 @@ export const Op = {
   SET_AXIS_STYLE: 12,
   CLEAR_DATA: 13,
   SET_VISIBLE: 14,
+  CONFIG_BATCH: 15,
 } as const;
 export type Op = (typeof Op)[keyof typeof Op];
 
@@ -86,6 +87,19 @@ export interface ConfigMsg {
   op: typeof Op.CONFIG;
   id: string;
   config: unknown;
+  hostId?: string;
+}
+
+/**
+ * Batched layer-config update: applies several `CONFIG`-equivalent updates in a
+ * single message. The engine resolves each entry's layer and calls `setConfig`,
+ * then recomputes continuous-mode / marks dirty once for the whole batch.
+ * Used by `FluxionHost.configLayers` / `setLayerVisibility` so toggling many
+ * series (e.g. a grid of charts) costs one postMessage instead of N.
+ */
+export interface ConfigBatchMsg {
+  op: typeof Op.CONFIG_BATCH;
+  entries: Array<{ id: string; config: unknown }>;
   hostId?: string;
 }
 
@@ -199,6 +213,7 @@ export type HostMsg =
   | AddLayerMsg
   | RemoveLayerMsg
   | ConfigMsg
+  | ConfigBatchMsg
   | DataMsg
   | DisposeMsg
   | SetBgColorMsg

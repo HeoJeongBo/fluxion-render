@@ -149,6 +149,21 @@ export class Engine {
         }
         break;
       }
+      case Op.CONFIG_BATCH: {
+        let applied = false;
+        for (const { id, config } of msg.entries) {
+          const layer = this.stack.get(id);
+          if (layer) {
+            layer.setConfig(config);
+            applied = true;
+          }
+        }
+        if (applied) {
+          this.syncContinuousMode();
+          this.scheduler.markDirty();
+        }
+        break;
+      }
       case Op.DATA: {
         const layer = this.stack.get(msg.id);
         if (layer) {

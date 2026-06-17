@@ -25,6 +25,7 @@ export {
   trajectoryLayer,
 } from "./lib/layer-specs";
 export { legendFromLayers } from "./lib/legend-from-layers";
+export { subscribeTicker, useSharedTicker } from "./lib/shared-ticker";
 export { useXAxisCanvas, useYAxisCanvas } from "./lib/use-axis-canvas";
 export { useAxisTicks } from "./lib/use-axis-ticks";
 export type {
@@ -47,6 +48,7 @@ export type {
 export { useFluxionTable } from "./lib/use-fluxion-table";
 export { useFluxionWorkerPool } from "./lib/use-fluxion-worker-pool";
 export { useLayerConfig } from "./lib/use-layer-config";
+export { useLayersConfig } from "./lib/use-layers-config";
 export type { ResizeInfo } from "./lib/use-resize-observer";
 export { useResizeObserver } from "./lib/use-resize-observer";
 export type { FluxionCanvasHandle, FluxionCanvasProps } from "./ui/fluxion-canvas";

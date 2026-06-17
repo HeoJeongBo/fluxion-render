@@ -10,6 +10,7 @@ describe("Op", () => {
     expect(Op.CONFIG).toBe(5);
     expect(Op.DATA).toBe(6);
     expect(Op.DISPOSE).toBe(7);
+    expect(Op.CONFIG_BATCH).toBe(15);
   });
 
   it("is frozen-as-const (no duplicate codes)", () => {
@@ -30,6 +31,18 @@ describe("HostMsg discriminated union", () => {
     if (msg.op === Op.DATA) {
       expect(msg.dtype).toBe("f32");
       expect(msg.length).toBe(2);
+    } else {
+      throw new Error("narrowing failed");
+    }
+  });
+
+  it("narrows CONFIG_BATCH to its entries array", () => {
+    const msg: HostMsg = {
+      op: Op.CONFIG_BATCH,
+      entries: [{ id: "a", config: { visible: false } }],
+    };
+    if (msg.op === Op.CONFIG_BATCH) {
+      expect(msg.entries[0].id).toBe("a");
     } else {
       throw new Error("narrowing failed");
     }

@@ -3,15 +3,15 @@ import { legendFromLayers } from "./legend-from-layers";
 import type { FluxionLayerSpec } from "./use-fluxion-canvas";
 
 describe("legendFromLayers", () => {
-  it("derives one item per colored data layer, labeled by config.label", () => {
+  it("derives one item per colored data layer, labeled by id (or override)", () => {
     const layers: FluxionLayerSpec[] = [
       { id: "axis", kind: "axis-grid" },
-      { id: "a", kind: "line", config: { color: "#f00", label: "Series A" } },
-      { id: "b", kind: "area", config: { color: "#0f0" } }, // no label → id
+      { id: "a", kind: "line", config: { color: "#f00" } },
+      { id: "b", kind: "area", config: { color: "#0f0" } },
     ];
-    expect(legendFromLayers(layers)).toEqual([
-      { color: "#f00", label: "Series A" },
-      { color: "#0f0", label: "b" },
+    expect(legendFromLayers(layers, { a: "Series A" })).toEqual([
+      { color: "#f00", label: "Series A" }, // override
+      { color: "#0f0", label: "b" }, // id fallback
     ]);
   });
 

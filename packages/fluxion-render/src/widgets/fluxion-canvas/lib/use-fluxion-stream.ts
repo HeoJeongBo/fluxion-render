@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { FluxionHost } from "../../../features/host";
+import { subscribeTicker } from "./shared-ticker";
 
 export interface UseFluxionStreamOptions<T> {
   /** Live host from `useFluxionCanvas` (or `null` during mount). */
@@ -19,6 +20,14 @@ export interface UseFluxionStreamOptions<T> {
    * this tick for rate tracking; return 0 if you don't care.
    */
   tick: (tMs: number, state: T) => number;
+  /**
+   * When true, this stream pumps off a process-wide shared timer (coalesced
+   * by `intervalMs`) instead of its own `setInterval`, and pauses while the
+   * page is hidden. Use it when many streams tick at the same rate to cut
+   * timer overhead. Default false (each stream owns its own interval — the
+   * original behavior, unchanged).
+   */
+  shared?: boolean;
 }
 
 export interface UseFluxionStreamResult {
@@ -48,7 +57,7 @@ export interface UseFluxionStreamResult {
 export function useFluxionStream<T>(
   opts: UseFluxionStreamOptions<T>,
 ): UseFluxionStreamResult {
-  const { host, intervalMs } = opts;
+  const { host, intervalMs, shared = false } = opts;
   const setupRef = useRef(opts.setup);
   const tickRef = useRef(opts.tick);
   setupRef.current = opts.setup;
@@ -79,8 +88,7 @@ export function useFluxionStream<T>(
     let pushes = 0;
     let lastReport = t0;
 
-    const interval = setInterval(() => {
-      const now = Date.now();
+    const pump = (now: number): void => {
       const t = now - t0;
       let n = 0;
       try {
@@ -94,13 +102,22 @@ export function useFluxionStream<T>(
         pushes = 0;
         lastReport = now;
       }
-    }, intervalMs);
+    };
 
+    if (shared) {
+      const unsubscribe = subscribeTicker(intervalMs, pump);
+      return () => {
+        unsubscribe();
+        setRate(0);
+      };
+    }
+
+    const interval = setInterval(() => pump(Date.now()), intervalMs);
     return () => {
       clearInterval(interval);
       setRate(0);
     };
-  }, [host, intervalMs]);
+  }, [host, intervalMs, shared]);
 
   return { rate };
 }
