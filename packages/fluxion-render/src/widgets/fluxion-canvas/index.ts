@@ -61,3 +61,9 @@ export type {
   FluxionTableProps,
 } from "./ui/fluxion-table";
 export { FluxionTable } from "./ui/fluxion-table";
+export { Sparkline, type SparklineProps } from "./ui/sparkline";
+export {
+  type BadgeTone,
+  TableCellBadge,
+  type TableCellBadgeProps,
+} from "./ui/table-cell-badge";

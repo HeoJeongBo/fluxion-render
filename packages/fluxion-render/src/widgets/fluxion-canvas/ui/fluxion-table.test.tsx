@@ -1,6 +1,8 @@
-import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, describe, expect, it } from "vitest";
 import { FluxionTable, type FluxionTableColumn } from "./fluxion-table";
+
+afterEach(cleanup);
 
 type Row = { id: string; value: number; label: string };
 
@@ -110,5 +112,80 @@ describe("FluxionTable", () => {
     const { container } = render(<FluxionTable columns={COLUMNS} rows={ROWS} />);
     expect(container.querySelectorAll("th").length).toBe(COLUMNS.length);
     expect(container.querySelectorAll("td").length).toBe(ROWS.length * COLUMNS.length);
+  });
+
+  describe("sortable columns", () => {
+    const sortCols: FluxionTableColumn<Row>[] = [
+      { key: "id", header: "ID", sortable: true },
+      { key: "value", header: "Value", sortable: true },
+      { key: "label", header: "Label" }, // not sortable
+    ];
+    const unsorted: Row[] = [
+      { id: "b", value: 30, label: "z" },
+      { id: "a", value: 10, label: "y" },
+      { id: "c", value: 20, label: "x" },
+    ];
+
+    function firstColumnValues(container: HTMLElement, colIndex: number): string[] {
+      return Array.from(container.querySelectorAll("tbody tr")).map(
+        (tr) => tr.children[colIndex]!.textContent ?? "",
+      );
+    }
+
+    it("sorts numbers ascending then descending on header clicks", () => {
+      const { container } = render(<FluxionTable columns={sortCols} rows={unsorted} />);
+      const valueHeader = screen.getByText(/Value/);
+      fireEvent.click(valueHeader);
+      expect(firstColumnValues(container, 1)).toEqual(["10", "20", "30"]);
+      fireEvent.click(valueHeader);
+      expect(firstColumnValues(container, 1)).toEqual(["30", "20", "10"]);
+    });
+
+    it("sorts strings with locale compare", () => {
+      const { container } = render(<FluxionTable columns={sortCols} rows={unsorted} />);
+      fireEvent.click(screen.getByText(/ID/));
+      expect(firstColumnValues(container, 0)).toEqual(["a", "b", "c"]);
+    });
+
+    it("ignores clicks on non-sortable headers", () => {
+      const { container } = render(<FluxionTable columns={sortCols} rows={unsorted} />);
+      fireEvent.click(screen.getByText("Label"));
+      // order unchanged
+      expect(firstColumnValues(container, 0)).toEqual(["b", "a", "c"]);
+    });
+
+    it("keeps equal values stable", () => {
+      const rows: Row[] = [
+        { id: "a", value: 5, label: "p" },
+        { id: "b", value: 5, label: "q" },
+      ];
+      const { container } = render(<FluxionTable columns={sortCols} rows={rows} />);
+      fireEvent.click(screen.getByText(/Value/));
+      expect(firstColumnValues(container, 0)).toEqual(["a", "b"]);
+    });
+
+    it("falls back to unsorted when the active sort column disappears", () => {
+      const { container, rerender } = render(
+        <FluxionTable columns={sortCols} rows={unsorted} />,
+      );
+      fireEvent.click(screen.getByText(/Value/)); // sort by value
+      expect(firstColumnValues(container, 0)).toEqual(["a", "c", "b"]);
+      // Re-render without the "value" column → sort key no longer resolvable.
+      const fewerCols: FluxionTableColumn<Row>[] = [
+        { key: "id", header: "ID", sortable: true },
+        { key: "label", header: "Label" },
+      ];
+      rerender(<FluxionTable columns={fewerCols} rows={unsorted} />);
+      // Back to original row order (sort guard returns rows).
+      expect(firstColumnValues(container, 0)).toEqual(["b", "a", "c"]);
+    });
+  });
+
+  it("marks the header sticky when stickyHeader is set", () => {
+    const { container } = render(
+      <FluxionTable columns={COLUMNS} rows={ROWS} stickyHeader />,
+    );
+    const th = container.querySelector("th") as HTMLElement;
+    expect(th.style.position).toBe("sticky");
   });
 });

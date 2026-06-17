@@ -1,9 +1,11 @@
-import type { CSSProperties, ReactNode } from "react";
+import { type CSSProperties, type ReactNode, useMemo, useState } from "react";
 
 export interface FluxionTableColumn<R extends Record<string, unknown>> {
   key: keyof R & string;
   header: string;
   render?: (value: R[keyof R & string], row: R) => ReactNode;
+  /** Allow clicking this column's header to sort rows by its value. Default false. */
+  sortable?: boolean;
 }
 
 export interface FluxionTableClassNames {
@@ -21,6 +23,12 @@ export interface FluxionTableProps<R extends Record<string, unknown>> {
   rows: R[];
   classNames?: FluxionTableClassNames;
   style?: CSSProperties;
+  /**
+   * Keep the header row pinned while the body scrolls vertically. Pair with a
+   * fixed `maxHeight` (via `style`) so the body has somewhere to scroll. Default
+   * false.
+   */
+  stickyHeader?: boolean;
 }
 
 const S = {
@@ -48,6 +56,15 @@ const S = {
     borderBottom: "1px solid #e2e8f0",
     whiteSpace: "nowrap" as const,
   },
+  thSticky: {
+    position: "sticky" as const,
+    top: 0,
+    zIndex: 1,
+  },
+  thSortable: {
+    cursor: "pointer" as const,
+    userSelect: "none" as const,
+  },
   td: {
     padding: "10px 16px",
     textAlign: "center" as const,
@@ -74,7 +91,35 @@ export function FluxionTable<R extends Record<string, unknown>>({
   rows,
   classNames = {},
   style,
+  stickyHeader = false,
 }: FluxionTableProps<R>) {
+  const [sort, setSort] = useState<{ key: string; dir: 1 | -1 } | null>(null);
+
+  const sortedRows = useMemo(() => {
+    if (!sort) return rows;
+    const col = columns.find((c) => c.key === sort.key);
+    if (!col?.sortable) return rows;
+    return [...rows].sort((a, b) => {
+      const av = a[sort.key as keyof R];
+      const bv = b[sort.key as keyof R];
+      if (av === bv) return 0;
+      // Numbers compare numerically; everything else by locale string.
+      if (typeof av === "number" && typeof bv === "number") {
+        return (av - bv) * sort.dir;
+      }
+      return String(av).localeCompare(String(bv)) * sort.dir;
+    });
+  }, [rows, columns, sort]);
+
+  const onHeaderClick = (col: FluxionTableColumn<R>) => {
+    if (!col.sortable) return;
+    setSort((prev) =>
+      prev?.key === col.key
+        ? { key: col.key, dir: prev.dir === 1 ? -1 : 1 }
+        : { key: col.key, dir: 1 },
+    );
+  };
+
   return (
     <div
       className={classNames.root}
@@ -83,19 +128,38 @@ export function FluxionTable<R extends Record<string, unknown>>({
       <table className={classNames.table} style={classNames.table ? undefined : S.table}>
         <thead className={classNames.thead}>
           <tr className={classNames.tr}>
-            {columns.map((col) => (
-              <th
-                key={col.key}
-                className={classNames.th}
-                style={classNames.th ? undefined : S.th}
-              >
-                {col.header}
-              </th>
-            ))}
+            {columns.map((col) => {
+              const active = sort?.key === col.key;
+              const arrow = col.sortable
+                ? active
+                  ? sort!.dir === 1
+                    ? " ▲"
+                    : " ▼"
+                  : " ⇅"
+                : "";
+              const thStyle = classNames.th
+                ? undefined
+                : {
+                    ...S.th,
+                    ...(stickyHeader ? S.thSticky : null),
+                    ...(col.sortable ? S.thSortable : null),
+                  };
+              return (
+                <th
+                  key={col.key}
+                  className={classNames.th}
+                  style={thStyle}
+                  onClick={() => onHeaderClick(col)}
+                >
+                  {col.header}
+                  {arrow}
+                </th>
+              );
+            })}
           </tr>
         </thead>
         <tbody className={classNames.tbody}>
-          {rows.map((row, i) => (
+          {sortedRows.map((row, i) => (
             // eslint-disable-next-line react/no-array-index-key
             <tr
               key={i}
