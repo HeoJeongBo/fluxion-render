@@ -34,6 +34,8 @@ export {
   type ScatterColoredSample,
   ScatterLayerHandle,
   type ScatterSample,
+  StackedAreaHandle,
+  type StackedAreaSample,
   StepLayerHandle,
   TrajectoryHandle,
   type TrajectorySample,

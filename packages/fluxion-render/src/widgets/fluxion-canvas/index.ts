@@ -15,6 +15,7 @@ export {
   referenceLineLayer,
   scatterColoredLayer,
   scatterLayer,
+  stackedAreaLayer,
   stepLayer,
   trajectoryLayer,
 } from "./lib/layer-specs";

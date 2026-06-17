@@ -582,6 +582,55 @@ export class TrajectoryHandle {
 }
 
 // ────────────────────────────────────────────────────────────────────────────
+// StackedArea — data layout: [t, y0, y1, …, y_{k-1}, …] stride = seriesCount+1
+// ────────────────────────────────────────────────────────────────────────────
+
+export interface StackedAreaSample {
+  /** Host-relative timestamp in ms. */
+  t: number;
+  /** One value per stacked series. Length must equal the layer's seriesCount. */
+  values: ArrayLike<number>;
+}
+
+export class StackedAreaHandle {
+  constructor(
+    private readonly sink: FluxionDataSink,
+    readonly id: string,
+  ) {}
+
+  push(sample: StackedAreaSample): void {
+    const k = sample.values.length;
+    const buf = new Float32Array(k + 1);
+    buf[0] = sample.t;
+    for (let i = 0; i < k; i++) buf[i + 1] = sample.values[i]!;
+    this.sink.pushData(this.id, buf);
+  }
+
+  pushBatch(samples: readonly StackedAreaSample[]): void {
+    const n = samples.length;
+    if (n === 0) return;
+    const k = samples[0]!.values.length;
+    const stride = k + 1;
+    const buf = new Float32Array(n * stride);
+    for (let i = 0; i < n; i++) {
+      const s = samples[i]!;
+      buf[i * stride] = s.t;
+      for (let j = 0; j < k; j++) buf[i * stride + 1 + j] = s.values[j]!;
+    }
+    this.sink.pushData(this.id, buf);
+  }
+
+  pushRaw(data: Float32Array): void {
+    this.sink.pushData(this.id, data);
+  }
+
+  /** Drop the ring buffer and (optionally) rewind `viewport.latestT`. */
+  reset(latestT?: number): void {
+    this.sink.clearLayer(this.id, { latestT });
+  }
+}
+
+// ────────────────────────────────────────────────────────────────────────────
 // Histogram — data layout: [v0, v1, v2, ...] raw values (binned in the layer)
 // ────────────────────────────────────────────────────────────────────────────
 

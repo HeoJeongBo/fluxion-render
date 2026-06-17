@@ -15,6 +15,7 @@ export type { PoseArrowConfig } from "./entities/pose-arrow-layer";
 export type { ReferenceLineConfig } from "./entities/reference-line-layer";
 export type { ScatterChartConfig } from "./entities/scatter-chart-layer";
 export type { ScatterColoredConfig } from "./entities/scatter-colored-layer";
+export type { StackedAreaConfig } from "./entities/stacked-area-layer";
 export type { StepChartConfig } from "./entities/step-chart-layer";
 export type { TrajectoryConfig } from "./entities/trajectory-layer";
 export {
@@ -57,6 +58,7 @@ export type {
   PoseArrowSample,
   ScatterColoredSample,
   ScatterSample,
+  StackedAreaSample,
   TrajectorySample,
   XyPoint,
 } from "./features/host";
@@ -80,6 +82,7 @@ export {
   ReferenceLineHandle,
   ScatterColoredHandle,
   ScatterLayerHandle,
+  StackedAreaHandle,
   StepLayerHandle,
   TrajectoryHandle,
 } from "./features/host";
@@ -124,6 +127,7 @@ export {
   referenceLineLayer,
   scatterColoredLayer,
   scatterLayer,
+  stackedAreaLayer,
   stepLayer,
   trajectoryLayer,
 } from "./widgets/fluxion-canvas/lib/layer-specs";

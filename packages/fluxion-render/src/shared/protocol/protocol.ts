@@ -39,7 +39,8 @@ export type LayerKind =
   | "pose-arrow"
   | "trajectory"
   | "occupancy-grid"
-  | "histogram";
+  | "histogram"
+  | "stacked-area";
 
 export type DType = "f32" | "u8" | "i16" | "u16" | "i32";
 

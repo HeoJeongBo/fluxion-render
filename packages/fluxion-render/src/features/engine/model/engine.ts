@@ -15,6 +15,7 @@ import { PoseArrowLayer } from "../../../entities/pose-arrow-layer";
 import { ReferenceLineLayer } from "../../../entities/reference-line-layer";
 import { ScatterChartLayer } from "../../../entities/scatter-chart-layer";
 import { ScatterColoredLayer } from "../../../entities/scatter-colored-layer";
+import { StackedAreaLayer } from "../../../entities/stacked-area-layer";
 import { StepChartLayer } from "../../../entities/step-chart-layer";
 import { TrajectoryLayer } from "../../../entities/trajectory-layer";
 import type { Layer } from "../../../shared/model/layer";
@@ -67,6 +68,8 @@ function createLayer(id: string, kind: LayerKind): Layer {
       return new OccupancyGridLayer(id);
     case "histogram":
       return new HistogramLayer(id);
+    case "stacked-area":
+      return new StackedAreaLayer(id);
   }
 }
 

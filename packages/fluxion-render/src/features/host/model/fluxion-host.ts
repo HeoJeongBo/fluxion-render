@@ -34,6 +34,7 @@ import {
   ReferenceLineHandle,
   ScatterColoredHandle,
   ScatterLayerHandle,
+  StackedAreaHandle,
   StepLayerHandle,
   TrajectoryHandle,
 } from "./layer-handles";
@@ -431,6 +432,10 @@ export class FluxionHost {
 
   histogram(id: string): HistogramHandle {
     return new HistogramHandle(this, id);
+  }
+
+  stackedArea(id: string): StackedAreaHandle {
+    return new StackedAreaHandle(this, id);
   }
 
   /**

@@ -16,6 +16,7 @@ import {
   referenceLineLayer,
   scatterColoredLayer,
   scatterLayer,
+  stackedAreaLayer,
   stepLayer,
   trajectoryLayer,
 } from "./layer-specs";
@@ -197,6 +198,14 @@ describe("histogramLayer", () => {
   });
 });
 
+describe("stackedAreaLayer", () => {
+  it("returns kind=stacked-area with given id", () => {
+    const spec = stackedAreaLayer("sa");
+    expect(spec.kind).toBe("stacked-area");
+    expect(spec.id).toBe("sa");
+  });
+});
+
 describe("all layer factories", () => {
   it("each factory returns an object with id, kind, and config properties", () => {
     const factories = [
@@ -218,6 +227,7 @@ describe("all layer factories", () => {
       trajectoryLayer("p"),
       occupancyGridLayer("q"),
       histogramLayer("r"),
+      stackedAreaLayer("s"),
     ];
 
     for (const spec of factories) {
@@ -248,6 +258,7 @@ describe("all layer factories", () => {
       trajectoryLayer(id),
       occupancyGridLayer(id),
       histogramLayer(id),
+      stackedAreaLayer(id),
     ];
 
     for (const spec of specs) {

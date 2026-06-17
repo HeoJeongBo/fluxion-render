@@ -86,6 +86,7 @@ export {
   referenceLineLayer,
   scatterColoredLayer,
   scatterLayer,
+  stackedAreaLayer,
   stepLayer,
   trajectoryLayer,
   type UseFluxionCanvasOptions,

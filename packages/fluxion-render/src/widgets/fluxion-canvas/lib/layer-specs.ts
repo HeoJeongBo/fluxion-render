@@ -14,6 +14,7 @@ import type { PoseArrowConfig } from "../../../entities/pose-arrow-layer";
 import type { ReferenceLineConfig } from "../../../entities/reference-line-layer";
 import type { ScatterChartConfig } from "../../../entities/scatter-chart-layer";
 import type { ScatterColoredConfig } from "../../../entities/scatter-colored-layer";
+import type { StackedAreaConfig } from "../../../entities/stacked-area-layer";
 import type { StepChartConfig } from "../../../entities/step-chart-layer";
 import type { TrajectoryConfig } from "../../../entities/trajectory-layer";
 import type { FluxionLayerSpec } from "./use-fluxion-canvas";
@@ -124,4 +125,11 @@ export function occupancyGridLayer(
 
 export function histogramLayer(id: string, config?: HistogramConfig): FluxionLayerSpec {
   return { id, kind: "histogram", config };
+}
+
+export function stackedAreaLayer(
+  id: string,
+  config?: StackedAreaConfig,
+): FluxionLayerSpec {
+  return { id, kind: "stacked-area", config };
 }

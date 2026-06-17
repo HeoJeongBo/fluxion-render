@@ -16,6 +16,7 @@ import {
   ReferenceLineHandle,
   ScatterColoredHandle,
   ScatterLayerHandle,
+  StackedAreaHandle,
   StepLayerHandle,
   TrajectoryHandle,
 } from "./layer-handles";
@@ -267,6 +268,50 @@ describe("TrajectoryHandle", () => {
     const h = new TrajectoryHandle(sink, "tj");
     h.reset(500);
     expect(clears[0]).toEqual({ id: "tj", opts: { latestT: 500 } });
+  });
+});
+
+describe("StackedAreaHandle", () => {
+  it("push encodes [t, ...values]", () => {
+    const { sink, pushes } = makeFakeSink();
+    const h = new StackedAreaHandle(sink, "sa");
+    h.push({ t: 100, values: [1, 2, 3] });
+    expect(pushes).toHaveLength(1);
+    expect(pushes[0].id).toBe("sa");
+    expect(Array.from(pushes[0].data)).toEqual([100, 1, 2, 3]);
+  });
+
+  it("pushBatch encodes every sample with one stride", () => {
+    const { sink, pushes } = makeFakeSink();
+    const h = new StackedAreaHandle(sink, "sa");
+    h.pushBatch([
+      { t: 100, values: [1, 2] },
+      { t: 200, values: [3, 4] },
+    ]);
+    expect(pushes).toHaveLength(1);
+    expect(Array.from(pushes[0].data)).toEqual([100, 1, 2, 200, 3, 4]);
+  });
+
+  it("pushBatch is a no-op for empty arrays", () => {
+    const { sink, pushes } = makeFakeSink();
+    const h = new StackedAreaHandle(sink, "sa");
+    h.pushBatch([]);
+    expect(pushes).toHaveLength(0);
+  });
+
+  it("pushRaw forwards the buffer unchanged", () => {
+    const { sink, pushes } = makeFakeSink();
+    const h = new StackedAreaHandle(sink, "sa");
+    const raw = new Float32Array([100, 1, 2]);
+    h.pushRaw(raw);
+    expect(pushes[0].data).toBe(raw);
+  });
+
+  it("reset forwards a rewind to clearLayer", () => {
+    const { sink, clears } = makeFakeSink();
+    const h = new StackedAreaHandle(sink, "sa");
+    h.reset(900);
+    expect(clears[0]).toEqual({ id: "sa", opts: { latestT: 900 } });
   });
 });
 
