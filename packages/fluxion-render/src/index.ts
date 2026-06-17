@@ -50,6 +50,7 @@ export type {
   EventSeverity,
   FluxionDataSink,
   FluxionHostOptions,
+  FluxionMetrics,
   FluxionTypedArray,
   FluxionWorkerPoolOptions,
   HeatmapPoint,

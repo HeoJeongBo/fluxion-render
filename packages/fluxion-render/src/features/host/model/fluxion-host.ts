@@ -118,6 +118,22 @@ function dtypeOf(arr: FluxionTypedArray): DType {
 /** Callback shape for `onBoundsChange`. */
 export type BoundsChangeListener = (yMin: number, yMax: number, latestT: number) => void;
 
+/** Snapshot of main-thread-observable host activity, returned by `getMetrics`. */
+export interface FluxionMetrics {
+  /** Total `pushData` calls across all layers since mount. */
+  pushCount: number;
+  /** Total samples pushed (sum of `length` across pushes). */
+  sampleCount: number;
+  /** Total bytes transferred to the worker (sum of pushed buffer byteLengths). */
+  bytesTransferred: number;
+  /** Per-layer push counts, keyed by layer id. */
+  pushesByLayer: Record<string, number>;
+  /** `performance.now()` of the most recent push, or null if none yet. */
+  lastPushAt: number | null;
+  /** Latest y-bounds + latestT seen from the worker's BOUNDS_UPDATE, or null. */
+  bounds: { yMin: number; yMax: number; latestT: number } | null;
+}
+
 /** Callback shape for `onTickUpdate`. Receives serialized tick arrays from the worker. */
 export type TickUpdateListener = (
   xTicks: SerializedTick[],
@@ -158,6 +174,13 @@ export class FluxionHost {
   private disposed = false;
   private boundsListeners: BoundsChangeListener[] = [];
   private tickListeners: TickUpdateListener[] = [];
+  // Diagnostics — see getMetrics().
+  private pushCount = 0;
+  private sampleCount = 0;
+  private bytesTransferred = 0;
+  private pushesByLayer = new Map<string, number>();
+  private lastPushAt: number | null = null;
+  private lastBounds: { yMin: number; yMax: number; latestT: number } | null = null;
   private workerMsgHandler: EventListener | null = null;
   private visibilityHandler: (() => void) | null = null;
 
@@ -221,6 +244,7 @@ export class FluxionHost {
       if (!msg || typeof msg !== "object" || !("op" in msg)) return;
       if (msg.op === WorkerOp.BOUNDS_UPDATE) {
         const bu = msg as BoundsUpdateMsg;
+        this.lastBounds = { yMin: bu.yMin, yMax: bu.yMax, latestT: bu.latestT };
         for (const fn of this.boundsListeners) fn(bu.yMin, bu.yMax, bu.latestT);
       }
       if (msg.op === WorkerOp.TICK_UPDATE) {
@@ -464,6 +488,15 @@ export class FluxionHost {
       );
     }
     const buffer = data.buffer as ArrayBuffer;
+    // Diagnostics: record before the buffer is transferred (detached after post).
+    this.pushCount++;
+    this.sampleCount += data.length;
+    this.bytesTransferred += buffer.byteLength;
+    this.pushesByLayer.set(id, (this.pushesByLayer.get(id) ?? 0) + 1);
+    /* v8 ignore start -- `performance` is always defined in the DOM test env; SSR fallback unreachable */
+    this.lastPushAt =
+      typeof performance !== "undefined" ? performance.now() : this.pushCount;
+    /* v8 ignore stop */
     this.post(
       {
         op: Op.DATA,
@@ -474,6 +507,23 @@ export class FluxionHost {
       },
       [buffer],
     );
+  }
+
+  /**
+   * Snapshot of main-thread-observable activity for debugging dashboards —
+   * push/sample/byte counters, per-layer push counts, last-push time, and the
+   * latest worker-reported bounds. Cheap; safe to poll. Note these are
+   * main-thread metrics (what was sent); ring eviction happens worker-side.
+   */
+  getMetrics(): FluxionMetrics {
+    return {
+      pushCount: this.pushCount,
+      sampleCount: this.sampleCount,
+      bytesTransferred: this.bytesTransferred,
+      pushesByLayer: Object.fromEntries(this.pushesByLayer),
+      lastPushAt: this.lastPushAt,
+      bounds: this.lastBounds ? { ...this.lastBounds } : null,
+    };
   }
 
   /**

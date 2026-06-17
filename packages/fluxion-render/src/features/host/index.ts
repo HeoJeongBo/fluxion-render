@@ -3,6 +3,7 @@ export { configureDefaultPool, FluxionWorkerPool, getDefaultPool } from "../work
 export type {
   BoundsChangeListener,
   FluxionHostOptions,
+  FluxionMetrics,
   FluxionTypedArray,
 } from "./model/fluxion-host";
 export { FluxionHost } from "./model/fluxion-host";

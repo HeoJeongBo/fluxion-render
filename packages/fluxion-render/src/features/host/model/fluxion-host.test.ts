@@ -376,6 +376,62 @@ describe("FluxionHost", () => {
     expect(posts).toHaveLength(0);
   });
 
+  describe("getMetrics", () => {
+    it("starts at zero with null last-push and bounds", () => {
+      const { worker } = makeFakeWorker();
+      const host = new FluxionHost(makeCanvas(), { workerFactory: () => worker });
+      const m = host.getMetrics();
+      expect(m.pushCount).toBe(0);
+      expect(m.sampleCount).toBe(0);
+      expect(m.bytesTransferred).toBe(0);
+      expect(m.pushesByLayer).toEqual({});
+      expect(m.lastPushAt).toBeNull();
+      expect(m.bounds).toBeNull();
+      host.dispose();
+    });
+
+    it("accumulates push/sample/byte counters and per-layer counts", () => {
+      const { worker } = makeFakeWorker();
+      const host = new FluxionHost(makeCanvas(), { workerFactory: () => worker });
+      host.pushData("a", new Float32Array([1, 2, 3, 4])); // 4 samples, 16 bytes
+      host.pushData("a", new Float32Array([5, 6])); // 2 samples, 8 bytes
+      host.pushData("b", new Float32Array([7])); // 1 sample, 4 bytes
+      const m = host.getMetrics();
+      expect(m.pushCount).toBe(3);
+      expect(m.sampleCount).toBe(7);
+      expect(m.bytesTransferred).toBe(28);
+      expect(m.pushesByLayer).toEqual({ a: 2, b: 1 });
+      expect(m.lastPushAt).not.toBeNull();
+      host.dispose();
+    });
+
+    it("captures the latest worker bounds", () => {
+      const { worker } = makeFakeWorker();
+      let messageHandler: ((evt: Event) => void) | null = null;
+      const workerWithEvents = {
+        ...worker,
+        addEventListener: (_t: string, fn: EventListener) => {
+          messageHandler = fn as (evt: Event) => void;
+        },
+        removeEventListener: () => {},
+      };
+      const host = new FluxionHost(makeCanvas(), {
+        workerFactory: () => workerWithEvents as unknown as Worker,
+      });
+      messageHandler!({
+        data: {
+          op: WorkerOp.BOUNDS_UPDATE,
+          hostId: "x",
+          yMin: -2,
+          yMax: 8,
+          latestT: 900,
+        },
+      } as unknown as Event);
+      expect(host.getMetrics().bounds).toEqual({ yMin: -2, yMax: 8, latestT: 900 });
+      host.dispose();
+    });
+  });
+
   it("onBoundsChange fires when worker sends BOUNDS_UPDATE", () => {
     const { worker } = makeFakeWorker();
     let messageHandler: ((evt: Event) => void) | null = null;
