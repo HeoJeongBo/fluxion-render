@@ -9,11 +9,13 @@ export type { HeatmapStreamConfig } from "./entities/heatmap-stream-layer";
 export type { LidarScatterConfig } from "./entities/lidar-scatter-layer";
 export type { LineChartConfig } from "./entities/line-chart-layer";
 export type { LineChartStaticConfig } from "./entities/line-chart-static-layer";
+export type { OccupancyGridConfig } from "./entities/occupancy-grid-layer";
 export type { PoseArrowConfig } from "./entities/pose-arrow-layer";
 export type { ReferenceLineConfig } from "./entities/reference-line-layer";
 export type { ScatterChartConfig } from "./entities/scatter-chart-layer";
 export type { ScatterColoredConfig } from "./entities/scatter-colored-layer";
 export type { StepChartConfig } from "./entities/step-chart-layer";
+export type { TrajectoryConfig } from "./entities/trajectory-layer";
 export {
   type BrushSelection,
   FluxionBrush,
@@ -50,9 +52,11 @@ export type {
   LidarStride,
   LineSample,
   MarkerEvent,
+  OccupancyGrid,
   PoseArrowSample,
   ScatterColoredSample,
   ScatterSample,
+  TrajectorySample,
   XyPoint,
 } from "./features/host";
 export {
@@ -69,11 +73,13 @@ export {
   LidarLayerHandle,
   LineLayerHandle,
   LineStaticLayerHandle,
+  OccupancyGridHandle,
   PoseArrowHandle,
   ReferenceLineHandle,
   ScatterColoredHandle,
   ScatterLayerHandle,
   StepLayerHandle,
+  TrajectoryHandle,
 } from "./features/host";
 export {
   FluxionPieChart,
@@ -110,10 +116,12 @@ export {
   lidarLayer,
   lineLayer,
   lineStaticLayer,
+  occupancyGridLayer,
   poseArrowLayer,
   referenceLineLayer,
   scatterColoredLayer,
   scatterLayer,
   stepLayer,
+  trajectoryLayer,
 } from "./widgets/fluxion-canvas/lib/layer-specs";
 export type { FluxionLayerSpec } from "./widgets/fluxion-canvas/lib/use-fluxion-canvas";

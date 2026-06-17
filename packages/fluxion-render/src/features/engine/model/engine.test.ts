@@ -624,6 +624,8 @@ describe("Engine", () => {
       "heatmap-stream",
       "reference-line",
       "pose-arrow",
+      "trajectory",
+      "occupancy-grid",
     ] as const;
     for (const kind of kinds) {
       expect(() => engine.dispatch({ op: Op.ADD_LAYER, id: kind, kind })).not.toThrow();

@@ -9,11 +9,13 @@ export {
   lidarLayer,
   lineLayer,
   lineStaticLayer,
+  occupancyGridLayer,
   poseArrowLayer,
   referenceLineLayer,
   scatterColoredLayer,
   scatterLayer,
   stepLayer,
+  trajectoryLayer,
 } from "./lib/layer-specs";
 export { useXAxisCanvas, useYAxisCanvas } from "./lib/use-axis-canvas";
 export { useAxisTicks } from "./lib/use-axis-ticks";

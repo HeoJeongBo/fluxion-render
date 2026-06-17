@@ -9,11 +9,13 @@ import { LayerStack } from "../../../entities/layer-stack";
 import { LidarScatterLayer } from "../../../entities/lidar-scatter-layer";
 import { LineChartLayer } from "../../../entities/line-chart-layer";
 import { LineChartStaticLayer } from "../../../entities/line-chart-static-layer";
+import { OccupancyGridLayer } from "../../../entities/occupancy-grid-layer";
 import { PoseArrowLayer } from "../../../entities/pose-arrow-layer";
 import { ReferenceLineLayer } from "../../../entities/reference-line-layer";
 import { ScatterChartLayer } from "../../../entities/scatter-chart-layer";
 import { ScatterColoredLayer } from "../../../entities/scatter-colored-layer";
 import { StepChartLayer } from "../../../entities/step-chart-layer";
+import { TrajectoryLayer } from "../../../entities/trajectory-layer";
 import type { Layer } from "../../../shared/model/layer";
 import { Scheduler } from "../../../shared/model/scheduler";
 import { Viewport } from "../../../shared/model/viewport";
@@ -58,6 +60,10 @@ function createLayer(id: string, kind: LayerKind): Layer {
       return new ReferenceLineLayer(id);
     case "pose-arrow":
       return new PoseArrowLayer(id);
+    case "trajectory":
+      return new TrajectoryLayer(id);
+    case "occupancy-grid":
+      return new OccupancyGridLayer(id);
   }
 }
 

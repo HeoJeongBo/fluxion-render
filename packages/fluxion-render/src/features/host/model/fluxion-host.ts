@@ -28,11 +28,13 @@ import {
   type LidarStride,
   LineLayerHandle,
   LineStaticLayerHandle,
+  OccupancyGridHandle,
   PoseArrowHandle,
   ReferenceLineHandle,
   ScatterColoredHandle,
   ScatterLayerHandle,
   StepLayerHandle,
+  TrajectoryHandle,
 } from "./layer-handles";
 
 /**
@@ -416,6 +418,14 @@ export class FluxionHost {
 
   poseArrow(id: string): PoseArrowHandle {
     return new PoseArrowHandle(this, id);
+  }
+
+  trajectory(id: string): TrajectoryHandle {
+    return new TrajectoryHandle(this, id);
+  }
+
+  occupancyGrid(id: string): OccupancyGridHandle {
+    return new OccupancyGridHandle(this, id);
   }
 
   /**

@@ -24,6 +24,8 @@ export {
   type LineSample,
   LineStaticLayerHandle,
   type MarkerEvent,
+  type OccupancyGrid,
+  OccupancyGridHandle,
   PoseArrowHandle,
   type PoseArrowSample,
   ReferenceLineHandle,
@@ -32,5 +34,7 @@ export {
   ScatterLayerHandle,
   type ScatterSample,
   StepLayerHandle,
+  TrajectoryHandle,
+  type TrajectorySample,
   type XyPoint,
 } from "./model/layer-handles";

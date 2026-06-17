@@ -10,11 +10,13 @@ import {
   lidarLayer,
   lineLayer,
   lineStaticLayer,
+  occupancyGridLayer,
   poseArrowLayer,
   referenceLineLayer,
   scatterColoredLayer,
   scatterLayer,
   stepLayer,
+  trajectoryLayer,
 } from "./layer-specs";
 
 describe("lineLayer", () => {
@@ -170,6 +172,22 @@ describe("poseArrowLayer", () => {
   });
 });
 
+describe("trajectoryLayer", () => {
+  it("returns kind=trajectory with given id", () => {
+    const spec = trajectoryLayer("tj");
+    expect(spec.kind).toBe("trajectory");
+    expect(spec.id).toBe("tj");
+  });
+});
+
+describe("occupancyGridLayer", () => {
+  it("returns kind=occupancy-grid with given id", () => {
+    const spec = occupancyGridLayer("og");
+    expect(spec.kind).toBe("occupancy-grid");
+    expect(spec.id).toBe("og");
+  });
+});
+
 describe("all layer factories", () => {
   it("each factory returns an object with id, kind, and config properties", () => {
     const factories = [
@@ -188,6 +206,8 @@ describe("all layer factories", () => {
       heatmapStreamLayer("m"),
       referenceLineLayer("n"),
       poseArrowLayer("o"),
+      trajectoryLayer("p"),
+      occupancyGridLayer("q"),
     ];
 
     for (const spec of factories) {
@@ -215,6 +235,8 @@ describe("all layer factories", () => {
       heatmapStreamLayer(id),
       referenceLineLayer(id),
       poseArrowLayer(id),
+      trajectoryLayer(id),
+      occupancyGridLayer(id),
     ];
 
     for (const spec of specs) {

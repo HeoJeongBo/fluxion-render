@@ -531,6 +531,105 @@ export class ScatterColoredHandle {
 }
 
 // ────────────────────────────────────────────────────────────────────────────
+// Trajectory — data layout: [x, y, t, ...] stride=3
+// x/y are world coordinates; t is host-relative ms (time-coloring + fading).
+// ────────────────────────────────────────────────────────────────────────────
+
+export interface TrajectorySample {
+  /** World-space x coordinate. */
+  x: number;
+  /** World-space y coordinate. */
+  y: number;
+  /** Host-relative timestamp in ms. */
+  t: number;
+}
+
+export class TrajectoryHandle {
+  constructor(
+    private readonly sink: FluxionDataSink,
+    readonly id: string,
+  ) {}
+
+  push(sample: TrajectorySample): void {
+    const buf = new Float32Array(3);
+    buf[0] = sample.x;
+    buf[1] = sample.y;
+    buf[2] = sample.t;
+    this.sink.pushData(this.id, buf);
+  }
+
+  pushBatch(samples: readonly TrajectorySample[]): void {
+    const n = samples.length;
+    if (n === 0) return;
+    const buf = new Float32Array(n * 3);
+    for (let i = 0; i < n; i++) {
+      const s = samples[i]!;
+      buf[i * 3] = s.x;
+      buf[i * 3 + 1] = s.y;
+      buf[i * 3 + 2] = s.t;
+    }
+    this.sink.pushData(this.id, buf);
+  }
+
+  pushRaw(data: Float32Array): void {
+    this.sink.pushData(this.id, data);
+  }
+
+  /** Drop the ring buffer and (optionally) rewind `viewport.latestT`. */
+  reset(latestT?: number): void {
+    this.sink.clearLayer(this.id, { latestT });
+  }
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// OccupancyGrid — header + row-major cells:
+// [originX, originY, resolution, cols, rows, c0, c1, …]
+// cell value: -1 = unknown, 0..100 = occupancy probability
+// ────────────────────────────────────────────────────────────────────────────
+
+export interface OccupancyGrid {
+  /** World x of the grid's lower-left corner. */
+  originX: number;
+  /** World y of the grid's lower-left corner. */
+  originY: number;
+  /** Cell size in world units. */
+  resolution: number;
+  /** Number of columns. */
+  cols: number;
+  /** Number of rows. */
+  rows: number;
+  /** Row-major cell values (`-1` unknown, `0..100` probability). Length `cols*rows`. */
+  cells: ArrayLike<number>;
+}
+
+/**
+ * Handle for `kind: "occupancy-grid"` layers. `setGrid` replaces the whole grid
+ * (suitable for a fresh ROS `nav_msgs/OccupancyGrid` each update).
+ */
+export class OccupancyGridHandle {
+  constructor(
+    private readonly sink: FluxionDataSink,
+    readonly id: string,
+  ) {}
+
+  setGrid(grid: OccupancyGrid): void {
+    const n = grid.cells.length;
+    const buf = new Float32Array(5 + n);
+    buf[0] = grid.originX;
+    buf[1] = grid.originY;
+    buf[2] = grid.resolution;
+    buf[3] = grid.cols;
+    buf[4] = grid.rows;
+    for (let i = 0; i < n; i++) buf[5 + i] = grid.cells[i]!;
+    this.sink.pushData(this.id, buf);
+  }
+
+  pushRaw(data: Float32Array): void {
+    this.sink.pushData(this.id, data);
+  }
+}
+
+// ────────────────────────────────────────────────────────────────────────────
 // HeatmapStream — data layout: [t, v0, v1, ..., v_{yBins-1}]
 // One call per column update.
 // ────────────────────────────────────────────────────────────────────────────

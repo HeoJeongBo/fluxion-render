@@ -9,11 +9,13 @@ import type { HeatmapStreamConfig } from "../../../entities/heatmap-stream-layer
 import type { LidarScatterConfig } from "../../../entities/lidar-scatter-layer";
 import type { LineChartConfig } from "../../../entities/line-chart-layer";
 import type { LineChartStaticConfig } from "../../../entities/line-chart-static-layer";
+import type { OccupancyGridConfig } from "../../../entities/occupancy-grid-layer";
 import type { PoseArrowConfig } from "../../../entities/pose-arrow-layer";
 import type { ReferenceLineConfig } from "../../../entities/reference-line-layer";
 import type { ScatterChartConfig } from "../../../entities/scatter-chart-layer";
 import type { ScatterColoredConfig } from "../../../entities/scatter-colored-layer";
 import type { StepChartConfig } from "../../../entities/step-chart-layer";
+import type { TrajectoryConfig } from "../../../entities/trajectory-layer";
 import { FluxionHost, type FluxionHostOptions } from "../../../features/host";
 import { type ResizeInfo, useResizeObserver } from "./use-resize-observer";
 
@@ -40,7 +42,9 @@ export type FluxionLayerSpec =
   | { id: string; kind: "scatter-colored"; config?: ScatterColoredConfig }
   | { id: string; kind: "heatmap-stream"; config?: HeatmapStreamConfig }
   | { id: string; kind: "reference-line"; config?: ReferenceLineConfig }
-  | { id: string; kind: "pose-arrow"; config?: PoseArrowConfig };
+  | { id: string; kind: "pose-arrow"; config?: PoseArrowConfig }
+  | { id: string; kind: "trajectory"; config?: TrajectoryConfig }
+  | { id: string; kind: "occupancy-grid"; config?: OccupancyGridConfig };
 
 export interface UseFluxionCanvasOptions {
   layers: FluxionLayerSpec[];

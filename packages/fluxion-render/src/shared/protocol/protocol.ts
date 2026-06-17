@@ -36,7 +36,9 @@ export type LayerKind =
   | "scatter-colored"
   | "heatmap-stream"
   | "reference-line"
-  | "pose-arrow";
+  | "pose-arrow"
+  | "trajectory"
+  | "occupancy-grid";
 
 export type DType = "f32" | "u8" | "i16" | "u16" | "i32";
 

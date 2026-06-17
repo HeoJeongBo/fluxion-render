@@ -335,6 +335,8 @@ describe("FluxionHost", () => {
     expect(host.heatmapStream("l").id).toBe("l");
     expect(host.referenceLine("m").id).toBe("m");
     expect(host.poseArrow("n").id).toBe("n");
+    expect(host.trajectory("o").id).toBe("o");
+    expect(host.occupancyGrid("p").id).toBe("p");
     host.dispose();
   });
 

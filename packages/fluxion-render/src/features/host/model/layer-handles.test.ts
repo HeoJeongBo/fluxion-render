@@ -10,11 +10,13 @@ import {
   LidarLayerHandle,
   LineLayerHandle,
   LineStaticLayerHandle,
+  OccupancyGridHandle,
   PoseArrowHandle,
   ReferenceLineHandle,
   ScatterColoredHandle,
   ScatterLayerHandle,
   StepLayerHandle,
+  TrajectoryHandle,
 } from "./layer-handles";
 
 function makeFakeSink() {
@@ -213,6 +215,87 @@ describe("PoseArrowHandle", () => {
     const { sink, pushes } = makeFakeSink();
     const h = new PoseArrowHandle(sink, "pose");
     const raw = new Float32Array([1, 2, 3]);
+    h.pushRaw(raw);
+    expect(pushes[0].data).toBe(raw);
+  });
+});
+
+describe("TrajectoryHandle", () => {
+  it("push encodes a single [x, y, t] sample", () => {
+    const { sink, pushes } = makeFakeSink();
+    const h = new TrajectoryHandle(sink, "tj");
+    h.push({ x: 1.5, y: -2.5, t: 100 });
+    expect(pushes).toHaveLength(1);
+    expect(pushes[0].id).toBe("tj");
+    expect(pushes[0].data.length).toBe(3);
+    expect(pushes[0].data[0]).toBeCloseTo(1.5);
+    expect(pushes[0].data[1]).toBeCloseTo(-2.5);
+    expect(pushes[0].data[2]).toBeCloseTo(100);
+  });
+
+  it("pushBatch encodes multiple samples into one Float32Array", () => {
+    const { sink, pushes } = makeFakeSink();
+    const h = new TrajectoryHandle(sink, "tj");
+    h.pushBatch([
+      { x: 0, y: 0, t: 0 },
+      { x: 1, y: 1, t: 100 },
+    ]);
+    expect(pushes).toHaveLength(1);
+    expect(pushes[0].data.length).toBe(6);
+    expect(pushes[0].data[3]).toBeCloseTo(1);
+    expect(pushes[0].data[5]).toBeCloseTo(100);
+  });
+
+  it("pushBatch is a no-op for empty arrays", () => {
+    const { sink, pushes } = makeFakeSink();
+    const h = new TrajectoryHandle(sink, "tj");
+    h.pushBatch([]);
+    expect(pushes).toHaveLength(0);
+  });
+
+  it("pushRaw forwards the buffer unchanged", () => {
+    const { sink, pushes } = makeFakeSink();
+    const h = new TrajectoryHandle(sink, "tj");
+    const raw = new Float32Array([1, 2, 3]);
+    h.pushRaw(raw);
+    expect(pushes[0].data).toBe(raw);
+  });
+
+  it("reset forwards a rewind to clearLayer", () => {
+    const { sink, clears } = makeFakeSink();
+    const h = new TrajectoryHandle(sink, "tj");
+    h.reset(500);
+    expect(clears[0]).toEqual({ id: "tj", opts: { latestT: 500 } });
+  });
+});
+
+describe("OccupancyGridHandle", () => {
+  it("setGrid encodes header + row-major cells", () => {
+    const { sink, pushes } = makeFakeSink();
+    const h = new OccupancyGridHandle(sink, "og");
+    h.setGrid({
+      originX: -1,
+      originY: -2,
+      resolution: 0.5,
+      cols: 2,
+      rows: 2,
+      cells: [0, 100, -1, 50],
+    });
+    expect(pushes).toHaveLength(1);
+    expect(pushes[0].id).toBe("og");
+    expect(pushes[0].data.length).toBe(5 + 4);
+    expect(pushes[0].data[0]).toBeCloseTo(-1);
+    expect(pushes[0].data[2]).toBeCloseTo(0.5);
+    expect(pushes[0].data[3]).toBe(2);
+    expect(pushes[0].data[5]).toBe(0);
+    expect(pushes[0].data[6]).toBe(100);
+    expect(pushes[0].data[7]).toBe(-1);
+  });
+
+  it("pushRaw forwards the buffer unchanged", () => {
+    const { sink, pushes } = makeFakeSink();
+    const h = new OccupancyGridHandle(sink, "og");
+    const raw = new Float32Array([0, 0, 1, 1, 1, 42]);
     h.pushRaw(raw);
     expect(pushes[0].data).toBe(raw);
   });
