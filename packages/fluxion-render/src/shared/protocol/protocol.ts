@@ -40,7 +40,8 @@ export type LayerKind =
   | "trajectory"
   | "occupancy-grid"
   | "histogram"
-  | "stacked-area";
+  | "stacked-area"
+  | "box-plot";
 
 export type DType = "f32" | "u8" | "i16" | "u16" | "i32";
 

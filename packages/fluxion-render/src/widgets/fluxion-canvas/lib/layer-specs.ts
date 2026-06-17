@@ -1,6 +1,7 @@
 import type { AreaChartConfig } from "../../../entities/area-chart-layer";
 import type { AxisGridConfig } from "../../../entities/axis-grid-layer";
 import type { BarChartConfig } from "../../../entities/bar-chart-layer";
+import type { BoxPlotConfig } from "../../../entities/box-plot-layer";
 import type { CandlestickConfig } from "../../../entities/candlestick-layer";
 import type { EventMarkerConfig } from "../../../entities/event-marker-layer";
 import type { HeatmapConfig } from "../../../entities/heatmap-layer";
@@ -132,4 +133,50 @@ export function stackedAreaLayer(
   config?: StackedAreaConfig,
 ): FluxionLayerSpec {
   return { id, kind: "stacked-area", config };
+}
+
+export function boxPlotLayer(id: string, config?: BoxPlotConfig): FluxionLayerSpec {
+  return { id, kind: "box-plot", config };
+}
+
+/**
+ * Spectrogram preset over `heatmap-stream`: each pushed column is a magnitude
+ * (or dB) spectrum, the y-axis is frequency. This is a thin, domain-named
+ * wrapper — it produces a `heatmap-stream` spec, so push columns with the
+ * matching handle (`host.heatmapStream(id).pushColumn(t, magnitudes)`).
+ */
+export interface SpectrogramConfig {
+  /** Number of frequency bins (heatmap rows). Default 64. */
+  freqBins?: number;
+  /** Frequency range [min, max] in Hz mapped to the y-axis. Default [0, 1]. */
+  freqRange?: [number, number];
+  /** Time columns retained. Default 256. */
+  maxCols?: number;
+  /** Colormap. Default "viridis". */
+  colormap?: "viridis" | "plasma" | "hot";
+  /** Magnitude/dB mapped to the cold end. Default: auto. */
+  minDb?: number;
+  /** Magnitude/dB mapped to the hot end. Default: auto. */
+  maxDb?: number;
+  visible?: boolean;
+}
+
+export function spectrogramLayer(
+  id: string,
+  config?: SpectrogramConfig,
+): FluxionLayerSpec {
+  const c = config ?? {};
+  return {
+    id,
+    kind: "heatmap-stream",
+    config: {
+      yBins: c.freqBins ?? 64,
+      yRange: c.freqRange ?? [0, 1],
+      maxCols: c.maxCols ?? 256,
+      colormap: c.colormap ?? "viridis",
+      minValue: c.minDb,
+      maxValue: c.maxDb,
+      visible: c.visible,
+    },
+  };
 }

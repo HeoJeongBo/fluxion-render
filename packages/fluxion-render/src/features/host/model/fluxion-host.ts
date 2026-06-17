@@ -20,6 +20,7 @@ import {
 import {
   AreaLayerHandle,
   BarLayerHandle,
+  BoxPlotHandle,
   CandlestickLayerHandle,
   EventMarkerHandle,
   HeatmapLayerHandle,
@@ -436,6 +437,10 @@ export class FluxionHost {
 
   stackedArea(id: string): StackedAreaHandle {
     return new StackedAreaHandle(this, id);
+  }
+
+  boxPlot(id: string): BoxPlotHandle {
+    return new BoxPlotHandle(this, id);
   }
 
   /**

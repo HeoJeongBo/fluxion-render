@@ -9,6 +9,8 @@ export { FluxionHost } from "./model/fluxion-host";
 export {
   AreaLayerHandle,
   BarLayerHandle,
+  BoxPlotHandle,
+  type BoxPlotStat,
   CandlestickLayerHandle,
   type CandlestickSample,
   EventMarkerHandle,

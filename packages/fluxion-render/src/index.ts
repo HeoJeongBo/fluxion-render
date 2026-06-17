@@ -2,6 +2,7 @@ export { createFluxionWorkerFactory } from "./app/worker/create-worker-factory";
 export type { AreaChartConfig } from "./entities/area-chart-layer";
 export type { AxisGridConfig } from "./entities/axis-grid-layer";
 export type { BarChartConfig } from "./entities/bar-chart-layer";
+export type { BoxPlotConfig } from "./entities/box-plot-layer";
 export type { CandlestickConfig } from "./entities/candlestick-layer";
 export type { EventMarkerConfig } from "./entities/event-marker-layer";
 export type { HeatmapConfig } from "./entities/heatmap-layer";
@@ -43,6 +44,7 @@ export {
   useFluxionGauge,
 } from "./features/gauge";
 export type {
+  BoxPlotStat,
   CandlestickSample,
   EventSeverity,
   FluxionDataSink,
@@ -65,6 +67,7 @@ export type {
 export {
   AreaLayerHandle,
   BarLayerHandle,
+  BoxPlotHandle,
   CandlestickLayerHandle,
   configureDefaultPool,
   EventMarkerHandle,
@@ -114,6 +117,7 @@ export {
   areaLayer,
   axisGridLayer,
   barLayer,
+  boxPlotLayer,
   candlestickLayer,
   eventMarkerLayer,
   heatmapLayer,
@@ -125,8 +129,10 @@ export {
   occupancyGridLayer,
   poseArrowLayer,
   referenceLineLayer,
+  type SpectrogramConfig,
   scatterColoredLayer,
   scatterLayer,
+  spectrogramLayer,
   stackedAreaLayer,
   stepLayer,
   trajectoryLayer,

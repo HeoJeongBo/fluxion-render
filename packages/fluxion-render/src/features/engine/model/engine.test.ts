@@ -628,6 +628,7 @@ describe("Engine", () => {
       "occupancy-grid",
       "histogram",
       "stacked-area",
+      "box-plot",
     ] as const;
     for (const kind of kinds) {
       expect(() => engine.dispatch({ op: Op.ADD_LAYER, id: kind, kind })).not.toThrow();

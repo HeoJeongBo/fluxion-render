@@ -582,6 +582,51 @@ export class TrajectoryHandle {
 }
 
 // ────────────────────────────────────────────────────────────────────────────
+// BoxPlot — data layout: [x, min, q1, median, q3, max, …] stride=6
+// ────────────────────────────────────────────────────────────────────────────
+
+export interface BoxPlotStat {
+  /** Category position in world space. */
+  x: number;
+  min: number;
+  q1: number;
+  median: number;
+  q3: number;
+  max: number;
+}
+
+/**
+ * Handle for `kind: "box-plot"` layers. `setBoxes` replaces the full set of
+ * box-plot statistics (one box per category).
+ */
+export class BoxPlotHandle {
+  constructor(
+    private readonly sink: FluxionDataSink,
+    readonly id: string,
+  ) {}
+
+  setBoxes(boxes: readonly BoxPlotStat[]): void {
+    const n = boxes.length;
+    const buf = new Float32Array(n * 6);
+    for (let i = 0; i < n; i++) {
+      const b = boxes[i]!;
+      const o = i * 6;
+      buf[o] = b.x;
+      buf[o + 1] = b.min;
+      buf[o + 2] = b.q1;
+      buf[o + 3] = b.median;
+      buf[o + 4] = b.q3;
+      buf[o + 5] = b.max;
+    }
+    this.sink.pushData(this.id, buf);
+  }
+
+  pushRaw(data: Float32Array): void {
+    this.sink.pushData(this.id, data);
+  }
+}
+
+// ────────────────────────────────────────────────────────────────────────────
 // StackedArea — data layout: [t, y0, y1, …, y_{k-1}, …] stride = seriesCount+1
 // ────────────────────────────────────────────────────────────────────────────
 

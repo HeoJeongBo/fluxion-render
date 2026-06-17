@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   AreaLayerHandle,
   BarLayerHandle,
+  BoxPlotHandle,
   CandlestickLayerHandle,
   EventMarkerHandle,
   type FluxionDataSink,
@@ -268,6 +269,30 @@ describe("TrajectoryHandle", () => {
     const h = new TrajectoryHandle(sink, "tj");
     h.reset(500);
     expect(clears[0]).toEqual({ id: "tj", opts: { latestT: 500 } });
+  });
+});
+
+describe("BoxPlotHandle", () => {
+  it("setBoxes encodes [x, min, q1, median, q3, max] per box", () => {
+    const { sink, pushes } = makeFakeSink();
+    const h = new BoxPlotHandle(sink, "bp");
+    h.setBoxes([
+      { x: 1, min: 10, q1: 20, median: 30, q3: 40, max: 50 },
+      { x: 2, min: 5, q1: 15, median: 25, q3: 35, max: 45 },
+    ]);
+    expect(pushes).toHaveLength(1);
+    expect(pushes[0].id).toBe("bp");
+    expect(Array.from(pushes[0].data)).toEqual([
+      1, 10, 20, 30, 40, 50, 2, 5, 15, 25, 35, 45,
+    ]);
+  });
+
+  it("pushRaw forwards the buffer unchanged", () => {
+    const { sink, pushes } = makeFakeSink();
+    const h = new BoxPlotHandle(sink, "bp");
+    const raw = new Float32Array([1, 0, 0, 0, 0, 0]);
+    h.pushRaw(raw);
+    expect(pushes[0].data).toBe(raw);
   });
 });
 

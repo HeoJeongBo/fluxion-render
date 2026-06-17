@@ -3,6 +3,7 @@ import {
   areaLayer,
   axisGridLayer,
   barLayer,
+  boxPlotLayer,
   candlestickLayer,
   eventMarkerLayer,
   heatmapLayer,
@@ -16,6 +17,7 @@ import {
   referenceLineLayer,
   scatterColoredLayer,
   scatterLayer,
+  spectrogramLayer,
   stackedAreaLayer,
   stepLayer,
   trajectoryLayer,
@@ -206,6 +208,60 @@ describe("stackedAreaLayer", () => {
   });
 });
 
+describe("boxPlotLayer", () => {
+  it("returns kind=box-plot with given id", () => {
+    const spec = boxPlotLayer("bp");
+    expect(spec.kind).toBe("box-plot");
+    expect(spec.id).toBe("bp");
+  });
+});
+
+describe("spectrogramLayer", () => {
+  it("maps to a heatmap-stream spec with defaults", () => {
+    const spec = spectrogramLayer("sp");
+    expect(spec.kind).toBe("heatmap-stream");
+    expect(spec.id).toBe("sp");
+    const cfg = spec.config as {
+      yBins: number;
+      yRange: [number, number];
+      maxCols: number;
+      colormap: string;
+    };
+    expect(cfg.yBins).toBe(64);
+    expect(cfg.yRange).toEqual([0, 1]);
+    expect(cfg.maxCols).toBe(256);
+    expect(cfg.colormap).toBe("viridis");
+  });
+
+  it("threads freqBins/freqRange/maxCols/colormap/minDb/maxDb through", () => {
+    const spec = spectrogramLayer("sp", {
+      freqBins: 128,
+      freqRange: [20, 20000],
+      maxCols: 512,
+      colormap: "plasma",
+      minDb: -100,
+      maxDb: 0,
+      visible: false,
+    });
+    const cfg = spec.config as {
+      yBins: number;
+      yRange: [number, number];
+      maxCols: number;
+      colormap: string;
+      minValue: number;
+      maxValue: number;
+      visible: boolean;
+    };
+    expect(cfg.yBins).toBe(128);
+    expect(cfg.yRange).toEqual([20, 20000]);
+    expect(cfg.maxCols).toBe(512);
+    expect(cfg.colormap).toBe("plasma");
+    expect(cfg.minValue).toBe(-100);
+    expect(cfg.maxValue).toBe(0);
+    expect(cfg.visible).toBe(false);
+  });
+});
+
 describe("all layer factories", () => {
   it("each factory returns an object with id, kind, and config properties", () => {
     const factories = [
@@ -228,6 +284,7 @@ describe("all layer factories", () => {
       occupancyGridLayer("q"),
       histogramLayer("r"),
       stackedAreaLayer("s"),
+      boxPlotLayer("t"),
     ];
 
     for (const spec of factories) {
@@ -259,6 +316,7 @@ describe("all layer factories", () => {
       occupancyGridLayer(id),
       histogramLayer(id),
       stackedAreaLayer(id),
+      boxPlotLayer(id),
     ];
 
     for (const spec of specs) {

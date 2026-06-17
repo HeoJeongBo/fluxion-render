@@ -1,6 +1,7 @@
 import { AreaChartLayer } from "../../../entities/area-chart-layer";
 import { AxisGridLayer } from "../../../entities/axis-grid-layer";
 import { BarChartLayer } from "../../../entities/bar-chart-layer";
+import { BoxPlotLayer } from "../../../entities/box-plot-layer";
 import { CandlestickLayer } from "../../../entities/candlestick-layer";
 import { EventMarkerLayer } from "../../../entities/event-marker-layer";
 import { HeatmapLayer } from "../../../entities/heatmap-layer";
@@ -70,6 +71,8 @@ function createLayer(id: string, kind: LayerKind): Layer {
       return new HistogramLayer(id);
     case "stacked-area":
       return new StackedAreaLayer(id);
+    case "box-plot":
+      return new BoxPlotLayer(id);
   }
 }
 

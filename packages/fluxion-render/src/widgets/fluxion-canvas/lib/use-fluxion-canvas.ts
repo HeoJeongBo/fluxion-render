@@ -2,6 +2,7 @@ import { type RefObject, useCallback, useEffect, useRef, useState } from "react"
 import type { AreaChartConfig } from "../../../entities/area-chart-layer";
 import type { AxisGridConfig } from "../../../entities/axis-grid-layer";
 import type { BarChartConfig } from "../../../entities/bar-chart-layer";
+import type { BoxPlotConfig } from "../../../entities/box-plot-layer";
 import type { CandlestickConfig } from "../../../entities/candlestick-layer";
 import type { EventMarkerConfig } from "../../../entities/event-marker-layer";
 import type { HeatmapConfig } from "../../../entities/heatmap-layer";
@@ -48,7 +49,8 @@ export type FluxionLayerSpec =
   | { id: string; kind: "trajectory"; config?: TrajectoryConfig }
   | { id: string; kind: "occupancy-grid"; config?: OccupancyGridConfig }
   | { id: string; kind: "histogram"; config?: HistogramConfig }
-  | { id: string; kind: "stacked-area"; config?: StackedAreaConfig };
+  | { id: string; kind: "stacked-area"; config?: StackedAreaConfig }
+  | { id: string; kind: "box-plot"; config?: BoxPlotConfig };
 
 export interface UseFluxionCanvasOptions {
   layers: FluxionLayerSpec[];
