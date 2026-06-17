@@ -16,3 +16,5 @@ export type {
 export { useHoverDataCache } from "./model/use-hover-data-cache";
 export type { FluxionCrosshairProps } from "./ui/fluxion-crosshair";
 export { FluxionCrosshair } from "./ui/fluxion-crosshair";
+export type { FluxionCrosshairOverlayProps } from "./ui/fluxion-crosshair-overlay";
+export { FluxionCrosshairOverlay } from "./ui/fluxion-crosshair-overlay";

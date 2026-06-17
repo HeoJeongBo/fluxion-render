@@ -1,3 +1,4 @@
+export { type CapacityAdvisory, checkCapacity } from "./lib/check-capacity";
 export {
   areaLayer,
   axisGridLayer,
@@ -23,6 +24,7 @@ export {
   stepLayer,
   trajectoryLayer,
 } from "./lib/layer-specs";
+export { legendFromLayers } from "./lib/legend-from-layers";
 export { useXAxisCanvas, useYAxisCanvas } from "./lib/use-axis-canvas";
 export { useAxisTicks } from "./lib/use-axis-ticks";
 export type {
