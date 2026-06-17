@@ -340,6 +340,7 @@ describe("FluxionHost", () => {
     expect(host.histogram("q").id).toBe("q");
     expect(host.stackedArea("r").id).toBe("r");
     expect(host.boxPlot("s").id).toBe("s");
+    expect(host.polar("t").id).toBe("t");
     host.dispose();
   });
 

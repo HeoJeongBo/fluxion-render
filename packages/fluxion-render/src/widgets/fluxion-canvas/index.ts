@@ -12,6 +12,7 @@ export {
   lineLayer,
   lineStaticLayer,
   occupancyGridLayer,
+  polarLayer,
   poseArrowLayer,
   referenceLineLayer,
   type SpectrogramConfig,

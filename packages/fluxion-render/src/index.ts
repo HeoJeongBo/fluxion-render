@@ -12,6 +12,7 @@ export type { LidarScatterConfig } from "./entities/lidar-scatter-layer";
 export type { LineChartConfig } from "./entities/line-chart-layer";
 export type { LineChartStaticConfig } from "./entities/line-chart-static-layer";
 export type { OccupancyGridConfig } from "./entities/occupancy-grid-layer";
+export type { PolarConfig } from "./entities/polar-layer";
 export type { PoseArrowConfig } from "./entities/pose-arrow-layer";
 export type { ReferenceLineConfig } from "./entities/reference-line-layer";
 export type { ScatterChartConfig } from "./entities/scatter-chart-layer";
@@ -57,6 +58,7 @@ export type {
   LineSample,
   MarkerEvent,
   OccupancyGrid,
+  PolarPoint,
   PoseArrowSample,
   ScatterColoredSample,
   ScatterSample,
@@ -81,6 +83,7 @@ export {
   LineLayerHandle,
   LineStaticLayerHandle,
   OccupancyGridHandle,
+  PolarHandle,
   PoseArrowHandle,
   ReferenceLineHandle,
   ScatterColoredHandle,
@@ -127,6 +130,7 @@ export {
   lineLayer,
   lineStaticLayer,
   occupancyGridLayer,
+  polarLayer,
   poseArrowLayer,
   referenceLineLayer,
   type SpectrogramConfig,

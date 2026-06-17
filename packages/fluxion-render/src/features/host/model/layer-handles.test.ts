@@ -13,6 +13,7 @@ import {
   LineLayerHandle,
   LineStaticLayerHandle,
   OccupancyGridHandle,
+  PolarHandle,
   PoseArrowHandle,
   ReferenceLineHandle,
   ScatterColoredHandle,
@@ -269,6 +270,31 @@ describe("TrajectoryHandle", () => {
     const h = new TrajectoryHandle(sink, "tj");
     h.reset(500);
     expect(clears[0]).toEqual({ id: "tj", opts: { latestT: 500 } });
+  });
+});
+
+describe("PolarHandle", () => {
+  it("setPoints encodes [theta, r] pairs", () => {
+    const { sink, pushes } = makeFakeSink();
+    const h = new PolarHandle(sink, "pl");
+    h.setPoints([
+      { theta: 0, r: 1 },
+      { theta: Math.PI, r: 2 },
+    ]);
+    expect(pushes).toHaveLength(1);
+    expect(pushes[0].id).toBe("pl");
+    expect(pushes[0].data[0]).toBeCloseTo(0);
+    expect(pushes[0].data[1]).toBeCloseTo(1);
+    expect(pushes[0].data[2]).toBeCloseTo(Math.PI);
+    expect(pushes[0].data[3]).toBeCloseTo(2);
+  });
+
+  it("pushRaw forwards the buffer unchanged", () => {
+    const { sink, pushes } = makeFakeSink();
+    const h = new PolarHandle(sink, "pl");
+    const raw = new Float32Array([0, 1, 2, 3]);
+    h.pushRaw(raw);
+    expect(pushes[0].data).toBe(raw);
   });
 });
 

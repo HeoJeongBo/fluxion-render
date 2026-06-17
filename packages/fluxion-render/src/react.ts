@@ -82,6 +82,7 @@ export {
   lineLayer,
   lineStaticLayer,
   occupancyGridLayer,
+  polarLayer,
   poseArrowLayer,
   type ResizeInfo,
   referenceLineLayer,

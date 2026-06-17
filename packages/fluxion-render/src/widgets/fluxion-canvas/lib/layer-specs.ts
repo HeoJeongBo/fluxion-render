@@ -11,6 +11,7 @@ import type { LidarScatterConfig } from "../../../entities/lidar-scatter-layer";
 import type { LineChartConfig } from "../../../entities/line-chart-layer";
 import type { LineChartStaticConfig } from "../../../entities/line-chart-static-layer";
 import type { OccupancyGridConfig } from "../../../entities/occupancy-grid-layer";
+import type { PolarConfig } from "../../../entities/polar-layer";
 import type { PoseArrowConfig } from "../../../entities/pose-arrow-layer";
 import type { ReferenceLineConfig } from "../../../entities/reference-line-layer";
 import type { ScatterChartConfig } from "../../../entities/scatter-chart-layer";
@@ -137,6 +138,10 @@ export function stackedAreaLayer(
 
 export function boxPlotLayer(id: string, config?: BoxPlotConfig): FluxionLayerSpec {
   return { id, kind: "box-plot", config };
+}
+
+export function polarLayer(id: string, config?: PolarConfig): FluxionLayerSpec {
+  return { id, kind: "polar", config };
 }
 
 /**

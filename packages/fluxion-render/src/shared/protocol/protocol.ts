@@ -41,7 +41,8 @@ export type LayerKind =
   | "occupancy-grid"
   | "histogram"
   | "stacked-area"
-  | "box-plot";
+  | "box-plot"
+  | "polar";
 
 export type DType = "f32" | "u8" | "i16" | "u16" | "i32";
 

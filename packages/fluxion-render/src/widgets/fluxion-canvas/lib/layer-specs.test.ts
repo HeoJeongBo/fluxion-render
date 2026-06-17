@@ -13,6 +13,7 @@ import {
   lineLayer,
   lineStaticLayer,
   occupancyGridLayer,
+  polarLayer,
   poseArrowLayer,
   referenceLineLayer,
   scatterColoredLayer,
@@ -216,6 +217,14 @@ describe("boxPlotLayer", () => {
   });
 });
 
+describe("polarLayer", () => {
+  it("returns kind=polar with given id", () => {
+    const spec = polarLayer("pl");
+    expect(spec.kind).toBe("polar");
+    expect(spec.id).toBe("pl");
+  });
+});
+
 describe("spectrogramLayer", () => {
   it("maps to a heatmap-stream spec with defaults", () => {
     const spec = spectrogramLayer("sp");
@@ -285,6 +294,7 @@ describe("all layer factories", () => {
       histogramLayer("r"),
       stackedAreaLayer("s"),
       boxPlotLayer("t"),
+      polarLayer("u"),
     ];
 
     for (const spec of factories) {
@@ -317,6 +327,7 @@ describe("all layer factories", () => {
       histogramLayer(id),
       stackedAreaLayer(id),
       boxPlotLayer(id),
+      polarLayer(id),
     ];
 
     for (const spec of specs) {

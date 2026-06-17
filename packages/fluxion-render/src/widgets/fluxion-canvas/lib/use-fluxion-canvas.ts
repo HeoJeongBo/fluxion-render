@@ -12,6 +12,7 @@ import type { LidarScatterConfig } from "../../../entities/lidar-scatter-layer";
 import type { LineChartConfig } from "../../../entities/line-chart-layer";
 import type { LineChartStaticConfig } from "../../../entities/line-chart-static-layer";
 import type { OccupancyGridConfig } from "../../../entities/occupancy-grid-layer";
+import type { PolarConfig } from "../../../entities/polar-layer";
 import type { PoseArrowConfig } from "../../../entities/pose-arrow-layer";
 import type { ReferenceLineConfig } from "../../../entities/reference-line-layer";
 import type { ScatterChartConfig } from "../../../entities/scatter-chart-layer";
@@ -50,7 +51,8 @@ export type FluxionLayerSpec =
   | { id: string; kind: "occupancy-grid"; config?: OccupancyGridConfig }
   | { id: string; kind: "histogram"; config?: HistogramConfig }
   | { id: string; kind: "stacked-area"; config?: StackedAreaConfig }
-  | { id: string; kind: "box-plot"; config?: BoxPlotConfig };
+  | { id: string; kind: "box-plot"; config?: BoxPlotConfig }
+  | { id: string; kind: "polar"; config?: PolarConfig };
 
 export interface UseFluxionCanvasOptions {
   layers: FluxionLayerSpec[];

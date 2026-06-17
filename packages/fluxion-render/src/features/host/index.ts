@@ -29,6 +29,8 @@ export {
   type MarkerEvent,
   type OccupancyGrid,
   OccupancyGridHandle,
+  PolarHandle,
+  type PolarPoint,
   PoseArrowHandle,
   type PoseArrowSample,
   ReferenceLineHandle,

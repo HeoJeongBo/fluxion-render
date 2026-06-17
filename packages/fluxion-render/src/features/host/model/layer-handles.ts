@@ -582,6 +582,42 @@ export class TrajectoryHandle {
 }
 
 // ────────────────────────────────────────────────────────────────────────────
+// Polar — data layout: [theta, r, theta, r, …] stride=2 (theta in radians, r≥0)
+// ────────────────────────────────────────────────────────────────────────────
+
+export interface PolarPoint {
+  /** Angle in radians (0 = +x, counter-clockwise). */
+  theta: number;
+  /** Radius (≥ 0). */
+  r: number;
+}
+
+/**
+ * Handle for `kind: "polar"` layers. `setPoints` replaces the full trace
+ * (one closed/open ring of `(theta, r)` vertices).
+ */
+export class PolarHandle {
+  constructor(
+    private readonly sink: FluxionDataSink,
+    readonly id: string,
+  ) {}
+
+  setPoints(points: readonly PolarPoint[]): void {
+    const n = points.length;
+    const buf = new Float32Array(n * 2);
+    for (let i = 0; i < n; i++) {
+      buf[i * 2] = points[i]!.theta;
+      buf[i * 2 + 1] = points[i]!.r;
+    }
+    this.sink.pushData(this.id, buf);
+  }
+
+  pushRaw(data: Float32Array): void {
+    this.sink.pushData(this.id, data);
+  }
+}
+
+// ────────────────────────────────────────────────────────────────────────────
 // BoxPlot — data layout: [x, min, q1, median, q3, max, …] stride=6
 // ────────────────────────────────────────────────────────────────────────────
 

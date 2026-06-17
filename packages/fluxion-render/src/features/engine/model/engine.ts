@@ -12,6 +12,7 @@ import { LidarScatterLayer } from "../../../entities/lidar-scatter-layer";
 import { LineChartLayer } from "../../../entities/line-chart-layer";
 import { LineChartStaticLayer } from "../../../entities/line-chart-static-layer";
 import { OccupancyGridLayer } from "../../../entities/occupancy-grid-layer";
+import { PolarLayer } from "../../../entities/polar-layer";
 import { PoseArrowLayer } from "../../../entities/pose-arrow-layer";
 import { ReferenceLineLayer } from "../../../entities/reference-line-layer";
 import { ScatterChartLayer } from "../../../entities/scatter-chart-layer";
@@ -73,6 +74,8 @@ function createLayer(id: string, kind: LayerKind): Layer {
       return new StackedAreaLayer(id);
     case "box-plot":
       return new BoxPlotLayer(id);
+    case "polar":
+      return new PolarLayer(id);
   }
 }
 

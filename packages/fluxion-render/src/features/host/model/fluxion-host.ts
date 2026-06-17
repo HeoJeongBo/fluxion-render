@@ -31,6 +31,7 @@ import {
   LineLayerHandle,
   LineStaticLayerHandle,
   OccupancyGridHandle,
+  PolarHandle,
   PoseArrowHandle,
   ReferenceLineHandle,
   ScatterColoredHandle,
@@ -441,6 +442,10 @@ export class FluxionHost {
 
   boxPlot(id: string): BoxPlotHandle {
     return new BoxPlotHandle(this, id);
+  }
+
+  polar(id: string): PolarHandle {
+    return new PolarHandle(this, id);
   }
 
   /**
