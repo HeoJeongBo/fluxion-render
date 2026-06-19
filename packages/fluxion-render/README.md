@@ -768,10 +768,17 @@ import { FluxionTable } from '@heojeongbo/fluxion-render/react';
 
 | Prop | Type | Description |
 |------|------|-------------|
-| `columns` | `FluxionTableColumn<R>[]` | `{ key, header, render? }` — `render` receives `(value, row)` |
+| `columns` | `FluxionTableColumn<R>[]` | `{ key, header, render?, sortable? }` — `render` receives `(value, row)`; `sortable` makes the header click-to-sort |
 | `rows` | `R[]` | Row data objects |
 | `classNames` | `FluxionTableClassNames` | Per-element CSS class names. All optional |
 | `style` | `CSSProperties` | Applied to the root wrapper `<div>` |
+| `stickyHeader` | `boolean` | Keep the header row pinned while the body scrolls. Pair with a fixed `maxHeight` via `style`. Default `false` |
+| `virtual` | `{ rowHeight, height, overscan?, scrollThrottleMs? }` | Virtualize rows: only the visible window (+ overscan) is rendered, so thousands of rows stay smooth. Requires a fixed `rowHeight` + viewport `height` in px. Omit for render-all |
+
+`virtual.scrollThrottleMs` coalesces scroll-driven re-renders to at most one per
+interval (leading + trailing): on high-refresh displays a large virtual table can
+otherwise flood React with renders. Omit it for the default — re-render on every
+scroll event.
 
 No default styles are applied — layout and appearance are fully controlled via `classNames`.
 
@@ -856,15 +863,25 @@ Convenience wrapper over the crosshair that reads its time-window config
 layer in `layers` — no need to repeat the axis props. Returns a `chartRef` for
 the pointer-capture `<div>` and a `state` to feed `<FluxionCrosshair>`.
 
+`cache` is **optional**: omit it and the hook creates and manages a
+`HoverDataCache` for you (auto-registered from `layers`), and returns it on the
+result alongside `push` / `pushBatch` so you can feed it from your stream tick —
+the common single-chart case needs no separate `useHoverDataCache()` call.
+
 ```tsx
-const cache = useHoverDataCache({ layers });
-const { chartRef, state } = useFluxionCrosshairFromLayers({
+const { chartRef, state, push } = useFluxionCrosshairFromLayers({
   host,                 // FluxionHost | null
-  cache: cache.cache,
-  layers,               // same array passed to <FluxionCanvas>
+  layers,               // same array passed to <FluxionCanvas>; cache auto-registers from it
   axisLayerId: 'axis',  // default 'axis'
   yPadPx: 8,            // match the axis layer's yPadPx
   yFormat: (y) => y.toFixed(3),
+});
+
+// mirror each sample into the hover cache from your pump:
+useFluxionStream({
+  host,
+  setup: (h) => h.line('line'),
+  tick: (t, line) => { const y = next(t); push('line', t, y); line.push({ t, y }); return 1; },
 });
 
 return (
@@ -874,6 +891,19 @@ return (
     <FluxionCrosshair state={state} style={{ position: 'absolute', inset: 0 }} />
   </div>
 );
+```
+
+Pass an explicit **`cache`** only when you need to share it (e.g. with
+`useFluxionExport`) or mirror it for managed-pool fan-out — the returned
+`push`/`pushBatch` then target whichever cache is active. For a long, high-rate
+window where the default hover ring would evict samples while they're still
+on-screen, size it per layer with **`overrides`**:
+
+```tsx
+useFluxionCrosshairFromLayers({
+  host, layers,
+  overrides: { s1: { capacity: 8192 }, s2: { capacity: 8192 } },
+});
 ```
 
 `state.points[]` carries one `{ layerId, label, color, t, y, xLabel, yLabel }` per
@@ -1071,6 +1101,12 @@ All data is transferred as `TypedArray` with zero-copy semantics. After calling 
 | `lidar` stride=2 | `[x, y, x, y, ...]` | 2 |
 | `lidar` stride=3 | `[x, y, z, ...]` | 3 |
 | `lidar` stride=4 | `[x, y, z, intensity, ...]` | 4 |
+
+For streaming layers, `t` must be **host-relative ms** (`Date.now() - timeOrigin`),
+not an absolute epoch. A `Float32` can't hold `Date.now()` without quantizing
+sub-second samples onto a single pixel, so pushing an absolute epoch logs a
+one-time `console.warn` — tracked **per layer**, so in a multi-chart dashboard one
+chart's mistake won't mask the same bug on another layer.
 
 ---
 
