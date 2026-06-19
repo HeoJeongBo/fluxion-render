@@ -297,10 +297,30 @@ export class ReplayStore {
 
   async getTimeRange(): Promise<{ earliest: number; latest: number } | null> {
     if (!this._db) return null;
-    const earliest = await this._querySingleT("next");
-    if (earliest === null) return null;
-    const latest = await this._querySingleT("prev");
-    return { earliest, latest: latest ?? earliest };
+    const db = this._db;
+    // Read both ends of the `by_t` index in a SINGLE readonly transaction —
+    // an ascending cursor for earliest and a descending one for latest on the
+    // same tx, instead of two separate transactions. Halves the IDB
+    // round-trips for a call made every poll (~500ms) by every mounted chart.
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction("frames", "readonly");
+      const index = tx.objectStore("frames").index("by_t");
+      let earliest: number | null = null;
+      let latest: number | null = null;
+      const fwd = index.openCursor(null, "next");
+      fwd.onsuccess = (e) => {
+        const cursor = (e.target as IDBRequest<IDBCursorWithValue | null>).result;
+        if (cursor) earliest = (cursor.value as FrameRecord).t;
+      };
+      const rev = index.openCursor(null, "prev");
+      rev.onsuccess = (e) => {
+        const cursor = (e.target as IDBRequest<IDBCursorWithValue | null>).result;
+        if (cursor) latest = (cursor.value as FrameRecord).t;
+      };
+      tx.oncomplete = () =>
+        resolve(earliest === null ? null : { earliest, latest: latest ?? earliest });
+      tx.onerror = () => reject(tx.error);
+    });
   }
 
   private _countFrames(): Promise<number> {
@@ -309,20 +329,6 @@ export class ReplayStore {
       const tx = db.transaction("frames", "readonly");
       const req = tx.objectStore("frames").count();
       req.onsuccess = (e) => resolve((e.target as IDBRequest<number>).result);
-      req.onerror = () => reject(req.error);
-    });
-  }
-
-  private _querySingleT(direction: IDBCursorDirection): Promise<number | null> {
-    const db = this._assertOpen();
-    return new Promise((resolve, reject) => {
-      const tx = db.transaction("frames", "readonly");
-      const index = tx.objectStore("frames").index("by_t");
-      const req = index.openCursor(null, direction);
-      req.onsuccess = (e) => {
-        const cursor = (e.target as IDBRequest<IDBCursorWithValue | null>).result;
-        resolve(cursor ? (cursor.value as FrameRecord).t : null);
-      };
       req.onerror = () => reject(req.error);
     });
   }
