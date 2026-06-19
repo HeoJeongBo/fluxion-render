@@ -3,11 +3,10 @@ import {
   axisGridLayer,
   FluxionCanvas,
   FluxionCrosshair,
-  HoverDataCache,
+  legendFromLayers,
   lineLayer,
-  useFluxionCrosshair,
+  useFluxionCrosshairFromLayers,
   useFluxionStream,
-  useLayerConfig,
   useTimeOrigin,
 } from "@heojeongbo/fluxion-render/react";
 import { useMemo, useState } from "react";
@@ -59,20 +58,13 @@ export function CrosshairDemoPage() {
   const timeOrigin = useTimeOrigin();
   const [host, setHost] = useState<FluxionHost | null>(null);
 
-  // Data cache — mirrors what we push to the Worker
-  const cache = useMemo(() => {
-    const c = new HoverDataCache();
-    for (const s of SERIES) {
-      c.registerLayer(s.id, { capacity: RING_CAPACITY, label: s.label, color: s.color });
-    }
-    return c;
-  }, []);
-
+  // The axis layer is the single source of truth for the time window — the
+  // crosshair reads it from here, so the selector drives both.
   const layers = useMemo(
     () => [
       axisGridLayer("axis", {
         xMode: "time",
-        timeWindowMs: DEFAULT_WINDOW_MS,
+        timeWindowMs: windowMs,
         timeOrigin,
         xTickFormat: "HH:mm:ss",
         xTickIntervalMs: 1000,
@@ -88,12 +80,24 @@ export function CrosshairDemoPage() {
         lineLayer(s.id, { color: s.color, lineWidth: 1.5, capacity: RING_CAPACITY }),
       ),
     ],
-    [timeOrigin],
+    [timeOrigin, windowMs],
   );
 
-  useLayerConfig(host, axisGridLayer("axis", { timeWindowMs: windowMs }));
+  // Auto-creates + registers the hover cache from `layers`. A 60s window at this
+  // rate is more samples than the default cache holds, so size each series'
+  // hover ring to the visible window via `overrides`.
+  const { chartRef, state, push } = useFluxionCrosshairFromLayers({
+    host,
+    layers,
+    overrides: Object.fromEntries(
+      SERIES.map((s) => [s.id, { capacity: RING_CAPACITY, label: s.label }]),
+    ),
+    yPadPx: Y_PAD_PX,
+    xFormat: (t) => new Date(timeOrigin + t).toISOString().slice(11, 23),
+    yFormat: (y) => y.toFixed(4),
+  });
 
-  // Push data: cache first (values copied), then handle (buffer transferred)
+  // Push data: handle (buffer transferred) + cache mirror for hover.
   useFluxionStream({
     host,
     intervalMs: 1000 / BATCH_HZ,
@@ -105,25 +109,17 @@ export function CrosshairDemoPage() {
           amplitude: spec.amplitude,
           seriesOffset: spec.offset,
         });
-        for (const msg of msgs) {
-          cache.push(spec.id, stampToMs(msg.header), msg.data);
-        }
+        for (const msg of msgs) push(spec.id, stampToMs(msg.header), msg.data);
         handle.pushBatch(msgs.map((m) => ({ t: stampToMs(m.header), y: m.data })));
       }
       return SAMPLES_PER_BATCH * SERIES.length;
     },
   });
 
-  const { chartRef, state } = useFluxionCrosshair({
-    host,
-    cache,
-    xMode: "time",
-    timeWindowMs: windowMs,
-    timeOrigin,
-    yPadPx: Y_PAD_PX,
-    xFormat: (t) => new Date(timeOrigin + t).toISOString().slice(11, 23),
-    yFormat: (y) => y.toFixed(4),
-  });
+  const legendItems = legendFromLayers(
+    layers,
+    Object.fromEntries(SERIES.map((s) => [s.id, s.label])),
+  );
 
   return (
     <div style={{ position: "relative", width: "100%", height: "100%" }}>
@@ -185,18 +181,18 @@ export function CrosshairDemoPage() {
           pointerEvents: "none",
         }}
       >
-        {SERIES.map((s) => (
-          <div key={s.id} style={{ display: "flex", alignItems: "center", gap: 6 }}>
+        {legendItems.map((it) => (
+          <div key={it.label} style={{ display: "flex", alignItems: "center", gap: 6 }}>
             <span
               style={{
                 display: "inline-block",
                 width: 10,
                 height: 10,
                 borderRadius: "50%",
-                background: s.color,
+                background: it.color,
               }}
             />
-            <span style={{ color: THEME.page.textPrimary }}>{s.label}</span>
+            <span style={{ color: THEME.page.textPrimary }}>{it.label}</span>
           </div>
         ))}
       </div>

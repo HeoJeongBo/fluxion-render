@@ -3,11 +3,9 @@ import {
   axisGridLayer,
   FluxionCanvas,
   FluxionCrosshair,
-  HoverDataCache,
   stepLayer,
-  useFluxionCrosshair,
+  useFluxionCrosshairFromLayers,
   useFluxionStream,
-  useLayerConfig,
   useTimeOrigin,
 } from "@heojeongbo/fluxion-render/react";
 import { useMemo, useState } from "react";
@@ -33,19 +31,18 @@ function nextState(): number {
   return state;
 }
 
-const cache = new HoverDataCache();
-cache.registerLayer("step", { capacity: 4096, label: "state", color: "#a78bfa" });
-
 export function StepDemoPage() {
   const [localWindowMs, setLocalWindowMs] = useState(DEFAULT_WINDOW_MS);
   const timeOrigin = useTimeOrigin();
   const [host, setHost] = useState<FluxionHost | null>(null);
 
+  // The axis layer is the single source of truth for the time window — the
+  // crosshair reads it from here, so the selector drives both.
   const layers = useMemo(
     () => [
       axisGridLayer("axis", {
         xMode: "time",
-        timeWindowMs: DEFAULT_WINDOW_MS,
+        timeWindowMs: localWindowMs,
         timeOrigin,
         xTickFormat: "HH:mm:ss.SSS",
         xTickIntervalMs: 1000,
@@ -64,10 +61,21 @@ export function StepDemoPage() {
         maxHz: TARGET_HZ,
       }),
     ],
-    [timeOrigin],
+    [timeOrigin, localWindowMs],
   );
 
-  useLayerConfig(host, axisGridLayer("axis", { timeWindowMs: localWindowMs }));
+  // Auto-creates + registers the hover cache from `layers`; returns `push`.
+  const {
+    chartRef,
+    state: crosshairState,
+    push,
+  } = useFluxionCrosshairFromLayers({
+    host,
+    layers,
+    yPadPx: Y_PAD_PX,
+    xFormat: (t) => new Date(timeOrigin + t).toISOString().slice(11, 23),
+    yFormat: (y) => y.toFixed(0),
+  });
 
   const { rate: hz } = useFluxionStream({
     host,
@@ -75,21 +83,10 @@ export function StepDemoPage() {
     setup: (h) => h.step("step"),
     tick: (t, step) => {
       const y = nextState();
-      cache.push("step", t, y);
+      push("step", t, y);
       step.push({ t, y });
       return 1;
     },
-  });
-
-  const { chartRef, state: crosshairState } = useFluxionCrosshair({
-    host,
-    cache,
-    xMode: "time",
-    timeWindowMs: localWindowMs,
-    timeOrigin,
-    yPadPx: Y_PAD_PX,
-    xFormat: (t) => new Date(timeOrigin + t).toISOString().slice(11, 23),
-    yFormat: (y) => y.toFixed(0),
   });
 
   return (

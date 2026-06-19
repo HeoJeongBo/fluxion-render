@@ -3,11 +3,9 @@ import {
   axisGridLayer,
   FluxionCanvas,
   FluxionCrosshair,
-  HoverDataCache,
   lineLayer,
-  useFluxionCrosshair,
+  useFluxionCrosshairFromLayers,
   useFluxionStream,
-  useLayerConfig,
   useTimeOrigin,
 } from "@heojeongbo/fluxion-render/react";
 import { useMemo, useState } from "react";
@@ -48,13 +46,6 @@ const WINDOW_OPTIONS = [
 const transformBatch = (msgs: Float32StampedMessage[]): LineSample[] =>
   msgs.map((m) => ({ t: stampToMs(m.header), y: m.data }));
 
-const cache = new HoverDataCache();
-cache.registerLayer("line", {
-  capacity: RING_CAPACITY,
-  label: "signal",
-  color: "#4fc3f7",
-});
-
 export interface HighRateDemoPageProps {
   windowMs?: number;
   hideSelector?: boolean;
@@ -71,11 +62,13 @@ export function HighRateDemoPage({
   const timeOrigin = useTimeOrigin();
   const [host, setHost] = useState<FluxionHost | null>(null);
 
+  // The axis layer is the single source of truth for the time window — the
+  // crosshair reads it from here, so the selector/prop drives both.
   const layers = useMemo(
     () => [
       axisGridLayer("axis", {
         xMode: "time",
-        timeWindowMs: DEFAULT_WINDOW_MS,
+        timeWindowMs: windowMs,
         timeOrigin,
         xTickFormat: "HH:mm:ss.SSS",
         xTickIntervalMs: 1000,
@@ -96,10 +89,19 @@ export function HighRateDemoPage({
         decimate: true,
       }),
     ],
-    [timeOrigin],
+    [timeOrigin, windowMs],
   );
 
-  useLayerConfig(host, axisGridLayer("axis", { timeWindowMs: windowMs }));
+  // Auto-creates + registers the hover cache from `layers`. 500 Hz over a 10s
+  // window exceeds the default cache size, so match the line ring via overrides.
+  const { chartRef, state, pushBatch } = useFluxionCrosshairFromLayers({
+    host,
+    layers,
+    overrides: { line: { capacity: RING_CAPACITY } },
+    yPadPx: Y_PAD_PX,
+    xFormat: (t) => new Date(timeOrigin + t).toISOString().slice(11, 23),
+    yFormat: (y) => y.toFixed(4),
+  });
 
   const { rate: hz } = useFluxionStream({
     host,
@@ -114,21 +116,16 @@ export function HighRateDemoPage({
         amplitude: 0.9,
       });
       const batch = transformBatch(msgs);
-      for (const s of batch) cache.push("line", s.t, s.y);
+      // Mirror into the hover cache as one interleaved [t,y,…] batch.
+      const flat = new Float32Array(batch.length * 2);
+      for (let i = 0; i < batch.length; i++) {
+        flat[i * 2] = batch[i]!.t;
+        flat[i * 2 + 1] = batch[i]!.y;
+      }
+      pushBatch("line", flat);
       line.pushBatch(batch); // one zero-copy postMessage for all 10 samples
       return SAMPLES_PER_BATCH; // → `rate` reports ~500 Hz
     },
-  });
-
-  const { chartRef, state } = useFluxionCrosshair({
-    host,
-    cache,
-    xMode: "time",
-    timeWindowMs: windowMs,
-    timeOrigin,
-    yPadPx: Y_PAD_PX,
-    xFormat: (t) => new Date(timeOrigin + t).toISOString().slice(11, 23),
-    yFormat: (y) => y.toFixed(4),
   });
 
   const visiblePoints = Math.round((SAMPLES_PER_SEC * windowMs) / 1000);

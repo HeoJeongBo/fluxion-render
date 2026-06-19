@@ -3,11 +3,9 @@ import {
   axisGridLayer,
   FluxionCanvas,
   FluxionCrosshair,
-  HoverDataCache,
   lineLayer,
-  useFluxionCrosshair,
+  useFluxionCrosshairFromLayers,
   useFluxionStream,
-  useLayerConfig,
   useTimeOrigin,
 } from "@heojeongbo/fluxion-render/react";
 import { useMemo, useState } from "react";
@@ -36,9 +34,6 @@ const transform = (msg: Float32StampedMessage): LineSample => ({
   y: msg.data,
 });
 
-const cache = new HoverDataCache();
-cache.registerLayer("line", { capacity: 4096, label: "signal", color: "#4fc3f7" });
-
 export interface LineDemoPageProps {
   windowMs?: number;
   hideSelector?: boolean;
@@ -55,11 +50,13 @@ export function LineDemoPage({
   const timeOrigin = useTimeOrigin();
   const [host, setHost] = useState<FluxionHost | null>(null);
 
+  // The axis layer is the single source of truth for the time window — the
+  // crosshair reads it from here, so the selector/prop drives both.
   const layers = useMemo(
     () => [
       axisGridLayer("axis", {
         xMode: "time",
-        timeWindowMs: DEFAULT_WINDOW_MS,
+        timeWindowMs: windowMs,
         timeOrigin,
         xTickFormat: "HH:mm:ss.SSS",
         xTickIntervalMs: 1000,
@@ -78,10 +75,17 @@ export function LineDemoPage({
         maxHz: TARGET_HZ,
       }),
     ],
-    [timeOrigin],
+    [timeOrigin, windowMs],
   );
 
-  useLayerConfig(host, axisGridLayer("axis", { timeWindowMs: windowMs }));
+  // Auto-creates + registers the hover cache from `layers`; returns `push`.
+  const { chartRef, state, push } = useFluxionCrosshairFromLayers({
+    host,
+    layers,
+    yPadPx: Y_PAD_PX,
+    xFormat: (t) => new Date(timeOrigin + t).toISOString().slice(11, 23),
+    yFormat: (y) => y.toFixed(4),
+  });
 
   const { rate: hz } = useFluxionStream({
     host,
@@ -90,21 +94,10 @@ export function LineDemoPage({
     tick: (t, line) => {
       const msg = generateFloat32StampedMessage(t);
       const sample = transform(msg);
-      cache.push("line", sample.t, sample.y);
+      push("line", sample.t, sample.y);
       line.push(sample);
       return 1;
     },
-  });
-
-  const { chartRef, state } = useFluxionCrosshair({
-    host,
-    cache,
-    xMode: "time",
-    timeWindowMs: windowMs,
-    timeOrigin,
-    yPadPx: Y_PAD_PX,
-    xFormat: (t) => new Date(timeOrigin + t).toISOString().slice(11, 23),
-    yFormat: (y) => y.toFixed(4),
   });
 
   return (

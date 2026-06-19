@@ -4,9 +4,8 @@ import {
   FluxionCanvas,
   FluxionCrosshair,
   FluxionTable,
-  HoverDataCache,
   lineLayer,
-  useFluxionCrosshair,
+  useFluxionCrosshairFromLayers,
   useFluxionStream,
   useFluxionTable,
   useLayerConfig,
@@ -71,11 +70,6 @@ const TABLE_COLUMNS: import("@heojeongbo/fluxion-render/react").FluxionTableColu
     { key: "time", header: "Time" },
   ];
 
-const cache = new HoverDataCache();
-for (const s of SERIES) {
-  cache.registerLayer(s.id, { capacity: RING_CAPACITY, label: s.label, color: s.color });
-}
-
 export interface StreamDemoPageProps {
   windowMs?: number;
   hideSelector?: boolean;
@@ -95,11 +89,13 @@ export function StreamDemoPage({
     Object.fromEntries(SERIES.map((s) => [s.id, true])),
   );
 
+  // The axis layer is the single source of truth for the time window — the
+  // crosshair reads it from here, so the selector/prop drives both.
   const layers = useMemo(
     () => [
       axisGridLayer("axis", {
         xMode: "time",
-        timeWindowMs: DEFAULT_WINDOW_MS,
+        timeWindowMs: windowMs,
         timeOrigin,
         xTickFormat: "HH:mm:ss",
         xTickIntervalMs: 1000,
@@ -119,13 +115,30 @@ export function StreamDemoPage({
         }),
       ),
     ],
-    [timeOrigin],
+    [timeOrigin, windowMs],
   );
 
-  useLayerConfig(host, axisGridLayer("axis", { timeWindowMs: windowMs }));
+  // Interactive series visibility toggles stay host-side config updates.
   useLayerConfig(host, lineLayer("s1", { visible: enabled["s1"] }));
   useLayerConfig(host, lineLayer("s2", { visible: enabled["s2"] }));
   useLayerConfig(host, lineLayer("s3", { visible: enabled["s3"] }));
+
+  // Auto-creates + registers the hover cache from `layers`. A 60s window at this
+  // rate exceeds the default cache size, so size each series ring via overrides.
+  const {
+    chartRef,
+    state: crosshairState,
+    push,
+  } = useFluxionCrosshairFromLayers({
+    host,
+    layers,
+    overrides: Object.fromEntries(
+      SERIES.map((s) => [s.id, { capacity: RING_CAPACITY, label: s.label }]),
+    ),
+    yPadPx: Y_PAD_PX,
+    xFormat: (t) => new Date(timeOrigin + t).toISOString().slice(11, 23),
+    yFormat: (y) => y.toFixed(4),
+  });
 
   const { rate } = useFluxionStream({
     host,
@@ -139,7 +152,7 @@ export function StreamDemoPage({
           seriesOffset: spec.offset,
         });
         const batch = transformBatch(msgs);
-        for (const s of batch) cache.push(spec.id, s.t, s.y);
+        for (const s of batch) push(spec.id, s.t, s.y);
         handle.pushBatch(batch);
       }
       return SAMPLES_PER_BATCH * SERIES.length;
@@ -167,17 +180,6 @@ export function StreamDemoPage({
         time: new Date(stampToMs(msg.header) + timeOrigin).toISOString().slice(11, 23),
       };
     },
-  });
-
-  const { chartRef, state: crosshairState } = useFluxionCrosshair({
-    host,
-    cache,
-    xMode: "time",
-    timeWindowMs: windowMs,
-    timeOrigin,
-    yPadPx: Y_PAD_PX,
-    xFormat: (t) => new Date(timeOrigin + t).toISOString().slice(11, 23),
-    yFormat: (y) => y.toFixed(4),
   });
 
   return (

@@ -3,9 +3,7 @@ import {
   formatMs,
   LogChannel,
   MetricChannel,
-  type ReplayPlayerFrame,
   VideoChannel,
-  VideoReplayer,
 } from "@heojeongbo/fluxion-replay";
 import {
   PlaybackControls,
@@ -13,10 +11,12 @@ import {
   usePlaybackRate,
   useRecordingSession,
   useRecordingTimer,
+  useReplayFrameLog,
   useReplayPlayer,
   useReplaySession,
   useReplayTimeline,
   useVideoRecorder,
+  useVideoReplayer,
 } from "@heojeongbo/fluxion-replay/react";
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import {
@@ -183,10 +183,12 @@ export function App() {
   const [timeRange, setTimeRange] = useState<{ earliest: number; latest: number } | null>(
     null,
   );
-  const [replayLogs, setReplayLogs] = useState<ReplayPlayerFrame[]>([]);
   const replayCanvasRef = useRef<HTMLCanvasElement>(null);
-  const videoReplayerRef = useRef<VideoReplayer | null>(null);
-  const offFrameRef = useRef<(() => void) | null>(null);
+
+  // Video frames paint to the canvas; non-video frames collect into the log —
+  // both handled by library hooks, no manual VideoReplayer/onFrame wiring.
+  useVideoReplayer(player, replayCanvasRef, session?.store ?? null, VIDEO_CHANNEL_ID);
+  const replayLogs = useReplayFrameLog(player, { exclude: [VIDEO_CHANNEL_ID] });
 
   const replayPlayer = useReplayPlayer(player);
   const timeline = useReplayTimeline(player, timeRange);
@@ -219,6 +221,8 @@ export function App() {
   }, [stream]);
 
   // ── Replay ────────────────────────────────────────────────────────────────
+  // useVideoReplayer + useReplayFrameLog (above) react to `player`, so entering
+  // replay is just: grab the range, enter, and set the player.
   const handleEnterReplay = useCallback(async () => {
     if (!session) return;
     const range = await session.getTimeRange();
@@ -228,37 +232,13 @@ export function App() {
     }
     liveVideoRef.current?.pause();
     setTimeRange(range);
-    setReplayLogs([]);
-    const p = await enterReplay(range.earliest);
-    setPlayer(p);
-    if (replayCanvasRef.current) {
-      videoReplayerRef.current?.dispose();
-      videoReplayerRef.current = new VideoReplayer({
-        channelId: VIDEO_CHANNEL_ID,
-        store: session.store,
-        outputCanvas: replayCanvasRef.current,
-      });
-    }
-    offFrameRef.current?.();
-    offFrameRef.current =
-      p?.onFrame((frame) => {
-        if (frame.channelId === VIDEO_CHANNEL_ID) {
-          videoReplayerRef.current?.feedFrame(frame);
-          return;
-        }
-        setReplayLogs((prev) => [...prev.slice(-99), frame]);
-      }) ?? null;
+    setPlayer(await enterReplay(range.earliest));
   }, [session, enterReplay]);
 
   const handleExitReplay = useCallback(() => {
-    offFrameRef.current?.();
-    offFrameRef.current = null;
     player?.stop();
-    videoReplayerRef.current?.dispose();
-    videoReplayerRef.current = null;
     setPlayer(null);
     setTimeRange(null);
-    setReplayLogs([]);
     if (liveVideoRef.current && stream) {
       liveVideoRef.current.srcObject = stream;
       void liveVideoRef.current.play();

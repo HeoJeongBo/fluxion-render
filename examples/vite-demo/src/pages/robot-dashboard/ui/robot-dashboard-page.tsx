@@ -14,6 +14,7 @@ import {
   useFluxionGauge,
   useFluxionStream,
   useLayerConfig,
+  useSimpleChart,
   useSyncedTimeWindow,
 } from "@heojeongbo/fluxion-render/react";
 import { useMemo, useRef, useState } from "react";
@@ -82,35 +83,24 @@ function MotorCard({
   tickFn: (t: number) => number;
   timeOrigin: number;
 }) {
-  const [host, setHost] = useState<FluxionHost | null>(null);
-  const { value } = useFluxionGauge({ host });
-
-  const layers = useMemo(
-    () => [
-      axisGridLayer("axis", {
-        xMode: "time",
-        timeWindowMs: DEFAULT_WINDOW_MS,
-        timeOrigin,
-        yMode: "auto",
-        showXLabels: false,
-        showYLabels: false,
-        gridColor: THEME.chart.gridColor,
-        yPadPx: 4,
-      }),
-      lineLayer("current", { color, lineWidth: 2, retentionMs: 8_000, maxHz: 30 }),
-    ],
-    [timeOrigin, color],
-  );
-
-  useFluxionStream({
-    host,
-    intervalMs: 1000 / 30,
-    setup: (h) => h.line("current"),
-    tick: (t, l) => {
-      l.push({ t, y: tickFn(t) });
-      return 1;
+  // One call builds the axis+line pair, owns the host, and runs the 30 Hz pump.
+  const { layers, host, setHost } = useSimpleChart({
+    hz: 30,
+    windowMs: DEFAULT_WINDOW_MS,
+    timeOrigin,
+    color,
+    lineWidth: 2,
+    layerId: "current",
+    sample: tickFn,
+    axis: {
+      showXLabels: false,
+      showYLabels: false,
+      gridColor: THEME.chart.gridColor,
+      yPadPx: 4,
     },
+    line: { retentionMs: 8_000, maxHz: 30 },
   });
+  const { value } = useFluxionGauge({ host });
 
   return (
     <div

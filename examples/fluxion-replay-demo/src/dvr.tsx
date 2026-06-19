@@ -4,6 +4,7 @@ import {
   FluxionCanvas,
   lineLayer,
   useFluxionStream,
+  useMiniChart,
 } from "@heojeongbo/fluxion-render/react";
 import {
   createRandomLogProducer,
@@ -11,24 +12,20 @@ import {
   formatMs,
   LogChannel,
   MetricChannel,
-  type ReplayPlayerFrame,
-  snapTimeToSegment,
   VideoChannel,
 } from "@heojeongbo/fluxion-replay";
 import {
   DvrBadge,
+  DvrScrubber,
   PlaybackControls,
-  type RecordingSegment,
   useChartReplayBridge,
   useDisplayMedia,
+  useDvrController,
   useLiveTimeRange,
-  usePlaybackRate,
   useRecordingSession,
   useRecordingTimer,
-  useReplayDvr,
-  useReplayPlayer,
+  useReplayFrameLog,
   useReplaySession,
-  useReplayTimeline,
   useStorageInfo,
   useVideoRecorder,
   useVideoReplayer,
@@ -88,20 +85,14 @@ function MiniChart({ index }: { index: number }) {
   const color = MINI_COLORS[index % MINI_COLORS.length]!;
   const freqHz = 0.3 + (index % 7) * 0.25;
   const timeOrigin = useMemo(() => Date.now(), []);
-  const layers = useMemo(
-    () => [
-      axisGridLayer("axis", {
-        xMode: "time",
-        timeWindowMs: 8_000,
-        timeOrigin,
-        yMode: "auto",
-        showXLabels: true,
-        showYLabels: false,
-      }),
-      lineLayer("line", { color, lineWidth: 1.5, capacity: 1024 }),
-    ],
-    [timeOrigin, color],
-  );
+  const { layers } = useMiniChart({
+    color,
+    lineWidth: 1.5,
+    timeWindowMs: 8_000,
+    timeOrigin,
+    capacity: 1024,
+    axis: { showXLabels: true, showYLabels: false },
+  });
   useFluxionStream({
     host,
     intervalMs: 50,
@@ -135,97 +126,9 @@ function MiniChart({ index }: { index: number }) {
   );
 }
 
-// (LiveLogRow / FrameRow now imported from ./shared)
-
-function UnifiedScrubber({
-  isDvr,
-  dvrFraction,
-  disabled,
-  onSeek,
-  segments,
-  earliest,
-  latest,
-}: {
-  isDvr: boolean;
-  dvrFraction: number;
-  disabled: boolean;
-  onSeek: (f: number) => void;
-  segments: RecordingSegment[];
-  earliest: number;
-  latest: number;
-}) {
-  const inputRef = useRef<HTMLInputElement>(null);
-  const isDraggingRef = useRef(false);
-  useEffect(() => {
-    if (!isDvr || isDraggingRef.current || !inputRef.current) return;
-    inputRef.current.value = String(Math.round(dvrFraction * 10_000));
-  }, [isDvr, dvrFraction]);
-  useEffect(() => {
-    if (!isDvr && inputRef.current) inputRef.current.value = "10000";
-  }, [isDvr]);
-  const dur = latest - earliest;
-  return (
-    <div style={{ position: "relative", padding: "2px 0" }}>
-      <div
-        style={{
-          position: "absolute",
-          left: 0,
-          right: 0,
-          top: "50%",
-          transform: "translateY(-50%)",
-          height: 4,
-          background: T.border,
-          borderRadius: 2,
-          pointerEvents: "none",
-        }}
-      >
-        {dur > 0 &&
-          segments.map((seg, i) => {
-            const segEnd = seg.end ?? latest;
-            const left = ((seg.start - earliest) / dur) * 100;
-            const width = ((Math.min(segEnd, latest) - seg.start) / dur) * 100;
-            if (width <= 0) return null;
-            return (
-              <div
-                key={i}
-                style={{
-                  position: "absolute",
-                  left: `${left}%`,
-                  width: `${width}%`,
-                  height: "100%",
-                  background: isDvr ? T.accent : T.red,
-                  borderRadius: 2,
-                }}
-              />
-            );
-          })}
-      </div>
-      <input
-        ref={inputRef}
-        type="range"
-        min={0}
-        max={10_000}
-        step={1}
-        defaultValue={10_000}
-        disabled={disabled}
-        onPointerDown={() => {
-          isDraggingRef.current = true;
-        }}
-        onPointerUp={(e) => {
-          isDraggingRef.current = false;
-          onSeek(Number((e.currentTarget as HTMLInputElement).value) / 10_000);
-        }}
-        style={{
-          position: "relative",
-          width: "100%",
-          accentColor: isDvr ? T.accent : T.red,
-          cursor: disabled ? "default" : "pointer",
-          background: "transparent",
-        }}
-      />
-    </div>
-  );
-}
+// (LiveLogRow / FrameRow now imported from ./shared; the DVR scrubber is now
+// the library's <DvrScrubber> — fraction↔time mapping, segment bars, and
+// pointer→seek all live in fluxion-replay.)
 
 // ─── DVR App ──────────────────────────────────────────────────────────────────
 
@@ -236,7 +139,6 @@ export function DvrApp() {
   const storageInfo = useStorageInfo(session, { intervalMs: 3000 });
 
   const [liveLogs, setLiveLogs] = useState<LiveLogEntry[]>([]);
-  const [dvrLogs, setDvrLogs] = useState<ReplayPlayerFrame[]>([]);
   const [rightTab, setRightTab] = useState<"logs" | "charts">("logs");
 
   // ── Log append ref (stable across renders) ────────────────────────────────
@@ -287,7 +189,9 @@ export function DvrApp() {
   const { elapsedSec } = useRecordingTimer({ isRecording });
 
   // ── DVR controller ─────────────────────────────────────────────────────────
-  const dvr = useReplayDvr({
+  // One hook replaces the session→dvr→rate→player chain the demo used to wire by
+  // hand; `scrubber` spreads straight onto <DvrScrubber>.
+  const ctl = useDvrController({
     session,
     enterReplay,
     exitReplay,
@@ -295,7 +199,7 @@ export function DvrApp() {
     autoPlay: true,
     autoExitToLive: true,
   });
-  const { rate, setRate } = usePlaybackRate({ player: dvr.player });
+  const { dvr, replayPlayer, isPlaying, rate, setRate } = ctl;
 
   // ── Video refs ─────────────────────────────────────────────────────────────
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -362,32 +266,8 @@ export function DvrApp() {
   });
 
   // ── DVR frame log ──────────────────────────────────────────────────────────
-  useEffect(() => {
-    if (!dvr.player) {
-      setDvrLogs([]);
-      return;
-    }
-    return dvr.player.onFrame((f) => {
-      if (f.channelId !== VIDEO_CHANNEL_ID) setDvrLogs((p) => [...p.slice(-99), f]);
-    });
-  }, [dvr.player]);
-
-  // ── Timeline / scrubber ────────────────────────────────────────────────────
-  const replayPlayer = useReplayPlayer(dvr.player);
-  const timeline = useReplayTimeline(dvr.player, dvr.effectiveTimeRange);
-  const isPlaying = replayPlayer.state === "playing";
-
-  const handleSeek = useCallback(
-    (fraction: number) => {
-      if (!timeRange) return;
-      const effectiveLatest = dvr.effectiveTimeRange?.latest ?? timeRange.latest;
-      const raw = timeRange.earliest + fraction * (effectiveLatest - timeRange.earliest);
-      const t = snapTimeToSegment(raw, segments, effectiveLatest);
-      if (fraction >= 0.9999) dvr.exit();
-      else void dvr.enter(t);
-    },
-    [dvr, timeRange, segments],
-  );
+  // onFrame → drop video → keep recent 100, now a single library hook.
+  const dvrLogs = useReplayFrameLog(dvr.player, { exclude: [VIDEO_CHANNEL_ID] });
 
   const handleStartCapture = useCallback(async () => {
     try {
@@ -703,16 +583,13 @@ export function DvrApp() {
               </span>
             )}
           </div>
-          <UnifiedScrubber
-            isDvr={isDvr}
-            dvrFraction={timeline.fraction}
-            disabled={!timeRange}
-            onSeek={handleSeek}
+          <DvrScrubber
+            {...ctl.scrubber}
             segments={segments}
-            earliest={timeRange?.earliest ?? 0}
-            latest={
-              isDvr && frozenLatest != null ? frozenLatest : (timeRange?.latest ?? 0)
-            }
+            liveAccentColor={T.red}
+            dvrAccentColor={T.accent}
+            dvrTextColor={T.text}
+            labelColor={T.textMuted}
           />
         </div>
       )}
