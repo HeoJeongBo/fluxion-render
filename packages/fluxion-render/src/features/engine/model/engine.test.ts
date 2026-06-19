@@ -570,6 +570,47 @@ describe("Engine", () => {
       engine.dispatch({ op: Op.DISPOSE });
     });
 
+    it("skips the y-axis canvas on pure continuous frames (bounds unchanged)", () => {
+      const engine = new Engine();
+      const canvas = newCanvas(100, 100);
+      engine.dispatch({ op: Op.INIT, canvas, width: 100, height: 100, dpr: 1 });
+      // Fixed yRange → y bounds never shift, so the y-axis only needs to draw
+      // once. A followClock x-axis drives continuous frames.
+      engine.dispatch({
+        op: Op.ADD_LAYER,
+        id: "axis",
+        kind: "axis-grid",
+        config: {
+          xMode: "time",
+          timeWindowMs: 1000,
+          timeOrigin: 1_000_000,
+          followClock: true,
+          yRange: [0, 10],
+        },
+      });
+      const xAxisCanvas = newCanvas(100, 30);
+      const yAxisCanvas = newCanvas(60, 100);
+      engine.dispatch({
+        op: Op.SET_AXIS_CANVAS,
+        xAxisCanvas: xAxisCanvas as unknown as OffscreenCanvas,
+        yAxisCanvas: yAxisCanvas as unknown as OffscreenCanvas,
+        xAxisHeight: 30,
+        yAxisWidth: 60,
+      });
+      flushFrame(); // initial dirty frame draws both axes
+      const xCtx = (xAxisCanvas as unknown as { getContext: () => FakeCtx }).getContext();
+      const yCtx = (yAxisCanvas as unknown as { getContext: () => FakeCtx }).getContext();
+      expect(yCtx.calls.some((c) => c.name === "setTransform")).toBe(true);
+      xCtx.calls.length = 0;
+      yCtx.calls.length = 0;
+      // Subsequent continuous frames: x-axis scrolls, y-axis is skipped.
+      flushFrame();
+      flushFrame();
+      expect(xCtx.calls.some((c) => c.name === "setTransform")).toBe(true);
+      expect(yCtx.calls.length).toBe(0);
+      engine.dispatch({ op: Op.DISPOSE });
+    });
+
     it("only xAxisCanvas provided — yAxis stays null", () => {
       const engine = new Engine();
       const canvas = newCanvas(100, 100);

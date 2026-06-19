@@ -110,7 +110,7 @@ export class Engine {
   private static readonly BOUNDS_EPS = 1e-4;
 
   constructor() {
-    this.scheduler = new Scheduler(() => this.render());
+    this.scheduler = new Scheduler((dirty) => this.render(dirty));
   }
 
   dispatch(msg: HostMsg): void {
@@ -279,7 +279,7 @@ export class Engine {
     }
   }
 
-  private render() {
+  private render(dirty = true) {
     const ctx = this.ctx;
     /* v8 ignore start -- render only runs via the scheduler after init; ctx/canvas are always set */
     if (!ctx || !this.canvas) return;
@@ -338,7 +338,10 @@ export class Engine {
           this.axisStyle,
         );
       }
-      if (this.yAxisCtx && this.yAxisCanvas) {
+      // The y-axis only changes when y bounds shift or a one-shot redraw was
+      // requested (resize/config/style). On a pure follow-clock continuous
+      // frame, only the x-axis scrolls — skip the y-axis fill+text entirely.
+      if (this.yAxisCtx && this.yAxisCanvas && (dirty || boundsChanged)) {
         this.yAxisCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
         axisLayer.drawYAxis(
           this.yAxisCtx,

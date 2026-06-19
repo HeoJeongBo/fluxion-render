@@ -1,4 +1,11 @@
-import { type CSSProperties, type ReactNode, useMemo, useState } from "react";
+import {
+  type CSSProperties,
+  type ReactNode,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 
 /** Compute the visible row window [start, end) for virtual scrolling. */
 function virtualWindow(
@@ -50,7 +57,67 @@ export interface FluxionTableProps<R extends Record<string, unknown>> {
    * `height` in px. Implies a scroll container; pair with `stickyHeader` to keep
    * the header visible. Omit for the default (render-all) behavior.
    */
-  virtual?: { rowHeight: number; height: number; overscan?: number };
+  virtual?: {
+    rowHeight: number;
+    height: number;
+    overscan?: number;
+    /**
+     * Coalesce scroll-driven re-renders to at most one per `scrollThrottleMs`.
+     * High-refresh displays fire `scroll` at 120 Hz+; for very large tables that
+     * can flood React with renders. A leading+trailing throttle keeps the first
+     * and last position exact while dropping the burst in between. Omit for the
+     * default (re-render on every scroll event).
+     */
+    scrollThrottleMs?: number;
+  };
+}
+
+/**
+ * Throttled `setState` for scroll position. Returns a setter that applies the
+ * latest value immediately on the leading edge, then at most once per
+ * `intervalMs`, always flushing the final value on the trailing edge. With
+ * `intervalMs <= 0` it passes through unthrottled.
+ */
+function useThrottledState(intervalMs: number): [number, (next: number) => void] {
+  const [value, setValue] = useState(0);
+  const lastRunRef = useRef(0);
+  const pendingRef = useRef<number | null>(null);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (timerRef.current != null) clearTimeout(timerRef.current);
+    };
+  }, []);
+
+  const set = (next: number) => {
+    if (intervalMs <= 0) {
+      setValue(next);
+      return;
+    }
+    const now = Date.now();
+    const elapsed = now - lastRunRef.current;
+    if (elapsed >= intervalMs) {
+      lastRunRef.current = now;
+      setValue(next);
+      return;
+    }
+    // Within the throttle window — remember the latest and schedule a trailing
+    // flush if one isn't already pending.
+    pendingRef.current = next;
+    if (timerRef.current == null) {
+      timerRef.current = setTimeout(() => {
+        timerRef.current = null;
+        lastRunRef.current = Date.now();
+        // The timer is only scheduled right after `pendingRef` is set above and
+        // is the only thing that clears it, so it is always non-null here.
+        setValue(pendingRef.current as number);
+        pendingRef.current = null;
+      }, intervalMs - elapsed);
+    }
+  };
+
+  return [value, set];
 }
 
 const S = {
@@ -117,7 +184,7 @@ export function FluxionTable<R extends Record<string, unknown>>({
   virtual,
 }: FluxionTableProps<R>) {
   const [sort, setSort] = useState<{ key: string; dir: 1 | -1 } | null>(null);
-  const [scrollTop, setScrollTop] = useState(0);
+  const [scrollTop, setScrollTop] = useThrottledState(virtual?.scrollThrottleMs ?? 0);
 
   const sortedRows = useMemo(() => {
     if (!sort) return rows;

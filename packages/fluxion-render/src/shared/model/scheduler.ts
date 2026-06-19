@@ -8,9 +8,16 @@ export class Scheduler {
   private continuous = false;
   private running = false;
   private raf: number | null = null;
-  private readonly tick: () => void;
+  private readonly tick: (dirty: boolean) => void;
 
-  constructor(tick: () => void) {
+  /**
+   * `tick` receives whether THIS frame was triggered by the dirty flag (a
+   * one-shot redraw: data, config, resize, style) as opposed to a pure
+   * continuous frame (a follow-clock scroll where only the time axis moves).
+   * The engine uses this to skip redundant work — e.g. re-rendering the y-axis
+   * canvas — on continuous frames where nothing y-related changed.
+   */
+  constructor(tick: (dirty: boolean) => void) {
     this.tick = tick;
   }
 
@@ -51,8 +58,9 @@ export class Scheduler {
   private loop = () => {
     if (!this.running) return;
     if (this.continuous || this.dirty) {
+      const wasDirty = this.dirty;
       this.dirty = false;
-      this.tick();
+      this.tick(wasDirty);
     }
     if (typeof requestAnimationFrame !== "undefined") {
       this.raf = requestAnimationFrame(this.loop);

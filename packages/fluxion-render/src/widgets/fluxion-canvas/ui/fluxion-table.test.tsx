@@ -1,5 +1,5 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it } from "vitest";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { FluxionTable, type FluxionTableColumn } from "./fluxion-table";
 
 afterEach(cleanup);
@@ -254,6 +254,90 @@ describe("FluxionTable", () => {
         <FluxionTable columns={COLUMNS} rows={manyRows.slice(0, 50)} />,
       );
       expect(bodyRows(container).length).toBe(50);
+    });
+
+    describe("scrollThrottleMs", () => {
+      function firstRowText(container: HTMLElement): string {
+        return bodyRows(container)[0]!.textContent ?? "";
+      }
+
+      it("applies the first scroll immediately (leading edge)", () => {
+        vi.useFakeTimers();
+        try {
+          const { container } = render(
+            <FluxionTable
+              columns={COLUMNS}
+              rows={manyRows}
+              virtual={{ rowHeight: 20, height: 200, overscan: 1, scrollThrottleMs: 50 }}
+            />,
+          );
+          const root = container.firstChild as HTMLElement;
+          act(() => {
+            fireEvent.scroll(root, { target: { scrollTop: 2000 } }); // row ~100
+          });
+          expect(firstRowText(container)).toContain("row 9");
+        } finally {
+          vi.useRealTimers();
+        }
+      });
+
+      it("clears a pending trailing-flush timer on unmount", () => {
+        vi.useFakeTimers();
+        try {
+          const { container, unmount } = render(
+            <FluxionTable
+              columns={COLUMNS}
+              rows={manyRows}
+              virtual={{ rowHeight: 20, height: 200, overscan: 1, scrollThrottleMs: 50 }}
+            />,
+          );
+          const root = container.firstChild as HTMLElement;
+          // Leading scroll, then a within-window scroll that schedules a timer.
+          act(() => {
+            fireEvent.scroll(root, { target: { scrollTop: 2000 } });
+            fireEvent.scroll(root, { target: { scrollTop: 4000 } });
+          });
+          // Unmount with the timer still pending — cleanup must clear it so the
+          // trailing flush never fires into an unmounted component.
+          expect(() => {
+            unmount();
+            vi.advanceTimersByTime(100);
+          }).not.toThrow();
+        } finally {
+          vi.useRealTimers();
+        }
+      });
+
+      it("coalesces a burst into a single trailing flush at the latest position", () => {
+        vi.useFakeTimers();
+        try {
+          const { container } = render(
+            <FluxionTable
+              columns={COLUMNS}
+              rows={manyRows}
+              virtual={{ rowHeight: 20, height: 200, overscan: 1, scrollThrottleMs: 50 }}
+            />,
+          );
+          const root = container.firstChild as HTMLElement;
+          // Leading scroll lands immediately.
+          act(() => {
+            fireEvent.scroll(root, { target: { scrollTop: 2000 } });
+          });
+          // Burst within the throttle window — none applied yet.
+          act(() => {
+            fireEvent.scroll(root, { target: { scrollTop: 4000 } });
+            fireEvent.scroll(root, { target: { scrollTop: 6000 } });
+          });
+          expect(firstRowText(container)).toContain("row 9"); // still at ~100
+          // Trailing flush applies the LAST position (6000 → row ~300).
+          act(() => {
+            vi.advanceTimersByTime(50);
+          });
+          expect(firstRowText(container)).toContain("row 29");
+        } finally {
+          vi.useRealTimers();
+        }
+      });
     });
   });
 });

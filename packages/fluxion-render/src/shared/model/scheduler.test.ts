@@ -62,6 +62,31 @@ describe("Scheduler", () => {
     s.stop();
   });
 
+  it("passes dirty=true to tick for a markDirty-triggered frame", () => {
+    const tick = vi.fn();
+    const s = new Scheduler(tick);
+    s.start();
+    s.markDirty();
+    vi.advanceTimersByTime(20);
+    expect(tick).toHaveBeenCalledTimes(1);
+    expect(tick).toHaveBeenLastCalledWith(true);
+    s.stop();
+  });
+
+  it("passes dirty=false to tick for a pure continuous frame", () => {
+    const tick = vi.fn();
+    const s = new Scheduler(tick);
+    s.start();
+    s.setContinuous(true);
+    // First frame: setContinuous flips dirty=true, so it reports dirty.
+    vi.advanceTimersByTime(20);
+    expect(tick).toHaveBeenLastCalledWith(true);
+    // Subsequent frames run purely off continuous — dirty=false.
+    vi.advanceTimersByTime(40);
+    expect(tick).toHaveBeenLastCalledWith(false);
+    s.stop();
+  });
+
   it("continuous mode ticks every frame without markDirty", () => {
     const tick = vi.fn();
     const s = new Scheduler(tick);
