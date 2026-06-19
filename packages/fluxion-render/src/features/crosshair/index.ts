@@ -13,7 +13,10 @@ export type {
   UseFluxionCrosshairResult,
 } from "./model/use-fluxion-crosshair";
 export { useFluxionCrosshair } from "./model/use-fluxion-crosshair";
-export type { UseFluxionCrosshairFromLayersOptions } from "./model/use-fluxion-crosshair-from-layers";
+export type {
+  UseFluxionCrosshairFromLayersOptions,
+  UseFluxionCrosshairFromLayersResult,
+} from "./model/use-fluxion-crosshair-from-layers";
 export { useFluxionCrosshairFromLayers } from "./model/use-fluxion-crosshair-from-layers";
 export type {
   UseHoverDataCacheOptions,

@@ -19,6 +19,7 @@ export {
   type UseBroadcastCrosshairCacheOptions,
   type UseBroadcastCrosshairCacheResult,
   type UseFluxionCrosshairFromLayersOptions,
+  type UseFluxionCrosshairFromLayersResult,
   type UseFluxionCrosshairOptions,
   type UseFluxionCrosshairResult,
   type UseHoverDataCacheOptions,
