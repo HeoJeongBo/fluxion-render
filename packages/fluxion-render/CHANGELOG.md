@@ -1,5 +1,46 @@
 # Changelog
 
+# [0.18.0](https://github-personal/HeoJeongBo/fluxion-render/compare/fluxion-render-v0.17.1...fluxion-render-v0.18.0) (2026-06-19)
+
+
+### Bug Fixes
+
+* **render:** track absolute-epoch guard per layer ([14d4007](https://github-personal/HeoJeongBo/fluxion-render/commit/14d4007db993112d7249121d3d0403943765d912))
+* **replay:** un-wedge scrubber DVR-entry guard on lost pointer release ([713f692](https://github-personal/HeoJeongBo/fluxion-render/commit/713f692c9e40a0f3075d2a32b4c2fce1bc4350cd))
+
+
+### Features
+
+* **examples:** add demos for the new robot & distribution layers ([bb479ff](https://github-personal/HeoJeongBo/fluxion-render/commit/bb479ff7ac250c3aede9776ad68e7859b95bbf14))
+* **examples:** add helpers and axis-format demos, lane/overlay toggle ([b22278e](https://github-personal/HeoJeongBo/fluxion-render/commit/b22278e69dd0e601f6e2af3b2a64777d80e8e17b))
+* **examples:** route vite-demo pages with TanStack Router ([8a13c48](https://github-personal/HeoJeongBo/fluxion-render/commit/8a13c48568a2faa2d5eec25088b5d92d77f4f1d1))
+* **render:** add box-plot layer and spectrogram preset ([9b28e63](https://github-personal/HeoJeongBo/fluxion-render/commit/9b28e63f603b2cd69fe4364cbf0789e8e266c2f1))
+* **render:** add dash palette and lane (small-multiples) mode for overlapping series ([684581d](https://github-personal/HeoJeongBo/fluxion-render/commit/684581db52a7b657058134e565661d7ab9c391e7))
+* **render:** add histogram layer with internal binning ([adffeb6](https://github-personal/HeoJeongBo/fluxion-render/commit/adffeb61a5db42cb147ce422608d6a5256d899d6))
+* **render:** add maxGapMs gap-breaking to line/area/step layers ([4f8aa30](https://github-personal/HeoJeongBo/fluxion-render/commit/4f8aa30beece2f24db77fc709273036564a2d116))
+* **render:** add polar/radar layer ([a462f75](https://github-personal/HeoJeongBo/fluxion-render/commit/a462f75f4d0db5518649b06b5f728da2006b7af3))
+* **render:** add stacked-area layer for composition over time ([6425893](https://github-personal/HeoJeongBo/fluxion-render/commit/6425893ee559d29c4367864264d5d710a19de4f1))
+* **render:** add trajectory and occupancy-grid layers for robot dashboards ([109d91b](https://github-personal/HeoJeongBo/fluxion-render/commit/109d91b6fb655960541f06f4258d66c68358e0ae))
+* **render:** batch config, shared ticker, pool crosshair & layer opts ([a52f9cf](https://github-personal/HeoJeongBo/fluxion-render/commit/a52f9cfd9c4f1268d4dc672c0c7e1045d4b4d215))
+* **render:** bundle hover cache and overrides into useFluxionCrosshairFromLayers ([d2e5f4c](https://github-personal/HeoJeongBo/fluxion-render/commit/d2e5f4c6eafd716ae9b8b9f7739022f4cdf0a4f3)), closes [hi#rate](https://github-personal/hi/issues/rate)
+* **render:** DX helpers — crosshair overlay, legend-from-layers, capacity check ([d39d161](https://github-personal/HeoJeongBo/fluxion-render/commit/d39d1614b288e61dbbdde33f24c7f9de511cbe19))
+* **render:** follow-clock stabilization, DX helpers, and 100% coverage ([0fb1b1c](https://github-personal/HeoJeongBo/fluxion-render/commit/0fb1b1c1f3ea0bf96a2dd0e0a96a97c9c5fcaf1a))
+* **render:** host.getMetrics() diagnostics and absolute-epoch push guard ([517d21e](https://github-personal/HeoJeongBo/fluxion-render/commit/517d21e416893f0651c1336666da5560ad408243))
+* **render:** reconcile layer configs in useFluxionCanvas when layers change ([28e55a7](https://github-personal/HeoJeongBo/fluxion-render/commit/28e55a77a482658321ff10194e88dbe0d4932464))
+* **render:** reconcile structural layer changes without a key remount ([da30fb2](https://github-personal/HeoJeongBo/fluxion-render/commit/da30fb2d117f66e9c6cef9d194b2a1b2a1f97fc5))
+* **render:** table enhancements — sparklines, badges, sortable & sticky headers ([837670b](https://github-personal/HeoJeongBo/fluxion-render/commit/837670b8d238bc11de32e104a362ad52ac901850))
+* **render:** virtual row scrolling for FluxionTable ([ab5e11c](https://github-personal/HeoJeongBo/fluxion-render/commit/ab5e11ca2841417166c03dd76f0dfcfd004bb8c2))
+* **replay:** add onOtherFrame passthrough to useVideoReplayer ([6a43f42](https://github-personal/HeoJeongBo/fluxion-render/commit/6a43f42097d7515cd9cec3f1030110d12e69d1ad))
+* **replay:** add useReplayFrameLog hook ([5bd53ed](https://github-personal/HeoJeongBo/fluxion-render/commit/5bd53ed3bfd9acfa74e13e80c1bd23d5032896ac))
+* **replay:** thread snapMs into DvrScrubber step and guard concurrent enterReplay ([50a0200](https://github-personal/HeoJeongBo/fluxion-render/commit/50a02001f4be8ed3c4474ab2950e3c62cbb29ffd))
+
+
+### Performance Improvements
+
+* **render:** cache axis y-ticks and formatClock date per frame ([9666ce0](https://github-personal/HeoJeongBo/fluxion-render/commit/9666ce0028542e591dac0b718ea9d73f7636b398))
+* **render:** dirty-gate y-axis canvas and add table scroll throttle ([401258a](https://github-personal/HeoJeongBo/fluxion-render/commit/401258a5d678d0fce757b2ab3007e0dc7c0e73c4)), closes [hi#refresh](https://github-personal/hi/issues/refresh)
+* **replay:** read getTimeRange bounds in a single transaction ([a658123](https://github-personal/HeoJeongBo/fluxion-render/commit/a6581235a84e6496a2d06310f85a1123326043b9))
+
 ## [0.17.1](https://github-personal/HeoJeongBo/fluxion-render/compare/fluxion-render-v0.17.0...fluxion-render-v0.17.1) (2026-06-12)
 
 
