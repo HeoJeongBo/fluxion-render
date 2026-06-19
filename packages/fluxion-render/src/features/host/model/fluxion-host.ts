@@ -4,6 +4,7 @@ import type { LineChartConfig } from "../../../entities/line-chart-layer";
 import type { LineChartStaticConfig } from "../../../entities/line-chart-static-layer";
 import type { FluxionWorkerPool } from "../../../features/worker-pool";
 import { getDefaultPool } from "../../../features/worker-pool";
+import { Emitter } from "../../../shared/lib/emitter";
 import {
   type AxisStyle,
   type BoundsUpdateMsg,
@@ -40,6 +41,7 @@ import {
   StepLayerHandle,
   TrajectoryHandle,
 } from "./layer-handles";
+import { MetricsTracker } from "./metrics-tracker";
 
 /**
  * TypedArray flavors that FluxionRender accepts. `ArrayBufferView` is too
@@ -175,20 +177,16 @@ export class FluxionHost {
     readonly hostId?: string;
   };
   private disposed = false;
-  private boundsListeners: BoundsChangeListener[] = [];
-  private tickListeners: TickUpdateListener[] = [];
+  private readonly boundsEmitter = new Emitter<
+    [yMin: number, yMax: number, latestT: number]
+  >();
+  private readonly tickEmitter = new Emitter<
+    [xTicks: SerializedTick[], yTicks: SerializedTick[]]
+  >();
   // Diagnostics — see getMetrics().
-  private pushCount = 0;
-  private sampleCount = 0;
-  private bytesTransferred = 0;
-  private pushesByLayer = new Map<string, number>();
-  private lastPushAt: number | null = null;
-  private lastBounds: { yMin: number; yMax: number; latestT: number } | null = null;
+  private readonly metrics = new MetricsTracker();
   private workerMsgHandler: EventListener | null = null;
   private visibilityHandler: (() => void) | null = null;
-  // Polled metrics subscription — one shared interval drives all listeners.
-  private metricsListeners: MetricsListener[] = [];
-  private metricsTimer: ReturnType<typeof setInterval> | null = null;
 
   constructor(canvas: HTMLCanvasElement, opts: FluxionHostOptions = {}) {
     if (opts.workerFactory) {
@@ -250,12 +248,12 @@ export class FluxionHost {
       if (!msg || typeof msg !== "object" || !("op" in msg)) return;
       if (msg.op === WorkerOp.BOUNDS_UPDATE) {
         const bu = msg as BoundsUpdateMsg;
-        this.lastBounds = { yMin: bu.yMin, yMax: bu.yMax, latestT: bu.latestT };
-        for (const fn of this.boundsListeners) fn(bu.yMin, bu.yMax, bu.latestT);
+        this.metrics.recordBounds(bu.yMin, bu.yMax, bu.latestT);
+        this.boundsEmitter.emit(bu.yMin, bu.yMax, bu.latestT);
       }
       if (msg.op === WorkerOp.TICK_UPDATE) {
         const tu = msg as TickUpdateMsg;
-        for (const fn of this.tickListeners) fn(tu.xTicks, tu.yTicks);
+        this.tickEmitter.emit(tu.xTicks, tu.yTicks);
       }
     };
     if (this.worker.addEventListener) {
@@ -291,11 +289,7 @@ export class FluxionHost {
    * Returns an unsubscribe function.
    */
   onBoundsChange(listener: BoundsChangeListener): () => void {
-    this.boundsListeners.push(listener);
-    return () => {
-      const idx = this.boundsListeners.indexOf(listener);
-      if (idx >= 0) this.boundsListeners.splice(idx, 1);
-    };
+    return this.boundsEmitter.subscribe(listener);
   }
 
   /**
@@ -305,11 +299,7 @@ export class FluxionHost {
    * Returns an unsubscribe function.
    */
   onTickUpdate(listener: TickUpdateListener): () => void {
-    this.tickListeners.push(listener);
-    return () => {
-      const idx = this.tickListeners.indexOf(listener);
-      if (idx >= 0) this.tickListeners.splice(idx, 1);
-    };
+    return this.tickEmitter.subscribe(listener);
   }
 
   /**
@@ -530,14 +520,7 @@ export class FluxionHost {
     }
     const buffer = data.buffer as ArrayBuffer;
     // Diagnostics: record before the buffer is transferred (detached after post).
-    this.pushCount++;
-    this.sampleCount += data.length;
-    this.bytesTransferred += buffer.byteLength;
-    this.pushesByLayer.set(id, (this.pushesByLayer.get(id) ?? 0) + 1);
-    /* v8 ignore start -- `performance` is always defined in the DOM test env; SSR fallback unreachable */
-    this.lastPushAt =
-      typeof performance !== "undefined" ? performance.now() : this.pushCount;
-    /* v8 ignore stop */
+    this.metrics.recordPush(id, data.length, buffer.byteLength);
     this.post(
       {
         op: Op.DATA,
@@ -557,14 +540,7 @@ export class FluxionHost {
    * main-thread metrics (what was sent); ring eviction happens worker-side.
    */
   getMetrics(): FluxionMetrics {
-    return {
-      pushCount: this.pushCount,
-      sampleCount: this.sampleCount,
-      bytesTransferred: this.bytesTransferred,
-      pushesByLayer: Object.fromEntries(this.pushesByLayer),
-      lastPushAt: this.lastPushAt,
-      bounds: this.lastBounds ? { ...this.lastBounds } : null,
-    };
+    return this.metrics.getMetrics();
   }
 
   /**
@@ -574,21 +550,7 @@ export class FluxionHost {
    * unsubscribe function. `intervalMs` of the FIRST subscriber sets the rate.
    */
   onMetricsUpdate(cb: MetricsListener, opts?: { intervalMs?: number }): () => void {
-    this.metricsListeners.push(cb);
-    if (this.metricsTimer === null) {
-      this.metricsTimer = setInterval(() => {
-        const snapshot = this.getMetrics();
-        for (const fn of this.metricsListeners) fn(snapshot);
-      }, opts?.intervalMs ?? 250);
-    }
-    return () => {
-      const idx = this.metricsListeners.indexOf(cb);
-      if (idx >= 0) this.metricsListeners.splice(idx, 1);
-      if (this.metricsListeners.length === 0 && this.metricsTimer !== null) {
-        clearInterval(this.metricsTimer);
-        this.metricsTimer = null;
-      }
-    };
+    return this.metrics.onMetricsUpdate(cb, opts);
   }
 
   /**
@@ -661,13 +623,9 @@ export class FluxionHost {
       document.removeEventListener("visibilitychange", this.visibilityHandler);
     }
     this.visibilityHandler = null;
-    if (this.metricsTimer !== null) {
-      clearInterval(this.metricsTimer);
-      this.metricsTimer = null;
-    }
-    this.metricsListeners.length = 0;
-    this.boundsListeners.length = 0;
-    this.tickListeners.length = 0;
+    this.metrics.dispose();
+    this.boundsEmitter.clear();
+    this.tickEmitter.clear();
     try {
       this.post({ op: Op.DISPOSE });
     } catch {
