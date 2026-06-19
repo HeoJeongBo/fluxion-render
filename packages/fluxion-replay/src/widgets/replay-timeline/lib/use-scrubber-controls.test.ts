@@ -148,6 +148,54 @@ describe("useScrubberControls", () => {
       expect(enter).toHaveBeenLastCalledWith(1_020_000);
     });
 
+    it("a window pointerup un-wedges the entry guard even without beginScrub wired", async () => {
+      // Same regression as above, but the safety net: a release OFF the slider
+      // never fires the input's commit/pointer-down handlers, yet a window-level
+      // pointerup always fires. The hook listens for it and re-arms the guard so
+      // a later drag can enter DVR again — independent of onPointerDown wiring.
+      const player = makeFakePlayer(1_030_000);
+      const enter = vi.fn(async () => player);
+      const fakeDvr = {
+        isDvr: false, // stays live (models the post-auto-exit state)
+        player: null,
+        frozenLatest: null,
+        effectiveTimeRange: LIVE,
+        enter,
+        exit: vi.fn(),
+      };
+      const { result } = renderHook(() =>
+        // biome-ignore lint/suspicious/noExplicitAny: minimal fake dvr
+        useScrubberControls({ dvr: fakeDvr as any, rate: 1 }),
+      );
+
+      // First gesture enters DVR (guard set true); its release is lost.
+      await act(async () => {
+        result.current.onScrubChange(fakeChange(1_030_000));
+        for (let i = 0; i < 5; i++) await Promise.resolve();
+      });
+      expect(enter).toHaveBeenCalledTimes(1);
+
+      // A fresh drag is still blocked by the wedged guard.
+      await act(async () => {
+        result.current.onScrubChange(fakeChange(1_025_000));
+        for (let i = 0; i < 5; i++) await Promise.resolve();
+      });
+      expect(enter).toHaveBeenCalledTimes(1);
+
+      // A window pointerup fires (release anywhere) → deferred re-arm clears the
+      // guard. NO beginScrub() is called.
+      act(() => {
+        window.dispatchEvent(new Event("pointerup"));
+        vi.advanceTimersByTime(0); // run the deferred macrotask re-arm
+      });
+      await act(async () => {
+        result.current.onScrubChange(fakeChange(1_020_000));
+        for (let i = 0; i < 5; i++) await Promise.resolve();
+      });
+      expect(enter).toHaveBeenCalledTimes(2);
+      expect(enter).toHaveBeenLastCalledWith(1_020_000);
+    });
+
     it("while live + t within liveEdgeEpsMs of edge → no-op (no enter)", async () => {
       const { ses, result } = setup();
       const nearEdge = LIVE.latest - EPS + 1; // inside eps window

@@ -296,5 +296,36 @@ export function useScrubberControls(
   // Cancel any in-flight coalesced seek on unmount.
   useEffect(() => () => flushPendingSeek(), [flushPendingSeek]);
 
+  // Safety net for a lost release. `commitScrub` (onMouseUp/onTouchEnd/onKeyUp)
+  // is the normal place the per-gesture entry guard is cleared — but a pointer
+  // released OFF the slider (common when dragging a thin timeline bar quickly)
+  // never fires those, so without `beginScrub` (onPointerDown) wired the guard
+  // would stay stuck `true` and silently gate out EVERY future live→DVR drag
+  // (the "after a while, dragging to the past stops working" bug). A window-
+  // level pointerup/pointercancel always fires, so re-arm the guard there.
+  //
+  // The re-arm is DEFERRED to a macrotask: on a normal release over the input,
+  // `pointerup` fires BEFORE the input's `mouseup`/`commitScrub`, so an
+  // immediate reset would clear the flag commitScrub still needs to read
+  // (cancel-vs-chain decision). Deferring lets commitScrub run first; the
+  // late reset is then a harmless no-op (commit already set it false). On a
+  // lost release no commit runs, so this deferred reset is the only un-wedge.
+  useEffect(() => {
+    /* v8 ignore start -- SSR guard; happy-dom always provides window */
+    if (typeof window === "undefined") return;
+    /* v8 ignore stop */
+    const rearm = () => {
+      setTimeout(() => {
+        enteredDuringDragRef.current = false;
+      }, 0);
+    };
+    window.addEventListener("pointerup", rearm);
+    window.addEventListener("pointercancel", rearm);
+    return () => {
+      window.removeEventListener("pointerup", rearm);
+      window.removeEventListener("pointercancel", rearm);
+    };
+  }, []);
+
   return { scrubT, beginScrub, onScrubChange, commitScrub };
 }
