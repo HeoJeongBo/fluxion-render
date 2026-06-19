@@ -53,6 +53,8 @@ export type {
   UseRecordingTimerResult,
 } from "./widgets/recording/lib/use-recording-timer";
 export { useRecordingTimer } from "./widgets/recording/lib/use-recording-timer";
+export type { UseReplayFrameLogOptions } from "./widgets/replay-timeline/lib/use-replay-frame-log";
+export { useReplayFrameLog } from "./widgets/replay-timeline/lib/use-replay-frame-log";
 export type {
   UseReplayPlayerOptions,
   UseReplayPlayerResult,
