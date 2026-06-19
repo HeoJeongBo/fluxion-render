@@ -60,4 +60,11 @@ describe("formatClock", () => {
     expect(fmt(at(2026, 0, 1, 14, 30, 0))).toBe("14:30");
     expect(fmt(at(2026, 0, 1, 8, 5, 0))).toBe("08:05");
   });
+
+  it("repeated calls with the same epoch reuse the cached date (hit path)", () => {
+    const t = at(2026, 0, 1, 14, 30, 45);
+    // Second call hits the one-entry Date memo; output must be identical.
+    expect(formatClock(t, "HH:mm:ss")).toBe("14:30:45");
+    expect(formatClock(t, "H:m:s")).toBe("14:30:45");
+  });
 });

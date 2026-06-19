@@ -29,8 +29,18 @@ export function makeClockFormatter(pattern: string): TickFormatter {
   return (epochMs: number) => formatClock(epochMs, pattern);
 }
 
+// One-entry Date memo. In a follow-clock axis the same wall-clock value is
+// formatted for many ticks across many frames; reusing the Date avoids a fresh
+// allocation per label. Transparent — the same fields are read either way.
+let lastEpoch = Number.NaN;
+let lastDate: Date | null = null;
+
 export function formatClock(epochMs: number, pattern: string): string {
-  const d = new Date(epochMs);
+  if (epochMs !== lastEpoch || lastDate === null) {
+    lastDate = new Date(epochMs);
+    lastEpoch = epochMs;
+  }
+  const d = lastDate;
   return pattern.replace(TOKEN_RE, (tok) => {
     switch (tok) {
       case "HH":

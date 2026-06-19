@@ -187,8 +187,35 @@ export class AxisGridLayer implements Layer {
   // One-shot guard so a misconfigured follow-clock (no timeOrigin) warns once.
   private warnedFollowNoOrigin = false;
 
+  // Cache of y-tick values + formatted labels, keyed on the y-bounds they were
+  // computed for. y-ticks only change when y-bounds move (or config changes —
+  // which nulls this), so a follow-clock x-axis scrolling every frame no longer
+  // re-runs niceTicks + formatYTick for an unchanged y-axis. `setConfig` clears
+  // it so a new targetTicks / yTickFormat takes effect.
+  private yTickCache: {
+    yMin: number;
+    yMax: number;
+    ticks: number[];
+    labels: string[];
+  } | null = null;
+
   constructor(id: string) {
     this.id = id;
+  }
+
+  /**
+   * y-tick values and their formatted labels for the current y-bounds, reusing
+   * the cached result while the bounds are unchanged.
+   */
+  private yTicksFor(): { ticks: number[]; labels: string[] } {
+    const cache = this.yTickCache;
+    if (cache && cache.yMin === this.bounds.yMin && cache.yMax === this.bounds.yMax) {
+      return cache;
+    }
+    const ticks = niceTicks(this.bounds.yMin, this.bounds.yMax, this.targetTicks);
+    const labels = ticks.map((v) => formatYTick(v, this.yTickFormat));
+    this.yTickCache = { yMin: this.bounds.yMin, yMax: this.bounds.yMax, ticks, labels };
+    return this.yTickCache;
   }
 
   setConfig(config: unknown): void {
@@ -242,6 +269,10 @@ export class AxisGridLayer implements Layer {
           "window falls back to latestT (no clock follow).",
       );
     }
+
+    // Any config change can affect tick values/labels (targetTicks, yTickFormat,
+    // yRange); drop the cache so the next draw recomputes.
+    this.yTickCache = null;
   }
 
   setData(_buffer: ArrayBuffer, _length: number, _viewport: Viewport): void {}
@@ -354,7 +385,7 @@ export class AxisGridLayer implements Layer {
       this.xTickIntervalMs != null
         ? intervalTicks(this.bounds.xMin, this.bounds.xMax, this.xTickIntervalMs)
         : niceTicks(this.bounds.xMin, this.bounds.xMax, this.targetTicks);
-    const yTicks = niceTicks(this.bounds.yMin, this.bounds.yMax, this.targetTicks);
+    const { ticks: yTicks, labels: yLabels } = this.yTicksFor();
 
     // ── Grid lines ──
     if (this.showXGrid || this.showYGrid) {
@@ -416,7 +447,7 @@ export class AxisGridLayer implements Layer {
         ctx.textBaseline = "middle";
         for (let i = 0; i < yTicks.length; i++) {
           const y = viewport.yToPx(yTicks[i]);
-          ctx.fillText(formatYTick(yTicks[i], this.yTickFormat), 2, y - 6);
+          ctx.fillText(yLabels[i], 2, y - 6);
         }
       }
     }
