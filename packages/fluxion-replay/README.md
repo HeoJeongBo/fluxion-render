@@ -357,7 +357,8 @@ All hooks live under `@heojeongbo/fluxion-replay/react`.
 | `useRecordingSession(opts)` | `{ error, isRecording }` — encapsulates the start/stop recording lifecycle, the StrictMode-safe ref guard, and optional per-channel tickers. Use when the page **is** the recording. |
 | `useRecordingTimer(opts)` | `{ elapsedSec }` — elapsed-seconds counter that starts/stops with `isRecording`, for a "REC 02:14" display. |
 | `useVideoRecorder(opts)` | `void` — manages a `VideoRecorder` lifecycle: starts encoding `track` into `channelId` when `isRecording && session && track` are all present, stops on cleanup. Tune `width`/`height`/`bitrate`/`framerate`. |
-| `useVideoReplayer(player, canvasRef, store, channelId, opts?)` | `void` — decodes a video channel's frames onto a `<canvas>`. Subscribes to `player.onSeek` and re-decodes from the nearest keyframe (via `VideoReplayer.seekTo`) so a backward/paused scrub never shows garbled VP8 deltas. |
+| `useVideoReplayer(player, canvasRef, store, channelId, opts?)` | `void` — decodes a video channel's frames onto a `<canvas>`. Subscribes to `player.onSeek` and re-decodes from the nearest keyframe (via `VideoReplayer.seekTo`) so a backward/paused scrub never shows garbled VP8 deltas. Pass `opts.onOtherFrame` to receive frames whose `channelId` is **not** this video channel, so one `player.onFrame` subscription fans out to both the canvas and your own log/metric collectors. |
+| `useReplayFrameLog(player, opts?)` | `ReplayPlayerFrame[]` — collects the player's frames into a bounded, newest-friendly array (the `onFrame` → filter → `slice(-N)` pattern DVR UIs hand-roll). `opts.exclude` drops channels (e.g. `[videoChannelId]`); `opts.max` caps retained frames (default `100`). Resets when `player` changes and unsubscribes on unmount. |
 | `useStorageInfo(session, opts?)` | `{ usedBytes, quotaBytes, percentUsed, idbFrameCount }` — periodic IDB + OPFS quota inspector. |
 | `useDisplayMedia()` | `{ stream, start, stop }` — thin wrapper around `navigator.mediaDevices.getDisplayMedia` used by the screen-capture demos. |
 | `<ReplayTimeline />` | Headless scrubber built on `<input type="range">`. Styleable; uses `useReplayTimeline` under the hood. |
@@ -620,7 +621,7 @@ dvr.player?.seek(snapped);
 ```tsx
 import { useScrubberControls, useReplayScrubber } from "@heojeongbo/fluxion-replay/react";
 
-const { scrubT, onScrubChange, commitScrub } = useScrubberControls({
+const { scrubT, beginScrub, onScrubChange, commitScrub } = useScrubberControls({
   dvr,
   rate,               // forwarded to player.play() on commit. Default 1
   liveEdgeEpsMs: 250, // how close to the live edge counts as "back to live". Default 250
@@ -639,12 +640,21 @@ const { min, max, value, disabled } = useReplayScrubber({
   type="range"
   min={min} max={max} value={value} step={1000}
   disabled={disabled}
+  onPointerDown={beginScrub}
   onChange={onScrubChange}
   onMouseUp={commitScrub}
   onTouchEnd={commitScrub}
   onKeyUp={commitScrub}
 />
 ```
+
+Wire **`onPointerDown={beginScrub}`**: it re-arms the per-gesture DVR-entry guard
+at the start of each drag. The guard is otherwise cleared on commit
+(`onMouseUp`/`onTouchEnd`/`onKeyUp`), so a pointer released **off** the slider — common
+on a thin timeline bar — would leave it stuck and silently block every later
+live→past drag. (`<DvrScrubber {...ctl.scrubber} />` already wires this; the hook
+also re-arms from a window-level `pointerup` as a safety net, but `onPointerDown`
+is the recommended wiring when you build the `<input>` yourself.)
 
 ---
 
