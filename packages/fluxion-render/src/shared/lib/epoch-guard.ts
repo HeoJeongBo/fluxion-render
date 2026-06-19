@@ -8,23 +8,32 @@
  */
 const ABSOLUTE_EPOCH_THRESHOLD = 1e12;
 
-let warned = false;
+// Keys (layer ids) already warned about. Per-key rather than a single global
+// flag so that, in a multi-chart dashboard, one chart's mistake doesn't consume
+// the warning and mask the same bug on a different layer. A shared sentinel key
+// is used when no key is supplied.
+const warned = new Set<string>();
+const NO_KEY = "\0";
 
 /**
- * Warn once (per session) if `t` looks like an absolute epoch timestamp.
- * No-op after the first warning, and for plausible host-relative values.
+ * Warn once per `key` if `t` looks like an absolute epoch timestamp. No-op after
+ * the first warning for that key, and for plausible host-relative values. Pass
+ * the layer id as `key` so each layer is independently surfaced.
  */
-export function warnIfAbsoluteEpoch(t: number): void {
-  if (warned || t < ABSOLUTE_EPOCH_THRESHOLD) return;
-  warned = true;
+export function warnIfAbsoluteEpoch(t: number, key?: string): void {
+  if (t < ABSOLUTE_EPOCH_THRESHOLD) return;
+  const k = key ?? NO_KEY;
+  if (warned.has(k)) return;
+  warned.add(k);
   console.warn(
-    `[fluxion] A timestamp (${t}) looks like an absolute epoch (Date.now()). ` +
-      "Push host-relative ms instead (Date.now() - timeOrigin); absolute epochs " +
-      "quantize badly at Float32 precision and collapse samples onto one pixel.",
+    `[fluxion] A timestamp (${t}) on layer "${key ?? "?"}" looks like an ` +
+      "absolute epoch (Date.now()). Push host-relative ms instead " +
+      "(Date.now() - timeOrigin); absolute epochs quantize badly at Float32 " +
+      "precision and collapse samples onto one pixel.",
   );
 }
 
-/** Reset the one-time guard. Test-only. */
+/** Reset the per-key guard. Test-only. */
 export function _resetEpochGuard(): void {
-  warned = false;
+  warned.clear();
 }

@@ -40,7 +40,7 @@ export class LineLayerHandle {
 
   /** Push a single `[t, y]` sample. Allocates a 2-element Float32Array. */
   push(sample: LineSample): void {
-    warnIfAbsoluteEpoch(sample.t);
+    warnIfAbsoluteEpoch(sample.t, this.id);
     const buf = new Float32Array(2);
     buf[0] = sample.t;
     buf[1] = sample.y;
@@ -206,7 +206,7 @@ export class ScatterLayerHandle {
 
   /** Push a single `[t, y]` sample. */
   push(sample: ScatterSample): void {
-    warnIfAbsoluteEpoch(sample.t);
+    warnIfAbsoluteEpoch(sample.t, this.id);
     const buf = new Float32Array(2);
     buf[0] = sample.t;
     buf[1] = sample.y;
@@ -251,7 +251,7 @@ export class AreaLayerHandle {
   ) {}
 
   push(sample: LineSample): void {
-    warnIfAbsoluteEpoch(sample.t);
+    warnIfAbsoluteEpoch(sample.t, this.id);
     const buf = new Float32Array(2);
     buf[0] = sample.t;
     buf[1] = sample.y;
@@ -290,7 +290,7 @@ export class StepLayerHandle {
   ) {}
 
   push(sample: LineSample): void {
-    warnIfAbsoluteEpoch(sample.t);
+    warnIfAbsoluteEpoch(sample.t, this.id);
     const buf = new Float32Array(2);
     buf[0] = sample.t;
     buf[1] = sample.y;

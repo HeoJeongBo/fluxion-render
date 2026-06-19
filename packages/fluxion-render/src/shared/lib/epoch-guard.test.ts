@@ -24,4 +24,17 @@ describe("warnIfAbsoluteEpoch", () => {
     expect(spy).toHaveBeenCalledTimes(1);
     expect(String(spy.mock.calls[0][0])).toContain("absolute epoch");
   });
+
+  it("tracks the guard per key so each layer warns independently", () => {
+    const spy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    warnIfAbsoluteEpoch(1.7e12, "cpu");
+    warnIfAbsoluteEpoch(1.7e12, "cpu"); // same key — suppressed
+    expect(spy).toHaveBeenCalledTimes(1);
+    expect(String(spy.mock.calls[0][0])).toContain('"cpu"');
+
+    // A different layer's mistake is NOT masked by the first warning.
+    warnIfAbsoluteEpoch(1.7e12, "mem");
+    expect(spy).toHaveBeenCalledTimes(2);
+    expect(String(spy.mock.calls[1][0])).toContain('"mem"');
+  });
 });
