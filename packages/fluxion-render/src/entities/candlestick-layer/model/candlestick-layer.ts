@@ -1,3 +1,5 @@
+import { pushSamples } from "../../../shared/lib/push-samples";
+import { computeRingCapacity } from "../../../shared/lib/ring-capacity";
 import type { Layer } from "../../../shared/model/layer";
 import { RingBuffer } from "../../../shared/model/ring-buffer";
 import type { Viewport } from "../../../shared/model/viewport";
@@ -40,22 +42,15 @@ export class CandlestickLayer implements Layer {
     if (c.downColor !== undefined) this.downColor = c.downColor;
     if (c.bodyWidth !== undefined) this.bodyWidth = Math.max(2, c.bodyWidth);
     if (c.visible !== undefined) this.visible = c.visible;
-    let cap = c.capacity;
-    if (cap === undefined && c.retentionMs !== undefined && c.maxHz !== undefined) {
-      cap = Math.ceil((c.retentionMs / 1000) * c.maxHz * 1.1);
-    }
+    const cap = computeRingCapacity(c);
     if (cap !== undefined && cap !== this.ring.capacity) {
       this.ring = new RingBuffer(cap, 5);
     }
   }
 
   setData(buffer: ArrayBuffer, length: number, viewport: Viewport): void {
-    if (length < 5) return;
-    const arr = new Float32Array(buffer, 0, length);
-    this.ring.pushMany(arr);
     // t is at index 0 of each stride-5 record; last record starts at length-5.
-    const t = arr[length - 5];
-    if (t > viewport.latestT) viewport.latestT = t;
+    pushSamples(this.ring, buffer, length, viewport, 5);
   }
 
   resize(_viewport: Viewport): void {}

@@ -1,4 +1,5 @@
 import { type ColormapName, lutFor } from "../../../shared/lib/colormap";
+import { computeRingCapacity } from "../../../shared/lib/ring-capacity";
 import type { Layer } from "../../../shared/model/layer";
 import { RingBuffer } from "../../../shared/model/ring-buffer";
 import type { Viewport } from "../../../shared/model/viewport";
@@ -72,14 +73,7 @@ export class TrajectoryLayer implements Layer {
       this.headMarkerSize = Math.max(1, c.headMarkerSize);
     if (c.fadeOlderMs !== undefined) this.fadeOlderMs = Math.max(0, c.fadeOlderMs);
     if (c.visible !== undefined) this.visible = c.visible;
-    let newCapacity: number | undefined = c.capacity;
-    if (
-      newCapacity === undefined &&
-      c.retentionMs !== undefined &&
-      c.maxHz !== undefined
-    ) {
-      newCapacity = Math.ceil((c.retentionMs / 1000) * c.maxHz * 1.1);
-    }
+    const newCapacity = computeRingCapacity(c);
     if (newCapacity !== undefined && newCapacity !== this.ring.capacity) {
       this.ring = new RingBuffer(newCapacity, 3);
     }

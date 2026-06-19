@@ -1,3 +1,4 @@
+import { computeRingCapacity } from "../../../shared/lib/ring-capacity";
 import type { FluxionLayerSpec } from "./use-fluxion-canvas";
 
 export interface CapacityAdvisory {
@@ -32,11 +33,7 @@ type StreamConfig = {
 
 /** Effective ring capacity for a streaming layer (explicit, derived, or default). */
 function effectiveCapacity(config: StreamConfig | undefined): number {
-  if (config?.capacity !== undefined) return config.capacity;
-  if (config?.retentionMs !== undefined && config?.maxHz !== undefined) {
-    return Math.ceil((config.retentionMs / 1000) * config.maxHz * 1.1);
-  }
-  return 2048; // layer default
+  return computeRingCapacity(config ?? {}) ?? 2048; // 2048 = layer default
 }
 
 /**

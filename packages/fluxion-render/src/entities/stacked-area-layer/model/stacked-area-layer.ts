@@ -1,3 +1,4 @@
+import { computeRingCapacity } from "../../../shared/lib/ring-capacity";
 import type { Layer } from "../../../shared/model/layer";
 import { RingBuffer } from "../../../shared/model/ring-buffer";
 import type { Viewport } from "../../../shared/model/viewport";
@@ -73,14 +74,7 @@ export class StackedAreaLayer implements Layer {
     if (c.lineWidth !== undefined) this.lineWidth = Math.max(0, c.lineWidth);
     if (c.normalize !== undefined) this.normalize = c.normalize;
     if (c.visible !== undefined) this.visible = c.visible;
-    let newCapacity: number | undefined = c.capacity;
-    if (
-      newCapacity === undefined &&
-      c.retentionMs !== undefined &&
-      c.maxHz !== undefined
-    ) {
-      newCapacity = Math.ceil((c.retentionMs / 1000) * c.maxHz * 1.1);
-    }
+    const newCapacity = computeRingCapacity(c);
     const cap = newCapacity ?? this.ring.capacity;
     if (resized || (newCapacity !== undefined && newCapacity !== this.ring.capacity)) {
       this.ring = new RingBuffer(cap, this.stride);

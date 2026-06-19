@@ -1,3 +1,5 @@
+import { pushSamples } from "../../../shared/lib/push-samples";
+import { computeRingCapacity } from "../../../shared/lib/ring-capacity";
 import type { Layer } from "../../../shared/model/layer";
 import { RingBuffer } from "../../../shared/model/ring-buffer";
 import type { Viewport } from "../../../shared/model/viewport";
@@ -79,25 +81,14 @@ export class ScatterColoredLayer implements Layer {
     if (c.maxSize !== undefined) this.maxSize = Math.max(1, c.maxSize);
     if (c.shape !== undefined) this.shape = c.shape;
     if (c.visible !== undefined) this.visible = c.visible;
-    let newCapacity: number | undefined = c.capacity;
-    if (
-      newCapacity === undefined &&
-      c.retentionMs !== undefined &&
-      c.maxHz !== undefined
-    ) {
-      newCapacity = Math.ceil((c.retentionMs / 1000) * c.maxHz * 1.1);
-    }
+    const newCapacity = computeRingCapacity(c);
     if (newCapacity !== undefined && newCapacity !== this.ring.capacity) {
       this.ring = new RingBuffer(newCapacity, 4);
     }
   }
 
   setData(buffer: ArrayBuffer, length: number, viewport: Viewport): void {
-    if (length < 4) return;
-    const arr = new Float32Array(buffer, 0, length);
-    this.ring.pushMany(arr);
-    const t = arr[length - 4];
-    if (t > viewport.latestT) viewport.latestT = t;
+    pushSamples(this.ring, buffer, length, viewport, 4);
   }
 
   resize(_viewport: Viewport): void {}

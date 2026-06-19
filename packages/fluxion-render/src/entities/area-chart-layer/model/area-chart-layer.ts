@@ -1,3 +1,5 @@
+import { pushSamples } from "../../../shared/lib/push-samples";
+import { computeRingCapacity } from "../../../shared/lib/ring-capacity";
 import type { Layer } from "../../../shared/model/layer";
 import { RingBuffer } from "../../../shared/model/ring-buffer";
 import type { Viewport } from "../../../shared/model/viewport";
@@ -79,21 +81,14 @@ export class AreaChartLayer implements Layer {
     if (c.laneIndex !== undefined) this.laneIndex = c.laneIndex;
     if (c.laneCount !== undefined) this.laneCount = c.laneCount;
     if (c.laneGapPx !== undefined) this.laneGapPx = c.laneGapPx;
-    let cap = c.capacity;
-    if (cap === undefined && c.retentionMs !== undefined && c.maxHz !== undefined) {
-      cap = Math.ceil((c.retentionMs / 1000) * c.maxHz * 1.1);
-    }
+    const cap = computeRingCapacity(c);
     if (cap !== undefined && cap !== this.ring.capacity) {
       this.ring = new RingBuffer(cap, 2);
     }
   }
 
   setData(buffer: ArrayBuffer, length: number, viewport: Viewport): void {
-    if (length < 2) return;
-    const arr = new Float32Array(buffer, 0, length);
-    this.ring.pushMany(arr);
-    const t = arr[length - 2];
-    if (t > viewport.latestT) viewport.latestT = t;
+    pushSamples(this.ring, buffer, length, viewport, 2);
   }
 
   resize(_viewport: Viewport): void {}

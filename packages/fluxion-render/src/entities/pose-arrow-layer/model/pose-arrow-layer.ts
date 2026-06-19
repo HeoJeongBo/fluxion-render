@@ -1,3 +1,4 @@
+import { computeRingCapacity } from "../../../shared/lib/ring-capacity";
 import type { Layer } from "../../../shared/model/layer";
 import { RingBuffer } from "../../../shared/model/ring-buffer";
 import type { Viewport } from "../../../shared/model/viewport";
@@ -45,14 +46,7 @@ export class PoseArrowLayer implements Layer {
     if (c.arrowWidth !== undefined) this.arrowWidth = Math.max(2, c.arrowWidth);
     if (c.color !== undefined) this.color = c.color;
     if (c.visible !== undefined) this.visible = c.visible;
-    let newCapacity: number | undefined = c.capacity;
-    if (
-      newCapacity === undefined &&
-      c.retentionMs !== undefined &&
-      c.maxHz !== undefined
-    ) {
-      newCapacity = Math.ceil((c.retentionMs / 1000) * c.maxHz * 1.1);
-    }
+    const newCapacity = computeRingCapacity(c);
     if (newCapacity !== undefined && newCapacity !== this.ring.capacity) {
       this.ring = new RingBuffer(newCapacity, 3);
     }

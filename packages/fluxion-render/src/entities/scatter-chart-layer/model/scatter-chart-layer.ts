@@ -1,3 +1,5 @@
+import { pushSamples } from "../../../shared/lib/push-samples";
+import { computeRingCapacity } from "../../../shared/lib/ring-capacity";
 import type { Layer } from "../../../shared/model/layer";
 import { RingBuffer } from "../../../shared/model/ring-buffer";
 import type { Viewport } from "../../../shared/model/viewport";
@@ -55,25 +57,14 @@ export class ScatterChartLayer implements Layer {
     if (c.shape !== undefined) this.shape = c.shape;
     if (c.visible !== undefined) this.visible = c.visible;
     if (c.opacity !== undefined) this.opacity = c.opacity;
-    let newCapacity: number | undefined = c.capacity;
-    if (
-      newCapacity === undefined &&
-      c.retentionMs !== undefined &&
-      c.maxHz !== undefined
-    ) {
-      newCapacity = Math.ceil((c.retentionMs / 1000) * c.maxHz * 1.1);
-    }
+    const newCapacity = computeRingCapacity(c);
     if (newCapacity !== undefined && newCapacity !== this.ring.capacity) {
       this.ring = new RingBuffer(newCapacity, 2);
     }
   }
 
   setData(buffer: ArrayBuffer, length: number, viewport: Viewport): void {
-    if (length < 2) return;
-    const arr = new Float32Array(buffer, 0, length);
-    this.ring.pushMany(arr);
-    const t = arr[length - 2];
-    if (t > viewport.latestT) viewport.latestT = t;
+    pushSamples(this.ring, buffer, length, viewport, 2);
   }
 
   resize(_viewport: Viewport): void {}
