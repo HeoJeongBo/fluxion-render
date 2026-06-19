@@ -25,6 +25,13 @@ export interface UseVideoReplayerOptions {
    * recorder uses a keyframe interval larger than ~2s. Default 3000.
    */
   seekLookbackMs?: number;
+  /**
+   * Called for every replay frame whose `channelId` is NOT this video channel —
+   * so a single `player.onFrame` subscription can fan out to both the video
+   * canvas (handled internally) and your own log/metric collectors, without
+   * hand-wiring a second listener. Receives frames in arrival order.
+   */
+  onOtherFrame?: (frame: ReplayPlayerFrame) => void;
 }
 
 /**
@@ -48,6 +55,10 @@ export function useVideoReplayer(
 ): void {
   const replayerRef = useRef<VideoReplayer | null>(null);
   const lookback = options?.seekLookbackMs ?? DEFAULT_SEEK_LOOKBACK_MS;
+  // Ref so a changing callback identity doesn't tear down and rebuild the
+  // decoder; the effect reads the latest via the ref.
+  const onOtherFrameRef = useRef(options?.onOtherFrame);
+  onOtherFrameRef.current = options?.onOtherFrame;
 
   useEffect(() => {
     replayerRef.current?.dispose();
@@ -150,7 +161,10 @@ export function useVideoReplayer(
     });
 
     const offFrame = player.onFrame((frame) => {
-      if (frame.channelId !== channelId) return;
+      if (frame.channelId !== channelId) {
+        onOtherFrameRef.current?.(frame);
+        return;
+      }
       if (seekingTo !== null) {
         // Park until the in-flight seek settles; it decides flush vs. drop.
         pending.push(frame);

@@ -175,6 +175,53 @@ describe("useVideoReplayer", () => {
     store.dispose();
   });
 
+  it("forwards non-video frames to onOtherFrame, never to feedFrame", async () => {
+    vi.useRealTimers();
+    const feedSpy = vi
+      .spyOn(VideoReplayer.prototype, "feedFrame")
+      .mockImplementation(() => {});
+    vi.spyOn(VideoReplayer.prototype, "seekTo").mockResolvedValue(undefined);
+
+    const store = makeStore();
+    await store.open();
+    const canvasRef = { current: makeCanvas() };
+
+    const frameListeners: ((f: unknown) => void)[] = [];
+    const fakePlayer = {
+      currentT: 0,
+      onFrame: (l: (f: unknown) => void) => {
+        frameListeners.push(l);
+        return () => {};
+      },
+      onSeek: () => () => {},
+    } as unknown as ReplayPlayer;
+
+    const others: unknown[] = [];
+    renderHook(() =>
+      useVideoReplayer(fakePlayer, canvasRef, store, CHANNEL, {
+        onOtherFrame: (f) => others.push(f),
+      }),
+    );
+    for (let i = 0; i < 10; i++) await Promise.resolve();
+
+    act(() => {
+      for (const l of frameListeners) {
+        l({ channelId: "logs", t: 50 });
+        l({ channelId: CHANNEL, t: 60 });
+        l({ channelId: "metrics", t: 70 });
+      }
+    });
+
+    // Video frame fed to the replayer; the two off-channel frames forwarded.
+    expect(feedSpy).toHaveBeenCalledTimes(1);
+    expect(others).toEqual([
+      { channelId: "logs", t: 50 },
+      { channelId: "metrics", t: 70 },
+    ]);
+
+    store.dispose();
+  });
+
   // ── Seek → keyframe-aligned re-decode ───────────────────────────────────────
 
   it("calls seekTo with a keyframe-aligned index on seek (real store)", async () => {
