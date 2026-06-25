@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.12.1](https://github-personal/HeoJeongBo/fluxion-render/compare/fluxion-replay-v0.12.0...fluxion-replay-v0.12.1) (2026-06-25)
+
+
+### Performance Improvements
+
+* **render,worker,replay:** coalesce pushes, decimate draws, grow pool, harden loops ([a344ae4](https://github-personal/HeoJeongBo/fluxion-render/commit/a344ae43bc0c8d1c6e2cabd5e255d00953ceec69))
+
 # [0.12.0](https://github-personal/HeoJeongBo/fluxion-render/compare/fluxion-replay-v0.11.3...fluxion-replay-v0.12.0) (2026-06-19)
 
 
