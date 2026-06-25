@@ -1018,4 +1018,52 @@ describe("Engine", () => {
       postSpy.mockRestore();
     });
   });
+
+  describe("dispose releases canvas backing", () => {
+    it("shrinks the main + axis OffscreenCanvases to 0×0 on DISPOSE", () => {
+      const engine = new Engine();
+      const canvas = newCanvas(100, 100);
+      engine.dispatch({ op: Op.INIT, canvas, width: 100, height: 100, dpr: 2 });
+      const xAxisCanvas = newCanvas(0, 0);
+      const yAxisCanvas = newCanvas(0, 0);
+      engine.dispatch({
+        op: Op.SET_AXIS_CANVAS,
+        xAxisCanvas: xAxisCanvas as unknown as OffscreenCanvas,
+        yAxisCanvas: yAxisCanvas as unknown as OffscreenCanvas,
+        xAxisHeight: 30,
+        yAxisWidth: 60,
+      });
+      flushFrame();
+      // Backbuffers are non-zero after init + axis resize.
+      expect(canvas.width).toBeGreaterThan(0);
+      expect(xAxisCanvas.width).toBeGreaterThan(0);
+      expect(yAxisCanvas.height).toBeGreaterThan(0);
+
+      engine.dispatch({ op: Op.DISPOSE });
+
+      // Backing freed synchronously (0×0) so the GPU surface releases now instead
+      // of lingering until GC — this is what bounds GPU usage under mount/unmount
+      // churn (a pool host per chart in a large accordion).
+      expect(canvas.width).toBe(0);
+      expect(canvas.height).toBe(0);
+      expect(xAxisCanvas.width).toBe(0);
+      expect(xAxisCanvas.height).toBe(0);
+      expect(yAxisCanvas.width).toBe(0);
+      expect(yAxisCanvas.height).toBe(0);
+    });
+
+    it("shrinks the main canvas on DISPOSE with no axis canvases", () => {
+      const engine = new Engine();
+      const canvas = newCanvas(100, 100);
+      engine.dispatch({ op: Op.INIT, canvas, width: 100, height: 100, dpr: 1 });
+      flushFrame();
+      expect(canvas.width).toBe(100);
+
+      engine.dispatch({ op: Op.DISPOSE });
+
+      // Main canvas released; axis canvases are null → releaseBacking early-returns.
+      expect(canvas.width).toBe(0);
+      expect(canvas.height).toBe(0);
+    });
+  });
 });

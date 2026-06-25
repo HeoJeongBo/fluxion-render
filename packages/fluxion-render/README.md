@@ -292,6 +292,13 @@ an engine: the worker render loop isolates the error (logs it and keeps the loop
 running), and the bounds/tick/metrics emitters and the shared streaming ticker
 isolate a throwing listener so it can't skip the others.
 
+**Mount/unmount churn is safe.** Charts can be freely mounted and unmounted in
+bulk — accordions, tabs, virtualized grids — without leaking GPU memory. Each
+host's OffscreenCanvas backing store is released on `dispose()` (the canvas is
+shrunk to `0×0` immediately rather than waiting for garbage collection), so
+rapidly opening/closing a section of many charts can't accumulate orphaned GPU
+surfaces and exhaust the context budget.
+
 ---
 
 ## Layer Types

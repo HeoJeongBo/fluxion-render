@@ -441,7 +441,28 @@ export class Engine {
   private dispose() {
     this.scheduler.stop();
     this.stack.disposeAll();
+    // Release each OffscreenCanvas's GPU backing store NOW instead of waiting for
+    // GC. A `transferControlToOffscreen()` canvas keeps its GPU surface alive
+    // until the OffscreenCanvas is garbage-collected; under rapid mount/unmount
+    // churn (e.g. a pool host per chart in a large accordion) those surfaces pile
+    // up and exhaust GPU memory, eventually losing the context and freezing every
+    // chart. Resizing to 0×0 frees the backing synchronously — and the linked
+    // main-thread placeholder <canvas> shrinks with it — so churn can't accumulate.
+    Engine.releaseBacking(this.canvas);
+    Engine.releaseBacking(this.xAxisCanvas);
+    Engine.releaseBacking(this.yAxisCanvas);
     this.canvas = null;
     this.ctx = null;
+    this.xAxisCanvas = null;
+    this.xAxisCtx = null;
+    this.yAxisCanvas = null;
+    this.yAxisCtx = null;
+  }
+
+  /** Free an OffscreenCanvas's GPU backing immediately by shrinking it to 0×0. */
+  private static releaseBacking(canvas: OffscreenCanvas | null): void {
+    if (!canvas) return;
+    canvas.width = 0;
+    canvas.height = 0;
   }
 }
