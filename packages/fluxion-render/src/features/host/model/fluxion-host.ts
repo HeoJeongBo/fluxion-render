@@ -91,6 +91,50 @@ export interface FluxionHostOptions {
   yAxisWidth?: number;
   /** Axis tick/label style. Defaults: color "#666", font "11px sans-serif", tickSize 6, tickMargin 4. */
   axisStyle?: AxisStyle;
+  /**
+   * Coalesce high-frequency per-sample pushes (the typed handles' `push()`)
+   * into ONE `Op.DATA` message per layer per animation frame, instead of one
+   * postMessage per sample. Cuts postMessage volume from O(samples/sec) to
+   * O(layers × fps) and removes the per-sample `Float32Array(2)` allocation —
+   * essential for many high-rate (e.g. 500 Hz) streams. Adds up to one frame
+   * (~16 ms) of latency to streamed data.
+   *
+   * Only the streaming handles' `push()` fast-path is coalesced; raw
+   * `pushData`, `pushBatch`, and the replace-style `set*` calls always post
+   * immediately (and flush any pending staged data for that layer first, so
+   * ordering is preserved). Default `true`; set `false` to restore immediate
+   * per-sample posting.
+   */
+  coalesce?: boolean;
+  /**
+   * Backpressure cap on staged Float32 elements per layer between flushes.
+   * On overflow the layer's staging is flushed immediately (synchronous post)
+   * rather than dropping samples. Default 1_000_000 (≈4 MB per layer).
+   */
+  coalesceMaxFloats?: number;
+  /**
+   * Cap the worker engine's render rate to this many fps. Omitted = uncapped
+   * (redraw on every dirty/continuous animation frame). For a large grid of
+   * streaming charts on a shared worker, capping to e.g. 30 roughly halves
+   * worker scan+draw CPU and is visually indistinguishable for a scrolling
+   * time window. Skipped frames keep pending data — nothing is dropped.
+   */
+  maxFps?: number;
+  /**
+   * Whether the worker posts `BOUNDS_UPDATE` to the main thread when the
+   * auto-scaled y-bounds change. Default `true`. Set `false` when nothing
+   * consumes {@link onBoundsChange} / `getMetrics().bounds` (e.g. a thumbnail
+   * grid) to skip the per-frame postMessage.
+   */
+  emitBounds?: boolean;
+  /**
+   * Whether the worker posts `TICK_UPDATE` to the main thread for React-side
+   * axis rendering. Default `true`. Only relevant with `externalAxes={false}`
+   * and no {@link onTickUpdate} consumer — set `false` to skip the per-frame
+   * tick computation + postMessage. No effect when axis canvases render in the
+   * worker (`externalAxes` / `xAxisElement` / `yAxisElement`).
+   */
+  emitTicks?: boolean;
 }
 
 function dtypeOf(arr: FluxionTypedArray): DType {
@@ -188,7 +232,20 @@ export class FluxionHost {
   private workerMsgHandler: EventListener | null = null;
   private visibilityHandler: (() => void) | null = null;
 
+  // ── Push coalescing (see FluxionHostOptions.coalesce) ───────────────────
+  private readonly coalesce: boolean;
+  private readonly coalesceMaxFloats: number;
+  // Per-layer staging: flat number[] of interleaved samples awaiting flush.
+  // Stride-agnostic — the worker's RingBuffer re-segments by its own stride,
+  // so concatenating same-layer chunks is byte-equivalent to N separate pushes.
+  private readonly pending = new Map<string, { chunks: number[]; floats: number }>();
+  private flushScheduled = false;
+  private flushHandle: number | null = null;
+  private flushUsesRaf = false;
+
   constructor(canvas: HTMLCanvasElement, opts: FluxionHostOptions = {}) {
+    this.coalesce = opts.coalesce ?? true;
+    this.coalesceMaxFloats = opts.coalesceMaxFloats ?? 1_000_000;
     if (opts.workerFactory) {
       // Solo mode: caller provided a custom factory — bypass the pool entirely.
       this.worker = opts.workerFactory();
@@ -215,6 +272,9 @@ export class FluxionHost {
         height,
         dpr,
         bgColor: opts.bgColor,
+        maxFps: opts.maxFps,
+        emitBounds: opts.emitBounds,
+        emitTicks: opts.emitTicks,
       },
       [offscreen],
     );
@@ -266,10 +326,11 @@ export class FluxionHost {
     /* v8 ignore next -- the no-document (SSR) arm is unreachable in the DOM test env */
     if (typeof document !== "undefined") {
       this.visibilityHandler = () => {
-        this.post({
-          op: Op.SET_VISIBLE,
-          visible: document.visibilityState === "visible",
-        });
+        const visible = document.visibilityState === "visible";
+        // While hidden, rAF stops firing, so any staged samples would sit in
+        // the pending buffer until the page returns. Drain them now.
+        if (!visible) this.flushAll();
+        this.post({ op: Op.SET_VISIBLE, visible });
       };
       document.addEventListener("visibilitychange", this.visibilityHandler);
     }
@@ -318,10 +379,13 @@ export class FluxionHost {
   // `useFluxionCanvas({ layers: FluxionLayerSpec[] })`).
   addLayer(id: string, kind: LayerKind, config?: unknown): void;
   addLayer(id: string, kind: LayerKind, config?: unknown): void {
+    // Defensive: drain any staged data for a recycled id before re-adding.
+    this.flushLayer(id);
     this.post({ op: Op.ADD_LAYER, id, kind, config: stripFunctionFields(config) });
   }
 
   removeLayer(id: string): void {
+    this.flushLayer(id);
     this.post({ op: Op.REMOVE_LAYER, id });
   }
 
@@ -338,6 +402,9 @@ export class FluxionHost {
   // config alongside the layer id.
   configLayer(id: string, config: unknown): void;
   configLayer(id: string, config: unknown): void {
+    // A config change (e.g. capacity → new ring) must not land before queued
+    // samples for this layer.
+    this.flushLayer(id);
     this.post({ op: Op.CONFIG, id, config: stripFunctionFields(config) });
   }
 
@@ -349,6 +416,7 @@ export class FluxionHost {
    */
   configLayers(entries: Array<{ id: string; config: unknown }>): void {
     if (entries.length === 0) return;
+    for (const e of entries) this.flushLayer(e.id);
     this.post({
       op: Op.CONFIG_BATCH,
       entries: entries.map((e) => ({
@@ -518,6 +586,10 @@ export class FluxionHost {
           `Call .slice() to copy into a fresh buffer before pushing.`,
       );
     }
+    // Order: drain any coalesced single-sample pushes staged for this layer
+    // (via the handles' stage() fast-path) so this immediate buffer lands
+    // after them, not before. No-op when nothing is staged.
+    this.flushLayer(id);
     const buffer = data.buffer as ArrayBuffer;
     // Diagnostics: record before the buffer is transferred (detached after post).
     this.metrics.recordPush(id, data.length, buffer.byteLength);
@@ -531,6 +603,76 @@ export class FluxionHost {
       },
       [buffer],
     );
+  }
+
+  /**
+   * Allocation-free append fast-path used by the typed streaming handles'
+   * `push()` ({@link FluxionDataSink.stage}). When `coalesce` is on, samples
+   * are staged per layer and flushed as one `Op.DATA` per animation frame;
+   * when off, this posts immediately (identical to `pushData` of one sample).
+   *
+   * `values` is consumed synchronously (copied into the layer's staging
+   * buffer) — the caller may reuse or discard it right after.
+   */
+  stage(id: string, values: readonly number[]): void {
+    if (this.disposed) return;
+    if (!this.coalesce) {
+      this.pushData(id, Float32Array.from(values));
+      return;
+    }
+    this.metrics.recordPush(id, values.length, values.length * 4);
+    let p = this.pending.get(id);
+    if (!p) {
+      p = { chunks: [], floats: 0 };
+      this.pending.set(id, p);
+    }
+    const chunks = p.chunks;
+    for (let i = 0; i < values.length; i++) chunks.push(values[i]!);
+    p.floats += values.length;
+    // Backpressure: if a layer outruns the flush cadence, post now rather than
+    // let the staging buffer grow unbounded. Never drops samples.
+    if (p.floats > this.coalesceMaxFloats) {
+      this.flushLayer(id);
+    } else {
+      this.scheduleFlush();
+    }
+  }
+
+  /** Schedule a one-shot flush of all pending layers on the next frame. */
+  private scheduleFlush(): void {
+    if (this.flushScheduled || this.disposed) return;
+    this.flushScheduled = true;
+    if (typeof requestAnimationFrame !== "undefined") {
+      this.flushUsesRaf = true;
+      this.flushHandle = requestAnimationFrame(() => this.flushAll());
+    } else {
+      this.flushUsesRaf = false;
+      this.flushHandle = setTimeout(() => this.flushAll(), 0) as unknown as number;
+    }
+  }
+
+  /** Flush every layer's staged samples as one `Op.DATA` message each. */
+  private flushAll(): void {
+    this.flushScheduled = false;
+    this.flushHandle = null;
+    for (const id of [...this.pending.keys()]) this.flushLayer(id);
+  }
+
+  /**
+   * Flush one layer's staged samples (if any) into a single transferred
+   * `Op.DATA` message. Used both by the frame flush and by the pre-flush
+   * ordering guards on control ops / `pushData`.
+   */
+  private flushLayer(id: string): void {
+    const p = this.pending.get(id);
+    if (!p) return;
+    this.pending.delete(id);
+    // A pending entry only exists because stage() appended ≥1 sample's worth
+    // of scalars, so chunks is always non-empty here.
+    const buf = new Float32Array(p.chunks);
+    this.post({ op: Op.DATA, id, buffer: buf.buffer, dtype: "f32", length: buf.length }, [
+      buf.buffer,
+    ]);
   }
 
   /**
@@ -563,6 +705,9 @@ export class FluxionHost {
    */
   emitStream(id: string, buffer: ArrayBuffer, length: number): void {
     if (this.disposed) return;
+    // Bypasses post() → drain staged layer data first so a custom-worker
+    // stream can't jump ahead of queued Op.DATA.
+    this.flushAll();
     const msg = { id, buffer, length, mode: "stream" as const };
     this.worker.postMessage(msg, [buffer]);
   }
@@ -583,6 +728,11 @@ export class FluxionHost {
    * All target `hostId`s must reside on the same worker as this host.
    * Use a size-1 pool (`useFluxionWorkerPool({ size: 1 })`) to guarantee co-location.
    * After this call, `buffer` is detached — do not read it again.
+   *
+   * The built-in worker validates `length`, but a **custom worker** decoding the
+   * `pool-stream` message MUST clamp it before constructing a view, e.g.
+   * `Math.max(0, Math.min(s.length | 0, s.buffer.byteLength >>> 2))`, so a
+   * malformed length can't throw and halt the worker.
    */
   emitPoolStream(
     targets: FluxionPoolStreamMsg["targets"],
@@ -590,6 +740,7 @@ export class FluxionHost {
     length: number,
   ): void {
     if (this.disposed) return;
+    this.flushAll();
     const msg: FluxionPoolStreamMsg = { mode: "pool-stream", targets, buffer, length };
     this.worker.postMessage(msg, [buffer]);
   }
@@ -603,15 +754,32 @@ export class FluxionHost {
    * Pair with `LineLayerHandle.reset(latestT)` for a typed call site.
    */
   clearLayer(id: string, opts?: { latestT?: number }): void {
+    // CLEAR before staged samples would wipe then re-fill — flush first so the
+    // clear lands last.
+    this.flushLayer(id);
     this.post({ op: Op.CLEAR_DATA, id, latestT: opts?.latestT });
   }
 
   resize(width: number, height: number, dpr: number): void {
+    this.flushAll();
     this.post({ op: Op.RESIZE, width, height, dpr });
   }
 
   dispose(): void {
     if (this.disposed) return;
+    // Cancel the scheduled flush first (flushAll would null the handle), then
+    // drain the last frame's staged samples synchronously (flushLayer posts via
+    // this.post, still allowed until `disposed` is set).
+    if (this.flushHandle != null) {
+      // flushUsesRaf records which API scheduled it; the matching canceller is
+      // always available in that same runtime.
+      if (this.flushUsesRaf) cancelAnimationFrame(this.flushHandle);
+      else clearTimeout(this.flushHandle);
+      this.flushHandle = null;
+    }
+    this.flushScheduled = false;
+    this.flushAll();
+    this.pending.clear();
     this.disposed = true;
     // Remove worker→main message listener
     if (this.workerMsgHandler && this.worker.removeEventListener) {

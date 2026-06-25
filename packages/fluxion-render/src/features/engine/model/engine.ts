@@ -101,6 +101,11 @@ export class Engine {
   // follow-clock continuous render loop is suspended (CPU/battery), regardless
   // of whether an axis layer is following the clock.
   private visible = true;
+  // Worker→main notifications. Default on; a host with no bounds/tick consumer
+  // (e.g. a large thumbnail grid with externalAxes=false) can disable them to
+  // skip per-frame postMessage + tick computation.
+  private emitBounds = true;
+  private emitTicks = true;
   private hostId: string | undefined;
   private lastSentYMin = Number.NaN;
   private lastSentYMax = Number.NaN;
@@ -117,7 +122,12 @@ export class Engine {
     switch (msg.op) {
       case Op.INIT:
         this.hostId = msg.hostId;
-        this.init(msg.canvas, msg.width, msg.height, msg.dpr, msg.bgColor);
+        this.init(msg.canvas, msg.width, msg.height, msg.dpr, {
+          bgColor: msg.bgColor,
+          maxFps: msg.maxFps,
+          emitBounds: msg.emitBounds,
+          emitTicks: msg.emitTicks,
+        });
         break;
       case Op.SET_BG_COLOR:
         this.bgColor = msg.color;
@@ -248,11 +258,19 @@ export class Engine {
     width: number,
     height: number,
     dpr: number,
-    bgColor?: string,
+    opts: {
+      bgColor?: string;
+      maxFps?: number;
+      emitBounds?: boolean;
+      emitTicks?: boolean;
+    },
   ) {
     this.canvas = canvas;
     this.ctx = canvas.getContext("2d");
-    if (bgColor !== undefined) this.bgColor = bgColor;
+    if (opts.bgColor !== undefined) this.bgColor = opts.bgColor;
+    if (opts.maxFps !== undefined) this.scheduler.setMaxFps(opts.maxFps);
+    if (opts.emitBounds !== undefined) this.emitBounds = opts.emitBounds;
+    if (opts.emitTicks !== undefined) this.emitTicks = opts.emitTicks;
     this.resize(width, height, dpr);
     this.scheduler.start();
     this.scheduler.markDirty();
@@ -309,18 +327,22 @@ export class Engine {
       Math.abs(yMin - this.lastSentYMin) > eps ||
       Math.abs(yMax - this.lastSentYMax) > eps;
     if (boundsChanged) {
+      // Latch the baseline even when emission is off, so `boundsChanged` (used
+      // below to gate the y-axis redraw) stays correct frame to frame.
       this.lastSentYMin = yMin;
       this.lastSentYMax = yMax;
-      try {
-        self.postMessage({
-          op: WorkerOp.BOUNDS_UPDATE,
-          hostId: this.hostId,
-          yMin,
-          yMax,
-          latestT: this.viewport.latestT,
-        });
-      } catch {
-        // Worker context may not support postMessage in tests
+      if (this.emitBounds) {
+        try {
+          self.postMessage({
+            op: WorkerOp.BOUNDS_UPDATE,
+            hostId: this.hostId,
+            yMin,
+            yMax,
+            latestT: this.viewport.latestT,
+          });
+        } catch {
+          // Worker context may not support postMessage in tests
+        }
       }
     }
 
@@ -353,8 +375,9 @@ export class Engine {
       }
     }
 
-    // Only send TICK_UPDATE when axis canvases are not present (React-side fallback).
-    if (!this.xAxisCanvas && !this.yAxisCanvas) {
+    // Only send TICK_UPDATE when axis canvases are not present (React-side
+    // fallback) and a consumer wants them.
+    if (this.emitTicks && !this.xAxisCanvas && !this.yAxisCanvas) {
       this.maybeSendTickUpdate(boundsChanged);
     }
   }

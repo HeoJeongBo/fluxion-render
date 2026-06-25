@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { Op } from "../../../shared/protocol";
+import { Scheduler } from "../../../shared/model/scheduler";
+import { Op, WorkerOp } from "../../../shared/protocol";
 import type { FakeCtx } from "../../../test/setup";
 import { Engine } from "./engine";
 
@@ -936,6 +937,85 @@ describe("Engine", () => {
       });
       expect(() => flushFrame()).not.toThrow();
       engine.dispatch({ op: Op.DISPOSE });
+    });
+  });
+
+  describe("INIT render options (maxFps / emitBounds / emitTicks)", () => {
+    function addAxisAndLine(engine: Engine): void {
+      engine.dispatch({
+        op: Op.ADD_LAYER,
+        id: "axis",
+        kind: "axis-grid",
+        config: { xRange: [0, 1], yMode: "auto" },
+      });
+      engine.dispatch({
+        op: Op.ADD_LAYER,
+        id: "line",
+        kind: "line",
+        config: { color: "#0f0", capacity: 16 },
+      });
+      const buf = new Float32Array([0, -1, 100, 1]);
+      engine.dispatch({
+        op: Op.DATA,
+        id: "line",
+        buffer: buf.buffer,
+        dtype: "f32",
+        length: buf.length,
+      });
+    }
+
+    it("maxFps threads through INIT to the scheduler", () => {
+      const setMaxFpsSpy = vi.spyOn(Scheduler.prototype, "setMaxFps");
+      const engine = new Engine();
+      const canvas = newCanvas(100, 100);
+      engine.dispatch({
+        op: Op.INIT,
+        canvas,
+        width: 100,
+        height: 100,
+        dpr: 1,
+        maxFps: 30,
+      });
+      expect(setMaxFpsSpy).toHaveBeenCalledWith(30);
+      engine.dispatch({ op: Op.DISPOSE });
+      setMaxFpsSpy.mockRestore();
+    });
+
+    it("emitBounds:false / emitTicks:false suppress worker→main posts", () => {
+      const postSpy = vi.spyOn(self, "postMessage").mockImplementation(() => {});
+      const engine = new Engine();
+      const canvas = newCanvas(100, 100);
+      engine.dispatch({
+        op: Op.INIT,
+        canvas,
+        width: 100,
+        height: 100,
+        dpr: 1,
+        emitBounds: false,
+        emitTicks: false,
+      });
+      addAxisAndLine(engine);
+      flushFrame();
+      const ops = postSpy.mock.calls.map((c) => (c[0] as { op?: number })?.op);
+      expect(ops).not.toContain(WorkerOp.BOUNDS_UPDATE);
+      expect(ops).not.toContain(WorkerOp.TICK_UPDATE);
+      engine.dispatch({ op: Op.DISPOSE });
+      postSpy.mockRestore();
+    });
+
+    it("emitBounds / emitTicks default to true (posts both)", () => {
+      const postSpy = vi.spyOn(self, "postMessage").mockImplementation(() => {});
+      const engine = new Engine();
+      const canvas = newCanvas(100, 100);
+      // No emit flags → defaults. No axis canvases → TICK_UPDATE fallback path.
+      engine.dispatch({ op: Op.INIT, canvas, width: 100, height: 100, dpr: 1 });
+      addAxisAndLine(engine);
+      flushFrame();
+      const ops = postSpy.mock.calls.map((c) => (c[0] as { op?: number })?.op);
+      expect(ops).toContain(WorkerOp.BOUNDS_UPDATE);
+      expect(ops).toContain(WorkerOp.TICK_UPDATE);
+      engine.dispatch({ op: Op.DISPOSE });
+      postSpy.mockRestore();
     });
   });
 });

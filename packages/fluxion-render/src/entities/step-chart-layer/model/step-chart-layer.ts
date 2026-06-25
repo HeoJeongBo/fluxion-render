@@ -1,3 +1,4 @@
+import { forEachColumn } from "../../../shared/lib/column-reduce";
 import { pushSamples } from "../../../shared/lib/push-samples";
 import { computeRingCapacity } from "../../../shared/lib/ring-capacity";
 import type { Layer } from "../../../shared/model/layer";
@@ -11,6 +12,15 @@ export interface StepChartConfig {
   retentionMs?: number;
   maxHz?: number;
   visible?: boolean;
+  /**
+   * Min/max-decimate the DRAW path to ~2–4 points per x-pixel column when
+   * oversampled (visible samples > 2×width), cutting draw cost from O(samples)
+   * to O(width). At sub-pixel density the staircase is indistinguishable from
+   * the decimated path. The ring still holds every sample (hover/scan/export
+   * unaffected). Tri-state: omitted = AUTO (decimate iff oversampled), `true` =
+   * same as auto, `false` = always draw every sample. Default auto.
+   */
+  decimate?: boolean;
   /**
    * Maximum allowed time gap (ms) between consecutive samples before the
    * staircase is broken: the bridging horizontal+vertical segments are
@@ -56,6 +66,8 @@ export class StepChartLayer implements Layer {
   private color = "#4fc3f7";
   private lineWidth = 1;
   private visible = true;
+  // undefined = auto (decimate iff oversampled); true/false = explicit override.
+  private decimate: boolean | undefined = undefined;
   private maxGapMs: number | undefined;
   private dashArray: number[] = [];
   private yOffset = 0;
@@ -76,6 +88,7 @@ export class StepChartLayer implements Layer {
     if (c.color !== undefined) this.color = c.color;
     if (c.lineWidth !== undefined) this.lineWidth = c.lineWidth;
     if (c.visible !== undefined) this.visible = c.visible;
+    if (c.decimate !== undefined) this.decimate = c.decimate;
     if (c.maxGapMs !== undefined) this.maxGapMs = c.maxGapMs;
     if (c.dashArray !== undefined) this.dashArray = c.dashArray;
     if (c.yOffset !== undefined) this.yOffset = c.yOffset;
@@ -150,6 +163,17 @@ export class StepChartLayer implements Layer {
     ctx.beginPath();
 
     const xMin = viewport.bounds.xMin;
+    // Decimate when oversampled — at >2 samples/px the staircase and the
+    // min/max-per-column path are visually identical. AUTO unless `decimate`
+    // is explicitly set; `false` opts out.
+    const oversampled = this.ring.length > viewport.widthPx * 2;
+    if (this.decimate !== false && oversampled) {
+      this._drawDecimated(ctx, viewport, xMin);
+      ctx.stroke();
+      if (dashed) ctx.setLineDash([]);
+      return;
+    }
+
     const gap = this.maxGapMs;
     let prevPy = 0;
     let prevT = 0;
@@ -178,6 +202,41 @@ export class StepChartLayer implements Layer {
 
     ctx.stroke();
     if (dashed) ctx.setLineDash([]);
+  }
+
+  /**
+   * Min/max-per-pixel-column path (see {@link forEachColumn}). At the densities
+   * where decimation kicks in (>2 samples/px) the staircase geometry collapses
+   * below pixel resolution, so a connected first→min→max→last path per column
+   * is visually identical while bounding the draw to O(width).
+   */
+  private _drawDecimated(
+    ctx: OffscreenCanvasRenderingContext2D,
+    viewport: Viewport,
+    xMin: number,
+  ): void {
+    const lane = this.laneActive();
+    let first = true;
+    forEachColumn(this.ring, viewport, xMin, this.maxGapMs, {
+      onColumn: (colPx, firstY, minY, maxY, lastY) => {
+        const pts = [firstY, minY, maxY, lastY];
+        for (let k = 0; k < pts.length; k++) {
+          if (k > 0 && pts[k] === pts[k - 1]) continue;
+          const py = lane
+            ? this.yToBandPx(pts[k]!, viewport)
+            : viewport.yToPx(pts[k]! + this.yOffset);
+          if (first) {
+            ctx.moveTo(colPx, py);
+            first = false;
+          } else {
+            ctx.lineTo(colPx, py);
+          }
+        }
+      },
+      onGapBreak: () => {
+        first = true;
+      },
+    });
   }
 
   clearData(): void {

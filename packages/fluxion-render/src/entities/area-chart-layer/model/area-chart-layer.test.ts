@@ -341,4 +341,107 @@ describe("AreaChartLayer", () => {
       for (const y of ys) expect(Number.isFinite(y)).toBe(true);
     });
   });
+
+  describe("draw decimation (decimate)", () => {
+    function fillVarying(layer: AreaChartLayer, vp: Viewport, n = 4000) {
+      layer.setConfig({ capacity: n + 100 }); // retain all samples (no eviction)
+      const buf = new Float32Array(n * 2);
+      for (let i = 0; i < n; i++) {
+        buf[i * 2] = (i * 5000) / n;
+        buf[i * 2 + 1] = Math.sin(i * 0.1) * 5;
+      }
+      layer.setData(buf.buffer, buf.length, vp);
+    }
+
+    it("auto-decimates fill + stroke (far fewer points than every sample)", () => {
+      const vp = makeViewport();
+      const pointCount = (decimate?: boolean) => {
+        const layer = new AreaChartLayer("a");
+        if (decimate !== undefined) layer.setConfig({ decimate });
+        fillVarying(layer, vp, 4000);
+        const ctx = createFakeCtx();
+        layer.draw(ctx as unknown as OffscreenCanvasRenderingContext2D, vp);
+        return {
+          points: ctx.calls.filter((c) => c.name === "moveTo" || c.name === "lineTo")
+            .length,
+          filled: ctx.calls.some((c) => c.name === "fill"),
+          stroked: ctx.calls.some((c) => c.name === "stroke"),
+        };
+      };
+      const auto = pointCount(undefined); // AUTO → decimated (oversampled)
+      const full = pointCount(false); // explicit opt-out → every sample
+      expect(auto.points).toBeGreaterThan(0);
+      expect(auto.points).toBeLessThan(full.points);
+      expect(auto.filled).toBe(true);
+      expect(auto.stroked).toBe(true);
+    });
+
+    it("decimate:false draws every sample (both fill and stroke passes)", () => {
+      const layer = new AreaChartLayer("a");
+      const vp = makeViewport();
+      const n = 3000;
+      layer.setConfig({ decimate: false, capacity: n + 100 });
+      const buf = new Float32Array(n * 2);
+      for (let i = 0; i < n; i++) {
+        buf[i * 2] = (i * 5000) / n;
+        buf[i * 2 + 1] = 1;
+      }
+      layer.setData(buf.buffer, buf.length, vp);
+      const ctx = createFakeCtx();
+      layer.draw(ctx as unknown as OffscreenCanvasRenderingContext2D, vp);
+      // fill pass (n-1) + baseline + stroke pass (n-1) → ≥ 2×(n-1) lineTo.
+      expect(ctx.calls.filter((c) => c.name === "lineTo").length).toBeGreaterThanOrEqual(
+        2 * (n - 1),
+      );
+    });
+
+    it("does not fill when no columns are visible (window after data)", () => {
+      const layer = new AreaChartLayer("a");
+      const vp = makeViewport();
+      fillVarying(layer, vp, 4000);
+      vp.setBounds({ xMin: 9000, xMax: 9999, yMin: -10, yMax: 10 });
+      const ctx = createFakeCtx();
+      layer.draw(ctx as unknown as OffscreenCanvasRenderingContext2D, vp);
+      expect(ctx.calls.some((c) => c.name === "fill")).toBe(false);
+    });
+
+    it("decimates in lane mode (band baseline + band-normalized y)", () => {
+      const layer = new AreaChartLayer("a");
+      layer.setConfig({ laneIndex: 1, laneCount: 2, laneGapPx: 0 });
+      const vp = makeViewport();
+      fillVarying(layer, vp, 4000);
+      vp.beginScan();
+      layer.scan(vp);
+      const ctx = createFakeCtx();
+      layer.draw(ctx as unknown as OffscreenCanvasRenderingContext2D, vp);
+      const ys = ctx.calls
+        .filter((c) => c.name === "moveTo" || c.name === "lineTo")
+        .map((c) => c.args[1] as number);
+      expect(ys.length).toBeGreaterThan(0);
+      for (const y of ys) expect(y).toBeGreaterThanOrEqual(199.999);
+      expect(ctx.calls.some((c) => c.name === "fill")).toBe(true);
+    });
+
+    it("closes a separate fill polygon per maxGapMs segment", () => {
+      const layer = new AreaChartLayer("a");
+      layer.setConfig({ maxGapMs: 5, dashArray: [4, 2] });
+      const vp = makeViewport();
+      const n = 4000;
+      const buf = new Float32Array(n * 2);
+      for (let i = 0; i < n; i++) {
+        const half = i < n / 2 ? 0 : 2600;
+        buf[i * 2] = half + (i % (n / 2)) * 0.5;
+        buf[i * 2 + 1] = Math.sin(i * 0.1) * 5;
+      }
+      layer.setData(buf.buffer, buf.length, vp);
+      const ctx = createFakeCtx();
+      layer.draw(ctx as unknown as OffscreenCanvasRenderingContext2D, vp);
+      // Two gap-separated segments → two closed fill polygons.
+      expect(
+        ctx.calls.filter((c) => c.name === "closePath").length,
+      ).toBeGreaterThanOrEqual(2);
+      // dashArray applied on the decimated stroke pass.
+      expect(ctx.calls.some((c) => c.name === "setLineDash")).toBe(true);
+    });
+  });
 });

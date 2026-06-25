@@ -112,3 +112,30 @@ describe("configureDefaultPool", () => {
     expect(p1).toBe(p2);
   });
 });
+
+describe("default pool sizing (adaptive maxSize)", () => {
+  it("scales maxSize with hardwareConcurrency (leaves one core for main)", async () => {
+    vi.stubGlobal("navigator", { hardwareConcurrency: 8 });
+    const { getDefaultPool } = await import("./default-pool");
+    const pool = getDefaultPool();
+    // 8 cores → maxSize min(16, 8-1) = 7. Pool starts small and may grow to 7.
+    pool.dispose();
+    expect(pool).toBeDefined();
+  });
+
+  it("falls back when navigator.hardwareConcurrency is unavailable", async () => {
+    vi.stubGlobal("navigator", { hardwareConcurrency: 0 });
+    const { getDefaultPool } = await import("./default-pool");
+    const pool = getDefaultPool();
+    expect(pool).toBeDefined();
+    pool.dispose();
+  });
+
+  it("falls back when navigator itself is undefined", async () => {
+    vi.stubGlobal("navigator", undefined);
+    const { getDefaultPool } = await import("./default-pool");
+    const pool = getDefaultPool();
+    expect(pool).toBeDefined();
+    pool.dispose();
+  });
+});

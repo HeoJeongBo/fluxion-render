@@ -665,10 +665,28 @@ describe("LineChartLayer (streaming)", () => {
       expect(ctx.calls.filter((c) => c.name === "lineTo").length).toBe(0);
     });
 
-    it("decimate: false (default) draws every sample", () => {
+    it("decimate omitted (auto) decimates when oversampled", () => {
       const layer = new LineChartLayer("l");
       const vp = makeViewport();
-      layer.setConfig({ capacity: 6000 }); // decimate stays false
+      layer.setConfig({ capacity: 6000 }); // decimate omitted → AUTO
+      const buf = new Float32Array(3000 * 2);
+      for (let i = 0; i < 3000; i++) {
+        buf[i * 2] = i;
+        buf[i * 2 + 1] = 0;
+      }
+      layer.setData(buf.buffer, buf.length, vp);
+      const ctx = createFakeCtx();
+      layer.draw(ctx as unknown as OffscreenCanvasRenderingContext2D, vp);
+      const lineTos = ctx.calls.filter((c) => c.name === "lineTo").length;
+      // 3000 samples > 2×1000px → auto-decimates, far fewer than every sample.
+      expect(lineTos).toBeGreaterThan(0);
+      expect(lineTos).toBeLessThan(3000);
+    });
+
+    it("decimate: false draws every sample even when oversampled", () => {
+      const layer = new LineChartLayer("l");
+      const vp = makeViewport();
+      layer.setConfig({ capacity: 6000, decimate: false }); // explicit opt-out
       const buf = new Float32Array(3000 * 2);
       for (let i = 0; i < 3000; i++) {
         buf[i * 2] = i;

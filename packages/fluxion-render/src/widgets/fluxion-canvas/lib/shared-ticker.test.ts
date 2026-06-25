@@ -64,6 +64,23 @@ describe("subscribeTicker", () => {
     expect(() => unsub()).not.toThrow();
   });
 
+  it("isolates a throwing subscriber so siblings still tick", () => {
+    const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const sibling = vi.fn();
+    const unsubA = subscribeTicker(100, () => {
+      throw new Error("pump boom");
+    });
+    const unsubB = subscribeTicker(100, sibling);
+
+    expect(() => vi.advanceTimersByTime(100)).not.toThrow();
+    expect(sibling).toHaveBeenCalledTimes(1); // not skipped by the thrower
+    expect(errSpy).toHaveBeenCalled();
+
+    unsubA();
+    unsubB();
+    errSpy.mockRestore();
+  });
+
   it("pauses ticking while the page is hidden", () => {
     const a = vi.fn();
     const unsub = subscribeTicker(100, a);

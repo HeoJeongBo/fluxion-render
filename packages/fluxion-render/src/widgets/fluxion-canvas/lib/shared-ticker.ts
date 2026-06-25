@@ -48,7 +48,15 @@ export function subscribeTicker(intervalMs: number, fn: Tick): () => void {
       handle: setInterval(() => {
         if (pageHidden) return;
         const now = Date.now();
-        for (const sub of created.subs) sub(now);
+        // Isolate each subscriber: one chart's pump throwing must not skip the
+        // other charts sharing this timer.
+        for (const sub of created.subs) {
+          try {
+            sub(now);
+          } catch (err) {
+            console.error("[fluxion] shared-ticker subscriber error:", err);
+          }
+        }
       }, intervalMs),
     };
     bucket = created;

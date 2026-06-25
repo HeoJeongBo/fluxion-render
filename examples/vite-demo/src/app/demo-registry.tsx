@@ -4,6 +4,7 @@ import { AreaDemoPage } from "../pages/area-demo";
 import { AxisFormatDemoPage } from "../pages/axis-format-demo";
 import { BarDemoPage } from "../pages/bar-demo";
 import { BoxPlotDemoPage } from "../pages/box-plot-demo";
+import { BroadcastStressDemoPage } from "../pages/broadcast-stress-demo";
 import { BrushDemoPage } from "../pages/brush-demo";
 import { CandlestickDemoPage } from "../pages/candlestick-demo";
 import { CrosshairDemoPage } from "../pages/crosshair-demo";
@@ -33,6 +34,7 @@ import { StaticXyDemoPage } from "../pages/static-xy-demo";
 import { StepDemoPage } from "../pages/step-demo";
 import { StreamDemoPage } from "../pages/stream-demo";
 import { StreamWorkerDemoPage } from "../pages/stream-worker-demo";
+import { StressTestDemoPage } from "../pages/stress-test-demo";
 import { TableDemoPage } from "../pages/table-demo";
 import { TrajectoryDemoPage } from "../pages/trajectory-demo";
 
@@ -128,6 +130,12 @@ export const DEMO_GROUPS: readonly DemoGroup[] = [
       { slug: "historical", label: "Historical", component: HistoricalDemoPage },
       { slug: "lidar", label: "LiDAR 30k", component: LidarDemoPage },
       { slug: "pool", label: "Pool (40 charts)", component: PoolDemoPage },
+      { slug: "stress", label: "Stress (300@500Hz)", component: StressTestDemoPage },
+      {
+        slug: "broadcast-stress",
+        label: "Broadcast (500Hz)",
+        component: BroadcastStressDemoPage,
+      },
       {
         slug: "stream-worker",
         label: "Custom Worker Stream",

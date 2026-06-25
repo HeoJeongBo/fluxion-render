@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { Op, WorkerOp } from "../../../shared/protocol";
 import { FluxionHost } from "./fluxion-host";
 
@@ -124,7 +124,11 @@ describe("FluxionHost", () => {
 
   it("addLineLayer creates the layer and returns a typed handle", () => {
     const { worker, posts } = makeFakeWorker();
-    const host = new FluxionHost(makeCanvas(), { workerFactory: () => worker });
+    // coalesce:false so the single push posts its DATA synchronously here.
+    const host = new FluxionHost(makeCanvas(), {
+      workerFactory: () => worker,
+      coalesce: false,
+    });
     posts.length = 0;
     const line = host.addLineLayer("chart", { color: "#0ff" });
     expect(line.id).toBe("chart");
@@ -211,7 +215,10 @@ describe("FluxionHost", () => {
 
   it("host.line(id) attaches a handle to a preexisting layer", () => {
     const { worker, posts } = makeFakeWorker();
-    const host = new FluxionHost(makeCanvas(), { workerFactory: () => worker });
+    const host = new FluxionHost(makeCanvas(), {
+      workerFactory: () => worker,
+      coalesce: false,
+    });
     // Simulate "layer added via useFluxionCanvas"
     host.addLayer("preexisting", "line", { color: "#fff" });
     const line = host.line("preexisting");
@@ -237,6 +244,27 @@ describe("FluxionHost", () => {
     const init = posts[0].msg as { op: number; bgColor?: string };
     expect(init.op).toBe(Op.INIT);
     expect(init.bgColor).toBe("#ffffff");
+    host.dispose();
+  });
+
+  it("forwards maxFps / emitBounds / emitTicks into the INIT message", () => {
+    const { worker, posts } = makeFakeWorker();
+    const host = new FluxionHost(makeCanvas(), {
+      workerFactory: () => worker,
+      maxFps: 30,
+      emitBounds: false,
+      emitTicks: false,
+    });
+    const init = posts[0].msg as {
+      op: number;
+      maxFps?: number;
+      emitBounds?: boolean;
+      emitTicks?: boolean;
+    };
+    expect(init.op).toBe(Op.INIT);
+    expect(init.maxFps).toBe(30);
+    expect(init.emitBounds).toBe(false);
+    expect(init.emitTicks).toBe(false);
     host.dispose();
   });
 
@@ -856,5 +884,246 @@ describe("FluxionHost", () => {
 
     addSpy.mockRestore();
     removeSpy.mockRestore();
+  });
+});
+
+describe("FluxionHost push coalescing", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+
+  // Capture rAF callbacks so the frame flush can be driven deterministically.
+  function captureRaf() {
+    const cbs: FrameRequestCallback[] = [];
+    const raf = vi.fn((cb: FrameRequestCallback) => {
+      cbs.push(cb);
+      return cbs.length;
+    });
+    const caf = vi.fn();
+    vi.stubGlobal("requestAnimationFrame", raf);
+    vi.stubGlobal("cancelAnimationFrame", caf);
+    return { raf, caf, runFrame: () => cbs.splice(0).forEach((f) => f(0)) };
+  }
+
+  const opsOf = (posts: RecordedPost[]) => posts.map((p) => (p.msg as { op: number }).op);
+  const dataPosts = (posts: RecordedPost[]) =>
+    posts.filter((p) => (p.msg as { op: number }).op === Op.DATA);
+  const f32 = (post: RecordedPost) => {
+    const ms = post.msg as { buffer: ArrayBuffer; length: number };
+    return Array.from(new Float32Array(ms.buffer, 0, ms.length));
+  };
+
+  it("coalesces multiple pushes into one DATA per layer per frame", () => {
+    const { worker, posts } = makeFakeWorker();
+    const { runFrame } = captureRaf();
+    const host = new FluxionHost(makeCanvas(), { workerFactory: () => worker });
+    const line = host.addLineLayer("chart");
+    posts.length = 0;
+    line.push({ t: 1, y: 10 });
+    line.push({ t: 2, y: 20 });
+    line.push({ t: 3, y: 30 });
+    expect(dataPosts(posts)).toHaveLength(0); // deferred to the frame
+    runFrame();
+    const data = dataPosts(posts);
+    expect(data).toHaveLength(1);
+    expect((data[0]!.msg as { id: string }).id).toBe("chart");
+    expect(f32(data[0]!)).toEqual([1, 10, 2, 20, 3, 30]);
+    const ms = data[0]!.msg as { buffer: ArrayBuffer };
+    expect(data[0]!.transfer).toEqual([ms.buffer]);
+    host.dispose();
+  });
+
+  it("flushes one DATA message per layer", () => {
+    const { worker, posts } = makeFakeWorker();
+    const { runFrame } = captureRaf();
+    const host = new FluxionHost(makeCanvas(), { workerFactory: () => worker });
+    const a = host.addLineLayer("a");
+    const b = host.addLineLayer("b");
+    posts.length = 0;
+    a.push({ t: 1, y: 1 });
+    b.push({ t: 2, y: 2 });
+    a.push({ t: 3, y: 3 });
+    runFrame();
+    const data = dataPosts(posts);
+    expect(data).toHaveLength(2);
+    const byId = new Map(data.map((d) => [(d.msg as { id: string }).id, f32(d)]));
+    expect(byId.get("a")).toEqual([1, 1, 3, 3]);
+    expect(byId.get("b")).toEqual([2, 2]);
+    host.dispose();
+  });
+
+  it.each([
+    [
+      "configLayer",
+      (h: FluxionHost) => h.configLayer("chart", { lineWidth: 2 }),
+      Op.CONFIG,
+    ],
+    ["clearLayer", (h: FluxionHost) => h.clearLayer("chart"), Op.CLEAR_DATA],
+    ["removeLayer", (h: FluxionHost) => h.removeLayer("chart"), Op.REMOVE_LAYER],
+  ])("pre-flushes staged data before %s (preserves order)", (_n, act, ctrlOp) => {
+    const { worker, posts } = makeFakeWorker();
+    captureRaf();
+    const host = new FluxionHost(makeCanvas(), { workerFactory: () => worker });
+    const line = host.addLineLayer("chart");
+    posts.length = 0;
+    line.push({ t: 1, y: 1 });
+    act(host); // synchronous pre-flush — no frame needed
+    const ops = opsOf(posts);
+    expect(ops).toContain(Op.DATA);
+    expect(ops.indexOf(Op.DATA)).toBeLessThan(ops.indexOf(ctrlOp));
+    host.dispose();
+  });
+
+  it("pre-flushes all layers before resize", () => {
+    const { worker, posts } = makeFakeWorker();
+    captureRaf();
+    const host = new FluxionHost(makeCanvas(), { workerFactory: () => worker });
+    host.addLineLayer("a").push({ t: 1, y: 1 });
+    posts.length = 0;
+    host.resize(200, 100, 1);
+    const ops = opsOf(posts);
+    expect(ops.indexOf(Op.DATA)).toBeLessThan(ops.indexOf(Op.RESIZE));
+    host.dispose();
+  });
+
+  it("pre-flushes staged data before an immediate pushData for the same layer", () => {
+    const { worker, posts } = makeFakeWorker();
+    captureRaf();
+    const host = new FluxionHost(makeCanvas(), { workerFactory: () => worker });
+    const line = host.addLineLayer("chart");
+    posts.length = 0;
+    line.push({ t: 1, y: 1 }); // staged
+    line.pushBatch([{ t: 2, y: 2 }]); // immediate pushData → drains staged first
+    const data = dataPosts(posts);
+    expect(data).toHaveLength(2);
+    expect(f32(data[0]!)).toEqual([1, 1]);
+    expect(f32(data[1]!)).toEqual([2, 2]);
+    host.dispose();
+  });
+
+  it("flushes immediately when a layer exceeds coalesceMaxFloats (backpressure)", () => {
+    const { worker, posts } = makeFakeWorker();
+    captureRaf();
+    const host = new FluxionHost(makeCanvas(), {
+      workerFactory: () => worker,
+      coalesceMaxFloats: 4,
+    });
+    const line = host.addLineLayer("chart");
+    posts.length = 0;
+    line.push({ t: 1, y: 1 }); // 2 floats
+    line.push({ t: 2, y: 2 }); // 4 floats (== cap, not over)
+    expect(dataPosts(posts)).toHaveLength(0);
+    line.push({ t: 3, y: 3 }); // 6 > 4 → immediate flush
+    const data = dataPosts(posts);
+    expect(data).toHaveLength(1);
+    expect(f32(data[0]!)).toEqual([1, 1, 2, 2, 3, 3]);
+    host.dispose();
+  });
+
+  it("posts non-f32 pushData immediately (coalescing is f32-only)", () => {
+    const { worker, posts } = makeFakeWorker();
+    captureRaf();
+    const host = new FluxionHost(makeCanvas(), { workerFactory: () => worker });
+    posts.length = 0;
+    host.pushData("x", new Uint8Array([1, 2, 3, 4]));
+    const data = dataPosts(posts);
+    expect(data).toHaveLength(1);
+    expect((data[0]!.msg as { dtype: string }).dtype).toBe("u8");
+    host.dispose();
+  });
+
+  it("coalesce:false posts each push immediately and transfers the buffer", () => {
+    const { worker, posts } = makeFakeWorker();
+    const host = new FluxionHost(makeCanvas(), {
+      workerFactory: () => worker,
+      coalesce: false,
+    });
+    const line = host.addLineLayer("chart");
+    posts.length = 0;
+    line.push({ t: 1, y: 2 });
+    const data = dataPosts(posts);
+    expect(data).toHaveLength(1);
+    expect(f32(data[0]!)).toEqual([1, 2]);
+    const ms = data[0]!.msg as { buffer: ArrayBuffer };
+    expect(data[0]!.transfer).toEqual([ms.buffer]);
+    host.dispose();
+  });
+
+  it("dispose flushes pending data, cancels the frame, and ignores later pushes", () => {
+    const { worker, posts } = makeFakeWorker();
+    const { caf, runFrame } = captureRaf();
+    const host = new FluxionHost(makeCanvas(), { workerFactory: () => worker });
+    const line = host.addLineLayer("chart");
+    posts.length = 0;
+    line.push({ t: 1, y: 2 });
+    host.dispose();
+    expect(dataPosts(posts)).toHaveLength(1); // last frame drained on dispose
+    expect(caf).toHaveBeenCalled();
+    line.push({ t: 9, y: 9 }); // stage() after dispose is a no-op
+    runFrame(); // the captured callback after dispose posts nothing
+    expect(dataPosts(posts)).toHaveLength(1);
+  });
+
+  it("flushes staged data when the page becomes hidden, before SET_VISIBLE", () => {
+    const docListeners: Record<string, EventListener[]> = {};
+    vi.spyOn(document, "addEventListener").mockImplementation((type, fn) => {
+      (docListeners[type] ??= []).push(fn as EventListener);
+    });
+    const { worker, posts } = makeFakeWorker();
+    captureRaf();
+    const host = new FluxionHost(makeCanvas(), { workerFactory: () => worker });
+    const line = host.addLineLayer("chart");
+    posts.length = 0;
+    line.push({ t: 1, y: 2 });
+    const original = document.visibilityState;
+    Object.defineProperty(document, "visibilityState", {
+      value: "hidden",
+      configurable: true,
+    });
+    docListeners.visibilitychange![0]!(new Event("visibilitychange"));
+    const ops = opsOf(posts);
+    expect(ops.indexOf(Op.DATA)).toBeGreaterThanOrEqual(0);
+    expect(ops.indexOf(Op.DATA)).toBeLessThan(ops.indexOf(Op.SET_VISIBLE));
+    Object.defineProperty(document, "visibilityState", {
+      value: original,
+      configurable: true,
+    });
+    host.dispose();
+  });
+
+  it("falls back to setTimeout when requestAnimationFrame is unavailable", () => {
+    // Fake only timers (not rAF), then hide rAF so scheduleFlush takes the
+    // setTimeout branch.
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    vi.stubGlobal("requestAnimationFrame", undefined);
+    vi.stubGlobal("cancelAnimationFrame", undefined);
+    const { worker, posts } = makeFakeWorker();
+    const host = new FluxionHost(makeCanvas(), { workerFactory: () => worker });
+    const line = host.addLineLayer("chart");
+    posts.length = 0;
+    line.push({ t: 1, y: 2 });
+    expect(dataPosts(posts)).toHaveLength(0); // deferred to the macrotask
+    vi.advanceTimersByTime(1);
+    expect(dataPosts(posts)).toHaveLength(1);
+    host.dispose();
+  });
+
+  it("setTimeout fallback: dispose clears a pending timeout", () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    vi.stubGlobal("requestAnimationFrame", undefined);
+    vi.stubGlobal("cancelAnimationFrame", undefined);
+    const clearSpy = vi.spyOn(globalThis, "clearTimeout");
+    const { worker, posts } = makeFakeWorker();
+    const host = new FluxionHost(makeCanvas(), { workerFactory: () => worker });
+    const line = host.addLineLayer("chart");
+    posts.length = 0;
+    line.push({ t: 1, y: 2 });
+    host.dispose(); // flushAll drains, then clearTimeout(handle)
+    expect(dataPosts(posts)).toHaveLength(1);
+    expect(clearSpy).toHaveBeenCalled();
+    vi.advanceTimersByTime(5); // the cleared timeout never fires again
+    expect(dataPosts(posts)).toHaveLength(1);
   });
 });

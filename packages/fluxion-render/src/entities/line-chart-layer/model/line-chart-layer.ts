@@ -1,3 +1,4 @@
+import { forEachColumn } from "../../../shared/lib/column-reduce";
 import { pushSamples } from "../../../shared/lib/push-samples";
 import { computeRingCapacity } from "../../../shared/lib/ring-capacity";
 import type { Layer } from "../../../shared/model/layer";
@@ -16,12 +17,18 @@ export interface LineChartConfig {
   /** When false, skip draw and scan. Default true. */
   visible?: boolean;
   /**
-   * When true, the DRAW path is min/max-decimated to ~2 points per x-pixel
-   * column when there are more visible samples than pixels. This keeps the
-   * rendered line visually identical (every peak/trough at display resolution
-   * is preserved) while cutting `lineTo` calls from O(samples) to O(width) —
-   * essential for high-rate (e.g. 500 Hz) streams. The ring still holds EVERY
-   * sample, so hover/scan/export are unaffected. Default false.
+   * Min/max-decimate the DRAW path to ~2–4 points per x-pixel column when there
+   * are more visible samples than pixels — keeping the rendered line visually
+   * identical (every peak/trough at display resolution is preserved) while
+   * cutting `lineTo` calls from O(samples) to O(width). The ring still holds
+   * EVERY sample, so hover/scan/export are unaffected.
+   *
+   * Tri-state:
+   *   - omitted (default) → AUTO: decimate only when oversampled (visible
+   *     samples > 2×width). Cheap, lossless, and the right default for
+   *     high-rate (e.g. 500 Hz) streams.
+   *   - `true`  → decimate whenever oversampled (same effect as auto).
+   *   - `false` → never decimate; always draw every sample (debugging).
    */
   decimate?: boolean;
   /**
@@ -94,7 +101,8 @@ export class LineChartLayer implements Layer {
   private color = "#4fc3f7";
   private lineWidth = 1;
   private visible = true;
-  private decimate = false;
+  // undefined = auto (decimate iff oversampled); true/false = explicit override.
+  private decimate: boolean | undefined = undefined;
   private maxGapMs: number | undefined;
   private dashArray: number[] = [];
   private yOffset = 0;
@@ -243,8 +251,10 @@ export class LineChartLayer implements Layer {
 
     // Decimate the DRAW (not the data) when there are far more visible samples
     // than pixels — emit min/max per x-pixel column so the rendered shape is
-    // identical but the path is O(width) instead of O(samples).
-    if (this.decimate && this.ring.length > viewport.widthPx * 2) {
+    // identical but the path is O(width) instead of O(samples). AUTO (decimate
+    // omitted) enables this whenever oversampled; `decimate:false` opts out.
+    const oversampled = this.ring.length > viewport.widthPx * 2;
+    if (this.decimate !== false && oversampled) {
       this._drawDecimated(ctx, viewport, xMin);
       ctx.stroke();
       if (dashed) ctx.setLineDash([]);
@@ -291,63 +301,30 @@ export class LineChartLayer implements Layer {
   ): void {
     const lane = this.laneActive();
     let first = true;
-    let curCol = Number.NaN;
-    // Per-column accumulators (y in data space; converted to px on flush).
-    let firstY = 0;
-    let lastY = 0;
-    let minY = 0;
-    let maxY = 0;
 
-    const flush = (colPx: number): void => {
+    forEachColumn(this.ring, viewport, xMin, this.maxGapMs, {
       // Emit first → min → max → last (skipping duplicates) so the column's
       // vertical extent is drawn without redundant points.
-      const pts = [firstY, minY, maxY, lastY];
-      for (let k = 0; k < pts.length; k++) {
-        if (k > 0 && pts[k] === pts[k - 1]) continue;
-        const py = lane
-          ? this.yToBandPx(pts[k], viewport)
-          : viewport.yToPx(pts[k] + this.yOffset);
-        if (first) {
-          ctx.moveTo(colPx, py);
-          first = false;
-        } else {
-          ctx.lineTo(colPx, py);
+      onColumn: (colPx, firstY, minY, maxY, lastY) => {
+        const pts = [firstY, minY, maxY, lastY];
+        for (let k = 0; k < pts.length; k++) {
+          if (k > 0 && pts[k] === pts[k - 1]) continue;
+          const py = lane
+            ? this.yToBandPx(pts[k]!, viewport)
+            : viewport.yToPx(pts[k]! + this.yOffset);
+          if (first) {
+            ctx.moveTo(colPx, py);
+            first = false;
+          } else {
+            ctx.lineTo(colPx, py);
+          }
         }
-      }
-    };
-
-    const gap = this.maxGapMs;
-    let prevT = Number.NaN;
-
-    this.ring.forEach((data, off) => {
-      const t = data[off];
-      if (t < xMin) return;
-      const y = data[off + 1];
-      // Gap: close the pre-gap segment at its column, then force the next
-      // emitted point to start a new subpath (moveTo via `first`). Resetting
-      // curCol makes the column-change branch below start fresh without a
-      // duplicate flush.
-      if (gap !== undefined && !Number.isNaN(prevT) && t - prevT > gap) {
-        /* v8 ignore next -- curCol is always set here: reaching this gap branch requires a prior in-window sample (prevT non-NaN), which necessarily assigned curCol in the column block below. curCol is only reset to NaN inside this branch, after the flush. */
-        if (!Number.isNaN(curCol)) flush(curCol);
-        curCol = Number.NaN;
+      },
+      // A gap forces the next emitted point to start a new subpath.
+      onGapBreak: () => {
         first = true;
-      }
-      const col = Math.floor(viewport.xToPx(t));
-      if (col !== curCol) {
-        if (!Number.isNaN(curCol)) flush(curCol);
-        curCol = col;
-        firstY = y;
-        minY = y;
-        maxY = y;
-      } else {
-        if (y < minY) minY = y;
-        if (y > maxY) maxY = y;
-      }
-      lastY = y;
-      prevT = t;
+      },
     });
-    if (!Number.isNaN(curCol)) flush(curCol);
   }
 
   clearData(): void {

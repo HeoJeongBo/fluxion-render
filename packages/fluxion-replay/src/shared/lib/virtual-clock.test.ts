@@ -119,6 +119,27 @@ describe("VirtualClock", () => {
     expect(clock.isRunning).toBe(false);
   });
 
+  it("a throwing onTick listener does not kill the loop (playback survives)", () => {
+    const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const clock = new VirtualClock();
+    const ticks: number[] = [];
+    clock.onTick(() => {
+      throw new Error("listener boom");
+    });
+    clock.onTick((t) => ticks.push(t)); // sibling must still receive ticks
+    clock.start(0, 1.0);
+
+    vi.advanceTimersByTime(32);
+    const after1 = ticks.length;
+    expect(after1).toBeGreaterThan(0); // sibling ran despite the thrower
+    vi.advanceTimersByTime(32);
+    expect(ticks.length).toBeGreaterThan(after1); // loop kept rescheduling
+    expect(errSpy).toHaveBeenCalled();
+
+    clock.stop();
+    errSpy.mockRestore();
+  });
+
   it("isRunning reflects state correctly", () => {
     const clock = new VirtualClock();
     expect(clock.isRunning).toBe(false);

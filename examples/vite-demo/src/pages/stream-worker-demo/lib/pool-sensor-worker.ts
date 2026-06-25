@@ -57,7 +57,11 @@ self.onmessage = (e: MessageEvent) => {
 
     if ((msg as { mode?: string }).mode === "pool-stream") {
       const s = msg as FluxionPoolStreamMsg;
-      const raw = new Float32Array(s.buffer, 0, s.length);
+      // Clamp length to the buffer's real capacity — a malformed length would
+      // otherwise throw on the view construction and (without the worker's
+      // try/catch) could halt message processing.
+      const len = Math.max(0, Math.min(s.length | 0, s.buffer.byteLength >>> 2));
+      const raw = new Float32Array(s.buffer, 0, len);
       // RAW packet: raw[0] = timestamp_us, raw[1+ci] = ch_ci raw_i16
       const t_ms = raw[0]! / 1000; // µs → ms
       for (let ci = 0; ci < s.targets.length; ci++) {

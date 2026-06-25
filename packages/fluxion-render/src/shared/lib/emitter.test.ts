@@ -58,4 +58,18 @@ describe("Emitter", () => {
     expect(a).not.toHaveBeenCalled();
     expect(b).not.toHaveBeenCalled();
   });
+
+  it("isolates a throwing listener: others still run and emit does not throw", () => {
+    const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const e = new Emitter<[n: number]>();
+    const after = vi.fn();
+    e.subscribe(() => {
+      throw new Error("listener boom");
+    });
+    e.subscribe(after);
+    expect(() => e.emit(7)).not.toThrow(); // does not propagate to the caller
+    expect(after).toHaveBeenCalledWith(7); // sibling still ran
+    expect(errSpy).toHaveBeenCalled();
+    errSpy.mockRestore();
+  });
 });

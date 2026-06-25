@@ -28,6 +28,14 @@ export interface UseFluxionStreamOptions<T> {
    * original behavior, unchanged).
    */
   shared?: boolean;
+  /**
+   * Track the pushed-samples-per-second `rate` (refreshed every 500ms via
+   * `setState`). Default `true`. Set `false` when you don't display `rate` to
+   * avoid a periodic re-render per stream — matters for large grids (e.g. 300
+   * charts) where the unused rate state would otherwise re-render every chart
+   * twice a second. When `false`, `rate` stays `0`.
+   */
+  trackRate?: boolean;
 }
 
 export interface UseFluxionStreamResult {
@@ -57,7 +65,7 @@ export interface UseFluxionStreamResult {
 export function useFluxionStream<T>(
   opts: UseFluxionStreamOptions<T>,
 ): UseFluxionStreamResult {
-  const { host, intervalMs, shared = false } = opts;
+  const { host, intervalMs, shared = false, trackRate = true } = opts;
   const setupRef = useRef(opts.setup);
   const tickRef = useRef(opts.tick);
   setupRef.current = opts.setup;
@@ -96,6 +104,7 @@ export function useFluxionStream<T>(
       } catch (err) {
         console.error("[useFluxionStream] tick error:", err);
       }
+      if (!trackRate) return;
       pushes += n;
       if (now - lastReport >= 500) {
         setRate(Math.round((pushes * 1000) / (now - lastReport)));
@@ -117,7 +126,7 @@ export function useFluxionStream<T>(
       clearInterval(interval);
       setRate(0);
     };
-  }, [host, intervalMs, shared]);
+  }, [host, intervalMs, shared, trackRate]);
 
   return { rate };
 }

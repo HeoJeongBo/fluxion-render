@@ -1,3 +1,4 @@
+import { forEachColumn } from "../../../shared/lib/column-reduce";
 import { pushSamples } from "../../../shared/lib/push-samples";
 import { computeRingCapacity } from "../../../shared/lib/ring-capacity";
 import type { Layer } from "../../../shared/model/layer";
@@ -19,6 +20,16 @@ export interface ScatterChartConfig {
   maxHz?: number;
   /** When false, skip draw and scan. Default true. */
   visible?: boolean;
+  /**
+   * Thin the drawn points to ~2 per x-pixel column (the column's min-y and
+   * max-y sample) when oversampled (visible samples > 2×width), cutting draw
+   * cost from O(samples) to O(width). The visible distribution envelope is
+   * preserved at display resolution; the ring keeps every sample
+   * (hover/scan/export unaffected). Tri-state: omitted = AUTO (thin iff
+   * oversampled), `true` = same as auto, `false` = always draw every point.
+   * Default auto.
+   */
+  decimate?: boolean;
   /**
    * Global point opacity in `[0, 1]`. Default 1 (opaque). Multiplies the canvas
    * alpha for this layer's points only; saved/restored so it never leaks into
@@ -42,6 +53,8 @@ export class ScatterChartLayer implements Layer {
   private pointSize = 3;
   private shape: "square" | "circle" = "square";
   private visible = true;
+  // undefined = auto (thin iff oversampled); true/false = explicit override.
+  private decimate: boolean | undefined = undefined;
   private opacity = 1;
   private ring: RingBuffer;
 
@@ -56,6 +69,7 @@ export class ScatterChartLayer implements Layer {
     if (c.pointSize !== undefined) this.pointSize = Math.max(1, c.pointSize);
     if (c.shape !== undefined) this.shape = c.shape;
     if (c.visible !== undefined) this.visible = c.visible;
+    if (c.decimate !== undefined) this.decimate = c.decimate;
     if (c.opacity !== undefined) this.opacity = c.opacity;
     const newCapacity = computeRingCapacity(c);
     if (newCapacity !== undefined && newCapacity !== this.ring.capacity) {
@@ -98,22 +112,32 @@ export class ScatterChartLayer implements Layer {
     ctx.fillStyle = this.color;
     ctx.beginPath();
 
-    if (this.shape === "circle") {
-      this.ring.forEach((data, off) => {
-        const t = data[off];
-        if (t < xMin) return;
-        const px = viewport.xToPx(t);
-        const py = viewport.yToPx(data[off + 1]);
-        ctx.moveTo(px + half, py);
-        ctx.arc(px, py, half, 0, Math.PI * 2);
+    // Hoist the shape branch out of the hot loop (one decision per draw).
+    const plot =
+      this.shape === "circle"
+        ? (px: number, py: number): void => {
+            ctx.moveTo(px + half, py);
+            ctx.arc(px, py, half, 0, Math.PI * 2);
+          }
+        : (px: number, py: number): void => {
+            ctx.rect(px - half, py - half, size, size);
+          };
+
+    // Thin to the column's min-y / max-y point when oversampled — bounds the
+    // plotted points to O(width) while keeping the distribution envelope.
+    // AUTO unless `decimate` is explicitly set; `false` opts out.
+    if (this.decimate !== false && this.ring.length > viewport.widthPx * 2) {
+      forEachColumn(this.ring, viewport, xMin, undefined, {
+        onColumn: (colPx, _firstY, minY, maxY) => {
+          plot(colPx, viewport.yToPx(minY));
+          if (maxY !== minY) plot(colPx, viewport.yToPx(maxY));
+        },
       });
     } else {
       this.ring.forEach((data, off) => {
         const t = data[off];
         if (t < xMin) return;
-        const px = viewport.xToPx(t);
-        const py = viewport.yToPx(data[off + 1]);
-        ctx.rect(px - half, py - half, size, size);
+        plot(viewport.xToPx(t), viewport.yToPx(data[off + 1]));
       });
     }
 

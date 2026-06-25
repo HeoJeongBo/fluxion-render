@@ -58,6 +58,12 @@ export interface InitMsg {
    * Default (when omitted): `"#0b0d12"` — matches the engine's dark default.
    */
   bgColor?: string;
+  /** Cap the engine's render rate to this many fps. Omitted = uncapped. */
+  maxFps?: number;
+  /** Post BOUNDS_UPDATE to the main thread on y-bounds change. Omitted = true. */
+  emitBounds?: boolean;
+  /** Post TICK_UPDATE to the main thread (React-side axis fallback). Omitted = true. */
+  emitTicks?: boolean;
   hostId?: string;
 }
 
@@ -136,6 +142,9 @@ export interface PoolInitMsg {
   height: number;
   dpr: number;
   bgColor?: string;
+  maxFps?: number;
+  emitBounds?: boolean;
+  emitTicks?: boolean;
 }
 
 /** Pool-only: tear down the engine for `hostId` without terminating the worker. */

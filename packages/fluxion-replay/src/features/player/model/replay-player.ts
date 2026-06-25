@@ -309,11 +309,25 @@ export class ReplayPlayer {
       if (!channel) continue;
       const data = channel.decode(f.payload);
       const playerFrame: ReplayPlayerFrame = { channelId: f.channelId, data, t: f.t };
-      for (const listener of this._frameListeners) listener(playerFrame);
+      // Isolate each listener — a throwing subscriber must not starve the
+      // others of this frame (it was already spliced out of the buffer).
+      for (const listener of this._frameListeners) {
+        try {
+          listener(playerFrame);
+        } catch (err) {
+          console.error("[fluxion-replay] frame listener error:", err);
+        }
+      }
     }
 
     // Emit tick
-    for (const listener of this._tickListeners) listener(currentT);
+    for (const listener of this._tickListeners) {
+      try {
+        listener(currentT);
+      } catch (err) {
+        console.error("[fluxion-replay] tick listener error:", err);
+      }
+    }
   }
 
   private async _prefetch(currentT: number): Promise<void> {

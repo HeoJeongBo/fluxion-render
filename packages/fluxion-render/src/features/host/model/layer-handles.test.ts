@@ -760,3 +760,96 @@ describe("Ring-based handles: reset()", () => {
     });
   }
 });
+
+// When the sink exposes `stage` (i.e. a real FluxionHost coalescer), the
+// per-sample `push()` fast-path routes scalars through it with no Float32Array
+// allocation and no immediate `pushData`.
+function makeStagingSink() {
+  const staged: { id: string; values: number[] }[] = [];
+  const pushes: { id: string; data: Float32Array }[] = [];
+  const sink: FluxionDataSink = {
+    pushData: vi.fn((id: string, data: Float32Array) => {
+      pushes.push({ id, data });
+    }),
+    configLayer: vi.fn(),
+    clearLayer: vi.fn(),
+    stage: vi.fn((id: string, values: readonly number[]) => {
+      staged.push({ id, values: Array.from(values) });
+    }),
+  };
+  return { sink, staged, pushes };
+}
+
+describe("push() stage fast-path (coalescing sink)", () => {
+  it("LineLayerHandle stages [t, y] and skips pushData", () => {
+    const { sink, staged, pushes } = makeStagingSink();
+    new LineLayerHandle(sink, "l").push({ t: 1, y: 2 });
+    expect(staged).toEqual([{ id: "l", values: [1, 2] }]);
+    expect(pushes).toHaveLength(0);
+  });
+
+  it("ScatterLayerHandle stages [t, y]", () => {
+    const { sink, staged } = makeStagingSink();
+    new ScatterLayerHandle(sink, "s").push({ t: 3, y: 4 });
+    expect(staged).toEqual([{ id: "s", values: [3, 4] }]);
+  });
+
+  it("AreaLayerHandle stages [t, y]", () => {
+    const { sink, staged } = makeStagingSink();
+    new AreaLayerHandle(sink, "a").push({ t: 5, y: 6 });
+    expect(staged).toEqual([{ id: "a", values: [5, 6] }]);
+  });
+
+  it("StepLayerHandle stages [t, y]", () => {
+    const { sink, staged } = makeStagingSink();
+    new StepLayerHandle(sink, "st").push({ t: 7, y: 8 });
+    expect(staged).toEqual([{ id: "st", values: [7, 8] }]);
+  });
+
+  it("CandlestickLayerHandle stages [t, open, high, low, close]", () => {
+    const { sink, staged } = makeStagingSink();
+    new CandlestickLayerHandle(sink, "c").push({
+      t: 1,
+      open: 2,
+      high: 3,
+      low: 0.5,
+      close: 2.5,
+    });
+    expect(staged[0]!.values).toEqual([1, 2, 3, 0.5, 2.5]);
+  });
+
+  it("ScatterColoredHandle stages [t, y, color, size] with defaults", () => {
+    const { sink, staged } = makeStagingSink();
+    new ScatterColoredHandle(sink, "sc").push({ t: 1, y: 2 });
+    expect(staged[0]!.values).toEqual([1, 2, 0.5, 0.5]);
+  });
+
+  it("ScatterColoredHandle stages provided color/size", () => {
+    const { sink, staged } = makeStagingSink();
+    new ScatterColoredHandle(sink, "sc").push({
+      t: 1,
+      y: 2,
+      colorValue: 0.8,
+      size: 0.2,
+    });
+    expect(staged[0]!.values).toEqual([1, 2, 0.8, 0.2]);
+  });
+
+  it("TrajectoryHandle stages [x, y, t]", () => {
+    const { sink, staged } = makeStagingSink();
+    new TrajectoryHandle(sink, "tr").push({ x: 1, y: 2, t: 3 });
+    expect(staged[0]!.values).toEqual([1, 2, 3]);
+  });
+
+  it("PoseArrowHandle stages [t, y, theta]", () => {
+    const { sink, staged } = makeStagingSink();
+    new PoseArrowHandle(sink, "pa").push({ t: 1, y: 2, theta: 0.5 });
+    expect(staged[0]!.values).toEqual([1, 2, 0.5]);
+  });
+
+  it("StackedAreaHandle stages [t, ...values]", () => {
+    const { sink, staged } = makeStagingSink();
+    new StackedAreaHandle(sink, "sa").push({ t: 1, values: [2, 3, 4] });
+    expect(staged[0]!.values).toEqual([1, 2, 3, 4]);
+  });
+});

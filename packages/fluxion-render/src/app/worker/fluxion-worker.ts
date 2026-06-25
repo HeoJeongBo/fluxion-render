@@ -19,6 +19,9 @@ self.onmessage = (e: MessageEvent<HostMsg>) => {
         height: msg.height,
         dpr: msg.dpr,
         bgColor: msg.bgColor,
+        maxFps: msg.maxFps,
+        emitBounds: msg.emitBounds,
+        emitTicks: msg.emitTicks,
         hostId: msg.hostId,
       });
       return;
@@ -35,7 +38,12 @@ self.onmessage = (e: MessageEvent<HostMsg>) => {
 
     if ((msg as unknown as { mode?: string }).mode === "pool-stream") {
       const s = msg as unknown as FluxionPoolStreamMsg;
-      const decoded = new Float32Array(s.buffer, 0, s.length);
+      // Defensive: a malformed length (negative, non-integer, or larger than
+      // the transferred buffer) would throw on the view construction. Clamp to
+      // the buffer's real capacity so one bad packet never disrupts the worker.
+      const maxLen = s.buffer.byteLength >>> 2; // bytes → f32 count
+      const len = Math.max(0, Math.min(s.length | 0, maxLen));
+      const decoded = new Float32Array(s.buffer, 0, len);
       for (const { hostId, layerId } of s.targets) {
         engines.get(hostId)?.pushRaw(layerId, decoded);
       }

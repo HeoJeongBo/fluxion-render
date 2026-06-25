@@ -360,4 +360,69 @@ describe("ScatterChartLayer", () => {
     expect(ctx.calls.filter((c) => c.name === "arc").length).toBe(0);
     expect(ctx.calls.some((c) => c.name === "fill")).toBe(true);
   });
+
+  describe("point-thinning (decimate)", () => {
+    // 800px wide viewport over [0,5000]; N samples → N / widthPx per pixel.
+    function fillVarying(layer: ScatterChartLayer, vp: Viewport, n = 4000) {
+      layer.setConfig({ capacity: n + 100 }); // retain all samples (no eviction)
+      const buf = new Float32Array(n * 2);
+      for (let i = 0; i < n; i++) {
+        buf[i * 2] = (i * 5000) / n; // t spans [0, 5000)
+        buf[i * 2 + 1] = Math.sin(i * 0.1) * 5; // varies within each column
+      }
+      layer.setData(buf.buffer, buf.length, vp);
+    }
+
+    it("auto-thins squares when oversampled (far fewer than every sample)", () => {
+      const layer = new ScatterChartLayer("sc1");
+      const vp = makeViewport();
+      fillVarying(layer, vp, 4000);
+      const ctx = createFakeCtx();
+      layer.draw(ctx as unknown as OffscreenCanvasRenderingContext2D, vp);
+      const rects = ctx.calls.filter((c) => c.name === "rect").length;
+      expect(rects).toBeGreaterThan(0);
+      expect(rects).toBeLessThan(4000);
+    });
+
+    it("auto-thins circles when oversampled", () => {
+      const layer = new ScatterChartLayer("sc1");
+      layer.setConfig({ shape: "circle" });
+      const vp = makeViewport();
+      fillVarying(layer, vp, 4000);
+      const ctx = createFakeCtx();
+      layer.draw(ctx as unknown as OffscreenCanvasRenderingContext2D, vp);
+      const arcs = ctx.calls.filter((c) => c.name === "arc").length;
+      expect(arcs).toBeGreaterThan(0);
+      expect(arcs).toBeLessThan(4000);
+    });
+
+    it("emits one point per column when the column is flat (min===max)", () => {
+      const layer = new ScatterChartLayer("sc1");
+      const vp = makeViewport();
+      const n = 4000;
+      layer.setConfig({ capacity: n + 100 });
+      const buf = new Float32Array(n * 2);
+      for (let i = 0; i < n; i++) {
+        buf[i * 2] = (i * 5000) / n;
+        buf[i * 2 + 1] = 1; // constant → every column flat
+      }
+      layer.setData(buf.buffer, buf.length, vp);
+      const ctx = createFakeCtx();
+      layer.draw(ctx as unknown as OffscreenCanvasRenderingContext2D, vp);
+      const rects = ctx.calls.filter((c) => c.name === "rect").length;
+      // One point per occupied column — bounded by the visible pixel width.
+      expect(rects).toBeGreaterThan(0);
+      expect(rects).toBeLessThanOrEqual(vp.widthPx + 1);
+    });
+
+    it("decimate:false draws every visible point even when oversampled", () => {
+      const layer = new ScatterChartLayer("sc1");
+      layer.setConfig({ decimate: false });
+      const vp = makeViewport();
+      fillVarying(layer, vp, 4000);
+      const ctx = createFakeCtx();
+      layer.draw(ctx as unknown as OffscreenCanvasRenderingContext2D, vp);
+      expect(ctx.calls.filter((c) => c.name === "rect").length).toBe(4000);
+    });
+  });
 });

@@ -1,3 +1,4 @@
+import { forEachColumn } from "../../../shared/lib/column-reduce";
 import { pushSamples } from "../../../shared/lib/push-samples";
 import { computeRingCapacity } from "../../../shared/lib/ring-capacity";
 import type { Layer } from "../../../shared/model/layer";
@@ -13,6 +14,16 @@ export interface AreaChartConfig {
   retentionMs?: number;
   maxHz?: number;
   visible?: boolean;
+  /**
+   * Min/max-decimate both the fill and the outline stroke to ~2–4 points per
+   * x-pixel column when oversampled (visible samples > 2×width), cutting draw
+   * cost from O(samples) to O(width). The fill still closes to the baseline per
+   * gap-segment and the envelope is preserved at display resolution. The ring
+   * keeps every sample (hover/scan/export unaffected). Tri-state: omitted =
+   * AUTO (decimate iff oversampled), `true` = same as auto, `false` = always
+   * draw every sample. Default auto.
+   */
+  decimate?: boolean;
   /**
    * Maximum allowed time gap (ms) between consecutive samples before the
    * area is broken: the current fill polygon closes to the baseline and a
@@ -53,6 +64,8 @@ export class AreaChartLayer implements Layer {
   private fillOpacity = 0.2;
   private lineWidth = 1;
   private visible = true;
+  // undefined = auto (decimate iff oversampled); true/false = explicit override.
+  private decimate: boolean | undefined = undefined;
   private maxGapMs: number | undefined;
   private dashArray: number[] = [];
   private yOffset = 0;
@@ -75,6 +88,7 @@ export class AreaChartLayer implements Layer {
       this.fillOpacity = Math.max(0, Math.min(1, c.fillOpacity));
     if (c.lineWidth !== undefined) this.lineWidth = c.lineWidth;
     if (c.visible !== undefined) this.visible = c.visible;
+    if (c.decimate !== undefined) this.decimate = c.decimate;
     if (c.maxGapMs !== undefined) this.maxGapMs = c.maxGapMs;
     if (c.dashArray !== undefined) this.dashArray = c.dashArray;
     if (c.yOffset !== undefined) this.yOffset = c.yOffset;
@@ -152,6 +166,12 @@ export class AreaChartLayer implements Layer {
     if (lane && !Number.isFinite(this.scannedYMin)) return;
 
     const xMin = viewport.bounds.xMin;
+    // Decimate when oversampled — min/max-per-column envelope for both fill and
+    // stroke. AUTO unless `decimate` is explicitly set; `false` opts out.
+    if (this.decimate !== false && this.ring.length > viewport.widthPx * 2) {
+      this._drawDecimated(ctx, viewport, xMin);
+      return;
+    }
     // In lane mode the fill runs to the band's bottom; otherwise to y=0.
     const baselinePy = lane ? this.laneBottomPx(viewport) : viewport.yToPx(0);
     const yPx = (y: number): number =>
@@ -215,6 +235,91 @@ export class AreaChartLayer implements Layer {
         ctx.lineTo(px, py);
       }
       prevT = t;
+    });
+    ctx.strokeStyle = this.color;
+    ctx.lineWidth = this.lineWidth;
+    const dashed = this.dashArray.length > 0;
+    if (dashed) ctx.setLineDash(this.dashArray);
+    ctx.stroke();
+    if (dashed) ctx.setLineDash([]);
+  }
+
+  /**
+   * Min/max-per-pixel-column fill + stroke (see {@link forEachColumn}). Each
+   * gap-segment's fill closes to the baseline; the envelope (min/max per column)
+   * is preserved at display resolution while bounding draw to O(width).
+   */
+  private _drawDecimated(
+    ctx: OffscreenCanvasRenderingContext2D,
+    viewport: Viewport,
+    xMin: number,
+  ): void {
+    const lane = this.laneActive();
+    const baselinePy = lane ? this.laneBottomPx(viewport) : viewport.yToPx(0);
+    const yPx = (y: number): number =>
+      lane ? this.yToBandPx(y, viewport) : viewport.yToPx(y + this.yOffset);
+    const gap = this.maxGapMs;
+
+    // Pass 1 — fill: one closed-to-baseline polygon per gap-segment.
+    ctx.beginPath();
+    let segFirstPx = 0;
+    let prevPx = 0;
+    let inSeg = false;
+    let any = false;
+    const closeSeg = (): void => {
+      ctx.lineTo(prevPx, baselinePy);
+      ctx.lineTo(segFirstPx, baselinePy);
+      ctx.closePath();
+    };
+    forEachColumn(this.ring, viewport, xMin, gap, {
+      onColumn: (colPx, firstY, minY, maxY, lastY) => {
+        const pts = [firstY, minY, maxY, lastY];
+        for (let k = 0; k < pts.length; k++) {
+          if (k > 0 && pts[k] === pts[k - 1]) continue;
+          const py = yPx(pts[k]!);
+          if (!inSeg) {
+            ctx.moveTo(colPx, py);
+            segFirstPx = colPx;
+            inSeg = true;
+            any = true;
+          } else {
+            ctx.lineTo(colPx, py);
+          }
+        }
+        prevPx = colPx;
+      },
+      onGapBreak: () => {
+        if (inSeg) {
+          closeSeg();
+          inSeg = false;
+        }
+      },
+    });
+    if (inSeg) closeSeg();
+    if (!any) return; // no visible columns
+    ctx.fillStyle = hexToRgba(this.color, this.fillOpacity);
+    ctx.fill();
+
+    // Pass 2 — stroke on top, breaking at gaps (no baseline segments).
+    ctx.beginPath();
+    let first = true;
+    forEachColumn(this.ring, viewport, xMin, gap, {
+      onColumn: (colPx, firstY, minY, maxY, lastY) => {
+        const pts = [firstY, minY, maxY, lastY];
+        for (let k = 0; k < pts.length; k++) {
+          if (k > 0 && pts[k] === pts[k - 1]) continue;
+          const py = yPx(pts[k]!);
+          if (first) {
+            ctx.moveTo(colPx, py);
+            first = false;
+          } else {
+            ctx.lineTo(colPx, py);
+          }
+        }
+      },
+      onGapBreak: () => {
+        first = true;
+      },
     });
     ctx.strokeStyle = this.color;
     ctx.lineWidth = this.lineWidth;

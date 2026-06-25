@@ -263,6 +263,28 @@ describe("FluxionWorkerPool.broadcastStream", () => {
     expect(fakeWorkers[0]!.postMessage).not.toHaveBeenCalled();
     pool.dispose();
   });
+
+  it("is a no-op after the pool is disposed (does not post to dead workers)", () => {
+    const { pool, fakeWorkers } = makePool(1);
+    const handle = pool.acquire();
+    const targets = [{ hostId: handle.hostId, layerId: "line" }];
+    pool.dispose();
+    fakeWorkers[0]!.postMessage.mockClear();
+    pool.broadcastStream(targets, new Float32Array(2).buffer, 2);
+    expect(fakeWorkers[0]!.postMessage).not.toHaveBeenCalled();
+  });
+});
+
+// ─── FluxionWorkerPool.dispose ───────────────────────────────────────────────
+
+describe("FluxionWorkerPool.dispose", () => {
+  it("clears the host registry so hasHost returns false afterward", () => {
+    const { pool } = makePool(1);
+    const handle = pool.acquire();
+    expect(pool.hasHost(handle.hostId)).toBe(true);
+    pool.dispose();
+    expect(pool.hasHost(handle.hostId)).toBe(false);
+  });
 });
 
 // ─── FluxionWorkerHandle.emitStream ──────────────────────────────────────────
@@ -290,5 +312,19 @@ describe("FluxionWorkerHandle.emitStream", () => {
     const transfer = call![1] as Transferable[];
     expect(transfer).toEqual([buffer]);
     pool.dispose();
+  });
+
+  it("emitStream / emitPoolStream are no-ops after the handle is terminated", () => {
+    const { pool, fakeWorkers } = makePool(1);
+    const handle = pool.acquire();
+    pool.dispose(); // marks all handles terminated
+    fakeWorkers[0]!.postMessage.mockClear();
+    handle.emitStream("sensor", new Float32Array(2).buffer, 2);
+    handle.emitPoolStream(
+      [{ hostId: handle.hostId, layerId: "line" }],
+      new Float32Array(2).buffer,
+      2,
+    );
+    expect(fakeWorkers[0]!.postMessage).not.toHaveBeenCalled();
   });
 });

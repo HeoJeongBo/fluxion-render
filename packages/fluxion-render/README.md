@@ -17,7 +17,7 @@ npm install @heojeongbo/fluxion-render
 
 ## Features
 
-- **Worker Pool** — 60 charts share 4 workers by default. Zero config required.
+- **Worker Pool** — charts share an adaptive pool that grows with load. Zero config required.
 - **OffscreenCanvas** — all rendering happens off the main thread
 - **Zero-copy data** — `Float32Array` ownership is transferred to the worker, never copied
 - **React integration** — hooks and components included (`/react` subpath)
@@ -187,26 +187,42 @@ setInterval(() => {
 
 ## Worker Pool
 
-Every `FluxionHost` automatically uses a shared module-level pool of **4 workers** — no setup needed. Mounting 60 charts creates 60 hosts but only 4 OS threads.
+Every `FluxionHost` automatically uses a shared module-level pool — no setup
+needed. Mounting 60 charts creates 60 hosts but only a handful of OS threads.
+
+The default pool is **adaptive**: it starts small (**2 workers**) and grows on
+demand toward a cap of `min(16, hardwareConcurrency − 1)` as charts mount, with
+`targetPerWorker` tuned low because render-heavy charts benefit from spreading
+across more threads. (Previously the default was a fixed 4 workers.)
 
 ```tsx
-// No config — 4 workers shared automatically
+// No config — workers shared automatically, pool grows as charts mount
 <FluxionCanvas layers={[...]} />
 <FluxionCanvas layers={[...]} />
-// ... 60 of these all share the same 4 workers
+// ... 60 of these all share the same adaptive pool
 ```
 
-**Adjust pool size** (call before creating any host):
+**Adjust the pool** (call before creating any host):
 
 ```ts
 import { configureDefaultPool } from '@heojeongbo/fluxion-render';
 
-configureDefaultPool({ size: 2 }); // use 2 workers instead of 4
+configureDefaultPool({ size: 2 });               // fixed 2-worker pool
+configureDefaultPool({ size: 2, maxSize: 8 });   // start at 2, grow to 8 on demand
 ```
 
 `getDefaultPool()` returns the current singleton pool (lazily created on first
-use), and `configureDefaultPool({ size?, workerFactory? })` replaces it (disposing
-the old one) — call it before creating any host.
+use), and `configureDefaultPool({ size?, maxSize?, targetPerWorker?, workerFactory? })`
+replaces it (disposing the old one) — call it before creating any host.
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `size` | `number` | `2` (default pool) | Initial worker count, clamped `[1, 16]` |
+| `maxSize` | `number` | `= size` (growth off) | Upper bound for runtime growth. When `> size`, the pool starts at `size` and spawns more on demand (up to `maxSize`) as average active hosts per worker reaches `targetPerWorker`. Clamped `[size, 16]` |
+| `targetPerWorker` | `number` | `12` (min 1) | Active hosts per worker that triggers growth toward `maxSize`. Lower it for heavier per-host workloads (e.g. high-Hz streaming charts) so hosts spread across more workers sooner. Only matters when `maxSize > size` |
+
+Since the pool can't observe per-stream Hz, **`targetPerWorker` is the tuning
+knob**: high-Hz apps set it lower for more headroom per worker.
 
 **Scoped pool** (React) — useful when a page needs its own isolated pool:
 
@@ -236,6 +252,48 @@ const host = new FluxionHost(canvas, {
 
 ---
 
+## Performance / many charts
+
+`FluxionHostOptions` (the second arg to `new FluxionHost`, also passed as
+`hostOptions` to `<FluxionCanvas>` / `useFluxionCanvas`) carries the throughput
+knobs below. The defaults already coalesce and decimate, so a grid of high-rate
+streams is cheap out of the box; the rest are opt-outs for niche cases.
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `coalesce` | `boolean` | `true` | Coalesce high-frequency per-sample handle `push()` calls into **one** `Op.DATA` message per layer per animation frame instead of one `postMessage` per sample. Cuts postMessage volume from O(samples/sec) to O(layers × fps) and removes the per-sample `Float32Array(2)` allocation — essential for many high-rate (e.g. 500 Hz) streams. Adds up to one frame (~16 ms) of latency. Only the streaming handles' `push()` fast-path is coalesced; raw `pushData`, `pushBatch`, and the replace-style `set*` calls always post immediately (and first flush any pending staged data for that layer, preserving order). Set `false` to restore immediate per-sample posting |
+| `coalesceMaxFloats` | `number` | `1_000_000` | Backpressure cap on staged Float32 elements per layer between flushes; on overflow the layer flushes immediately (never drops samples) |
+| `maxFps` | `number` | uncapped | Cap the worker engine's render rate. For a large grid of streaming charts sharing a worker, capping to e.g. `30` roughly halves worker scan+draw CPU and is visually indistinguishable for a scrolling time window. Skipped frames keep pending data — nothing is dropped |
+| `emitBounds` | `boolean` | `true` | Whether the worker posts `BOUNDS_UPDATE` to the main thread on auto y-bounds change. Set `false` when nothing consumes `onBoundsChange` / `getMetrics().bounds` (e.g. a thumbnail grid) to skip the per-frame postMessage |
+| `emitTicks` | `boolean` | `true` | Whether the worker posts `TICK_UPDATE` for React-side axis rendering. Only relevant with `externalAxes={false}` and no `onTickUpdate` consumer; set `false` to skip per-frame tick computation + postMessage. No effect when axis canvases render in the worker (`externalAxes` / `xAxisElement` / `yAxisElement`) |
+
+(Plus `bgColor`, `pool`, `workerFactory` covered above.)
+
+**Putting it together for a wall of charts.** The adaptive default pool spreads
+hosts across workers as charts mount; `coalesce` (on by default) collapses
+per-sample posts to one message per layer per frame; per-layer `decimate` (auto)
+makes each draw O(width) rather than O(samples); and `maxFps` caps the shared
+worker's frame rate. For a read-only thumbnail grid, also set
+`emitBounds: false` / `emitTicks: false` to drop the per-frame bookkeeping
+postMessages:
+
+```tsx
+<FluxionCanvas
+  hostOptions={{ coalesce: true, maxFps: 30, emitBounds: false, emitTicks: false }}
+  layers={[
+    axisGridLayer('axis', { xMode: 'time', timeWindowMs: 5000, yMode: 'auto' }),
+    lineLayer('s', { color: '#4fc3f7', maxHz: 500 }), // decimate auto-engages
+  ]}
+/>
+```
+
+**Robustness.** A single throwing frame or listener no longer permanently stops
+an engine: the worker render loop isolates the error (logs it and keeps the loop
+running), and the bounds/tick/metrics emitters and the shared streaming ticker
+isolate a throwing listener so it can't skip the others.
+
+---
+
 ## Layer Types
 
 ### `line` — Streaming time-series
@@ -250,7 +308,10 @@ lineLayer('signal', {
   retentionMs?: number,  // data retention window in ms
   maxHz?: number,        // expected max sample rate — auto-calculates capacity
   visible?: boolean,     // show/hide without reinitialising the layer (default true)
-  decimate?: boolean,    // min/max-decimate the DRAW at high sample density (default false)
+  decimate?: boolean,    // min/max-decimate the DRAW at high sample density.
+                         // Tri-state: omitted = AUTO (decimate only when oversampled),
+                         // true = always when oversampled, false = always draw every
+                         // sample. Also on area/step/scatter — see "Streaming decimation"
   maxGapMs?: number,     // break the stroke when consecutive samples are farther apart
                          // than this (bursty/intermittent streams show real holes
                          // instead of a bridging diagonal); also on area/step layers
@@ -279,11 +340,22 @@ small for the visible window — i.e. samples are evicted while still on screen 
 the layer logs a one-time `[fluxion] Layer "id": ring capacity … is smaller than
 the visible window` warning so silent data loss is visible during development.
 
-**High-rate decimation** — set `decimate: true` to draw a min/max-per-pixel-column
-path when there are far more visible samples than pixels (e.g. 500Hz over a multi-second
-window). The rendered line stays visually identical — every peak/trough is preserved at
-display resolution — while `lineTo` calls drop from O(samples) to O(width). The ring buffer
-still retains **every** sample, so hover, scan (y-auto bounds), and export are unaffected.
+#### Streaming decimation (`decimate`)
+
+`decimate` is a shared, **tri-state** option on the `line`, `step`, `area`, and
+`scatter` streaming layers that makes high-rate (e.g. 500 Hz) charts **O(width)**
+instead of O(samples) to draw:
+
+- **omitted (default) → AUTO** — decimate only when oversampled (visible samples
+  > 2× pixel width).
+- **`true`** — decimate whenever oversampled (same effect as auto).
+- **`false`** — always draw every sample.
+
+For `line` / `step` / `area` it draws a min/max envelope (~2–4 points per x-pixel
+column), so it's **visually lossless** — every peak/trough at display resolution
+is preserved; for `scatter` it thins to each column's min-y / max-y points. The
+ring buffer still holds **every** sample, so hover, scan (y-auto bounds), and
+export are unaffected.
 
 **Toggling series visibility** — set `visible` to show/hide a layer without reinitialising the host or losing buffered data. For a single layer, `useLayerConfig` sends one lightweight CONFIG message:
 
@@ -420,7 +492,7 @@ in the layout shown below; `t` is host-relative ms for streaming layers.
 Notable config fields (all have sensible defaults):
 
 - **`barLayer`** — `color`, `barWidth`=8, `layout`=`'xy'|'y'`, `xRange`=`[0,1]` (for `'y'`).
-- **`scatterLayer`** — `color`, `pointSize`=3, `shape`=`'square'|'circle'`, `opacity`=1 (global point opacity 0–1), ring sizing via `capacity`=2048 / `retentionMs` / `maxHz`.
+- **`scatterLayer`** — `color`, `pointSize`=3, `shape`=`'square'|'circle'`, `opacity`=1 (global point opacity 0–1), `decimate` (tri-state, see [Streaming decimation](#streaming-decimation-decimate) — thins to per-column min-y/max-y points), ring sizing via `capacity`=2048 / `retentionMs` / `maxHz`.
 - **`scatterColoredLayer`** — `colormap`=`'viridis'|'plasma'|'hot'|'gradient'` (+ `minColor`/`maxColor` for `'gradient'`), `minSize`=2 / `maxSize`=8, `shape`=`'circle'`.
 - **`candlestickLayer`** — `upColor`=`#26a69a`, `downColor`=`#ef5350`, `bodyWidth`=6.
 - **`eventMarkerLayer`** — `colors`=`[info, warning, error]`, `markerSize`=8, `lineWidth`=1.
@@ -533,7 +605,9 @@ Creates the canvas, worker, and all layers. Returns a ref to attach to a contain
 ```ts
 const { containerRef, host } = useFluxionCanvas({
   layers: FluxionLayerSpec[],       // layer declarations (configs are live — see below)
-  hostOptions?: FluxionHostOptions, // bgColor, pool, workerFactory
+  hostOptions?: FluxionHostOptions, // bgColor, pool, workerFactory + perf knobs
+                                    // (coalesce / maxFps / emitBounds / emitTicks —
+                                    // see "Performance / many charts")
   onReady?: (host) => void,         // called once after initialization
 });
 ```
@@ -563,6 +637,7 @@ const { rate } = useFluxionStream({
   setup: (host) => T,     // called once — resolve typed handles here
   tick: (tMs, state) => number, // called every interval, return sample count
   shared?: boolean,       // opt into the shared ticker (default false) — see below
+  trackRate?: boolean,    // measure pushed-samples/sec into `rate` (default true) — see below
 });
 ```
 
@@ -574,6 +649,12 @@ process-wide timer that fans out to every subscriber — and it **pauses while t
 page is hidden** (`document.hidden`), so background tabs stop pumping. This cuts
 timer overhead dramatically on dashboards with dozens of small charts. Default
 `false` preserves the original one-interval-per-stream behavior exactly.
+
+**Not displaying `rate`?** Pass `trackRate: false`. By default (`true`) the hook
+tracks the pushed-samples-per-second `rate` and refreshes it every 500 ms via
+`setState` — a periodic re-render per stream. With it off, that periodic
+re-render is skipped (and `rate` stays `0`), which matters for large grids of
+hundreds of charts.
 
 Need the shared timer outside `useFluxionStream`? Use the primitive directly:
 
@@ -624,7 +705,9 @@ Creates a scoped `FluxionWorkerPool` that is disposed when the component unmount
 
 ```ts
 const pool = useFluxionWorkerPool({
-  size?: number,              // default 4
+  size?: number,              // initial worker count, default 4
+  maxSize?: number,           // grow on demand up to this (default = size, growth off)
+  targetPerWorker?: number,   // hosts/worker that triggers growth (default 12)
   workerFactory: () => Worker, // required
 });
 ```
@@ -1074,7 +1157,13 @@ stop();
 
 ```ts
 const pool = new FluxionWorkerPool({
-  size?: number,           // default 4, clamped to [1, 16]
+  size?: number,            // INITIAL worker count, default 4, clamped to [1, 16]
+  maxSize?: number,         // upper bound for runtime growth, default = size (growth off).
+                            // When > size, the pool starts at size and spawns more workers
+                            // on demand (up to maxSize), clamped to [size, 16]
+  targetPerWorker?: number, // active hosts/worker that triggers growth, default 12 (min 1).
+                            // Only effective when maxSize > size — lower it for heavier
+                            // (e.g. high-Hz) per-host workloads to spread sooner
   workerFactory: () => Worker, // required
 });
 

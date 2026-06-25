@@ -60,8 +60,26 @@ export interface WorkerLike {
 }
 
 export interface WorkerPoolOptions {
-  /** Number of workers to maintain. Default: 4. Clamped to [1, 16]. */
+  /**
+   * Initial number of workers. Default: 4. Clamped to [1, 16]. When `maxSize`
+   * is larger, this is the starting count and the pool grows on demand.
+   */
   size?: number;
+  /**
+   * Upper bound for runtime growth. When greater than `size`, the pool starts
+   * at `size` workers and spawns more on demand (up to `maxSize`) as the
+   * average active hosts per worker reaches `targetPerWorker` — useful for
+   * apps whose chart/host count varies widely. Defaults to `size` (growth
+   * disabled, fixed-size pool). Clamped to [size, 16].
+   */
+  maxSize?: number;
+  /**
+   * Active hosts per worker that triggers growth toward `maxSize`. Lower it for
+   * heavier per-host workloads (e.g. high-Hz streaming charts) so the pool
+   * spreads hosts across more workers sooner. Default 12. Min 1. Only has an
+   * effect when `maxSize > size`.
+   */
+  targetPerWorker?: number;
   /**
    * Factory function that creates a new Worker instance.
    * Required — the pool has no default because the worker script URL
@@ -490,10 +508,16 @@ export class WorkerHandle<TMsg extends object> implements WorkerLike {
 export type WorkerPoolErrorCallback = (err: WorkerErrorMsg, workerIndex: number) => void;
 
 export class WorkerPool<TMsg extends object> {
-  private readonly workers: Worker[];
-  private readonly hostCounts: Int32Array;
+  // Mutable arrays (push to grow); `readonly` pins the reference, not contents.
+  private readonly workers: Worker[] = [];
+  // Per-worker active-host counts. Plain number[] (not Int32Array) so it can
+  // grow alongside `workers`; ≤16 entries, so the cache benefit is moot.
+  private readonly hostCounts: number[] = [];
   private readonly handles: Set<WorkerHandle<TMsg>> = new Set();
   private readonly _workerErrorListeners: EventListener[] = [];
+  private readonly _workerFactory: () => Worker;
+  private readonly _maxSize: number;
+  private readonly _targetPerWorker: number;
   private _errorCallback: WorkerPoolErrorCallback | undefined;
   private _seq = 0;
   private _disposed = false;
@@ -505,28 +529,49 @@ export class WorkerPool<TMsg extends object> {
 
   constructor(opts: WorkerPoolOptions) {
     const size = Math.max(1, Math.min(opts.size ?? 4, 16));
-    this.workers = Array.from({ length: size }, () => opts.workerFactory());
-    // Int32Array for cache-friendly integer counters
-    this.hostCounts = new Int32Array(size);
+    this._workerFactory = opts.workerFactory;
+    // maxSize defaults to size (growth disabled) so existing fixed-size callers
+    // are unchanged; opt into growth by passing a larger maxSize.
+    this._maxSize = Math.max(size, Math.min(opts.maxSize ?? size, 16));
+    this._targetPerWorker = Math.max(1, opts.targetPerWorker ?? 12);
+    for (let i = 0; i < size; i++) this._spawnWorker();
+  }
 
-    // Attach a pool-level error listener to each worker so fire-and-forget
-    // postMessage errors are visible via pool.onError(), not silently dropped.
-    for (let i = 0; i < this.workers.length; i++) {
-      const idx = i;
-      const listener: EventListener = (evt: Event) => {
-        const d = (evt as MessageEvent).data;
-        if (
-          d !== null &&
-          typeof d === "object" &&
-          (d as WorkerErrorMsg).__fluxionError === true &&
-          this._errorCallback
-        ) {
-          this._errorCallback(d as WorkerErrorMsg, idx);
-        }
-      };
-      this._workerErrorListeners.push(listener);
-      this.workers[i]!.addEventListener("message", listener);
-    }
+  /**
+   * Create one worker, append it to the pool, and wire its pool-level error
+   * listener so fire-and-forget postMessage errors surface via `onError()`
+   * (not silently dropped). Used for both the initial workers and growth.
+   */
+  private _spawnWorker(): void {
+    const index = this.workers.length;
+    const worker = this._workerFactory();
+    this.workers.push(worker);
+    this.hostCounts.push(0);
+    const listener: EventListener = (evt: Event) => {
+      const d = (evt as MessageEvent).data;
+      if (
+        d !== null &&
+        typeof d === "object" &&
+        (d as WorkerErrorMsg).__fluxionError === true &&
+        this._errorCallback
+      ) {
+        this._errorCallback(d as WorkerErrorMsg, index);
+      }
+    };
+    this._workerErrorListeners.push(listener);
+    worker.addEventListener("message", listener);
+  }
+
+  /**
+   * Grow the pool by one worker when the average active hosts per worker has
+   * reached `targetPerWorker`, up to `maxSize`. A freshly spawned worker is the
+   * least-busy one, so the host being acquired lands on it. No-op at `maxSize`.
+   */
+  private _maybeGrow(): void {
+    if (this.workers.length >= this._maxSize) return;
+    let total = 0;
+    for (let i = 0; i < this.hostCounts.length; i++) total += this.hostCounts[i]!;
+    if (total >= this.workers.length * this._targetPerWorker) this._spawnWorker();
   }
 
   /**
@@ -598,6 +643,7 @@ export class WorkerPool<TMsg extends object> {
     if (this._disposed) {
       throw new Error("WorkerPool has been disposed");
     }
+    this._maybeGrow();
     const index = this._leastBusyIndex();
     this.hostCounts[index]++;
     const hostId = `host-${++this._seq}`;

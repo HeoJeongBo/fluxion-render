@@ -1432,3 +1432,90 @@ describe("WorkerPool.stream()", () => {
     expect(fakeWorkers[0]!.postMessage.mock.calls.length).toBe(before);
   });
 });
+
+describe("WorkerPool runtime growth", () => {
+  function makeGrowPool(opts: {
+    size?: number;
+    maxSize?: number;
+    targetPerWorker?: number;
+  }): { pool: WorkerPool<TestMsg>; fakeWorkers: FakeWorker[] } {
+    const fakeWorkers: FakeWorker[] = [];
+    const pool = new WorkerPool<TestMsg>({
+      workerFactory: () => {
+        const w = makeFakeWorker();
+        fakeWorkers.push(w);
+        return w as unknown as Worker;
+      },
+      ...opts,
+    });
+    return { pool, fakeWorkers };
+  }
+
+  it("grows toward maxSize as hosts accumulate, then plateaus at the cap", () => {
+    const { pool } = makeGrowPool({ size: 1, maxSize: 3, targetPerWorker: 2 });
+    expect(pool.stats().size).toBe(1);
+    for (let i = 0; i < 8; i++) pool.acquire();
+    // total 2 → grow to 2; total 4 → grow to 3; then capped at maxSize 3.
+    expect(pool.stats().size).toBe(3);
+    pool.dispose();
+  });
+
+  it("does not grow past maxSize", () => {
+    const { pool } = makeGrowPool({ size: 1, maxSize: 2, targetPerWorker: 1 });
+    for (let i = 0; i < 10; i++) pool.acquire();
+    expect(pool.stats().size).toBe(2);
+    pool.dispose();
+  });
+
+  it("does not grow when maxSize defaults to size (fixed pool)", () => {
+    const { pool, fakeWorkers } = makeGrowPool({ size: 2, targetPerWorker: 1 });
+    for (let i = 0; i < 10; i++) pool.acquire();
+    expect(pool.stats().size).toBe(2);
+    expect(fakeWorkers.length).toBe(2);
+    pool.dispose();
+  });
+
+  it("wires the pool error listener onto grown workers", () => {
+    const { pool, fakeWorkers } = makeGrowPool({
+      size: 1,
+      maxSize: 2,
+      targetPerWorker: 1,
+    });
+    const errors: Array<{ msg: WorkerErrorMsg; index: number }> = [];
+    pool.onError((msg, index) => errors.push({ msg, index }));
+    pool.acquire(); // count→1
+    pool.acquire(); // total 1 ≥ 1 → spawns worker index 1
+    expect(fakeWorkers.length).toBe(2);
+    const errMsg = {
+      __fluxionError: true,
+      message: "boom",
+      hostId: "h",
+    } as unknown as WorkerErrorMsg;
+    fakeWorkers[1]!._emit("message", errMsg);
+    expect(errors).toHaveLength(1);
+    expect(errors[0]!.index).toBe(1);
+    pool.dispose();
+  });
+
+  it("decrements per-worker counts on release after growth", () => {
+    const { pool } = makeGrowPool({ size: 1, maxSize: 3, targetPerWorker: 2 });
+    const handles = Array.from({ length: 6 }, () => pool.acquire());
+    expect(pool.stats().size).toBeGreaterThan(1);
+    const before = pool.stats().totalActive;
+    handles[0]!.release();
+    expect(pool.stats().totalActive).toBe(before - 1);
+    pool.dispose();
+  });
+
+  it("terminates grown workers on dispose", () => {
+    const { pool, fakeWorkers } = makeGrowPool({
+      size: 1,
+      maxSize: 3,
+      targetPerWorker: 1,
+    });
+    for (let i = 0; i < 5; i++) pool.acquire();
+    expect(fakeWorkers.length).toBeGreaterThan(1);
+    pool.dispose();
+    for (const w of fakeWorkers) expect(w.terminate).toHaveBeenCalled();
+  });
+});

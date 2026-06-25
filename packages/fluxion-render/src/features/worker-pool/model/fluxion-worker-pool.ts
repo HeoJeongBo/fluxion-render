@@ -15,15 +15,28 @@ export class FluxionWorkerPool extends WorkerPool<HostMsg> {
     worker: Worker,
     index: number,
     hostId: string,
+    onRelease: () => void,
   ): FluxionWorkerHandle {
     const handle = new FluxionWorkerHandle(worker, hostId, () => {
       this._registry.delete(hostId);
       this._hostIndex.delete(hostId);
-      this._release(index);
+      // Delegate to the base onRelease — it removes the handle from the pool's
+      // `handles` Set AND decrements the busy counter. Calling `_release`
+      // directly (the old behavior) skipped the Set cleanup, leaking a dead
+      // handle on every mount/unmount cycle.
+      onRelease();
     });
     this._registry.set(hostId, handle);
     this._hostIndex.set(hostId, index);
     return handle;
+  }
+
+  override dispose(): void {
+    super.dispose();
+    // Base dispose() doesn't know about these subclass maps; clear them so a
+    // disposed pool holds no stale hostId→handle entries.
+    this._registry.clear();
+    this._hostIndex.clear();
   }
 
   override acquire(): FluxionWorkerHandle {
@@ -49,6 +62,9 @@ export class FluxionWorkerPool extends WorkerPool<HostMsg> {
     buffer: ArrayBuffer,
     length: number,
   ): void {
+    // A disposed pool has terminated workers — posting would throw / no-op.
+    // (The caller-owned `buffer` is simply left for GC, not transferred.)
+    if (this.isDisposed) return;
     // Group targets by worker index (not by handle instance — each acquire() returns
     // a new handle object even when backed by the same worker, so using the handle as
     // a Map key would create one group per host instead of one group per worker).
@@ -59,6 +75,9 @@ export class FluxionWorkerPool extends WorkerPool<HostMsg> {
     for (const t of targets) {
       const h = this._registry.get(t.hostId);
       const idx = this._hostIndex.get(t.hostId);
+      // Skip stale (unmounted) targets — a released/disposed host is removed
+      // from the registry, so a mid-churn broadcast never posts to a dead
+      // handle. (A whole-pool dispose is short-circuited above.)
       if (!h || idx === undefined) continue;
       let group = byWorkerIndex.get(idx);
       if (!group) {

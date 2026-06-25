@@ -25,6 +25,9 @@ export class FluxionWorkerHandle extends WorkerHandle<HostMsg> {
         height: m.height,
         dpr: m.dpr,
         bgColor: m.bgColor,
+        maxFps: m.maxFps,
+        emitBounds: m.emitBounds,
+        emitTicks: m.emitTicks,
       };
       this._worker.postMessage(poolMsg, transfer ?? []);
       return;
@@ -46,6 +49,7 @@ export class FluxionWorkerHandle extends WorkerHandle<HostMsg> {
    * After this call, `buffer` is detached — do not read it again.
    */
   emitStream(id: string, buffer: ArrayBuffer, length: number): void {
+    if (this.isTerminated) return; // worker may already be gone (pool disposed)
     const msg = { id, buffer, length, hostId: this.hostId, mode: "stream" as const };
     this._worker.postMessage(msg, [buffer]);
   }
@@ -59,6 +63,7 @@ export class FluxionWorkerHandle extends WorkerHandle<HostMsg> {
     buffer: ArrayBuffer,
     length: number,
   ): void {
+    if (this.isTerminated) return; // worker may already be gone (pool disposed)
     const msg: FluxionPoolStreamMsg = { mode: "pool-stream", targets, buffer, length };
     this._worker.postMessage(msg, [buffer]);
   }

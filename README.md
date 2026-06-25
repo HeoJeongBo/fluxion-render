@@ -25,7 +25,7 @@ Built for robotics and sensor systems: streaming line charts, LiDAR point clouds
 ```
 Main Thread                          Worker Thread(s)
 ───────────────                      ──────────────────────────
-FluxionHost × N                      FluxionWorkerPool (4 workers)
+FluxionHost × N                      FluxionWorkerPool (adaptive, auto-growing)
   │                                    │
   │──POOL_INIT (OffscreenCanvas)──────►│  Engine (one per host)
   │──ADD_LAYER ──────────────────────►│    LayerStack
@@ -45,7 +45,8 @@ ReplayPlayer   ──► VirtualClock (RAF) → prefetch → onFrame()
 
 - All rendering runs in workers — main thread is never blocked
 - `ArrayBuffer` is **transferred** (not copied) on every data push
-- 60 charts share 4 workers by default via the built-in worker pool
+- Charts share an **adaptive** worker pool that starts small and grows on demand toward a hardware-bound cap
+- Scales to hundreds of simultaneous high-rate charts: per-frame push **coalescing**, automatic draw **decimation** (min/max envelope), and an optional render-FPS cap (`maxFps`)
 - Scheduler only renders when data changes (dirty flag)
 - Replay stores up to 10 minutes of any stream in IndexedDB + OPFS
 

@@ -305,12 +305,35 @@ defineWorkerWithState<Msg, object, State, StreamMsg>(
 
 ### `WorkerPool<TMsg>`
 
-Manages a fixed set of workers. Distributes load via least-busy scheduling.
+Manages a set of workers and distributes load via least-busy scheduling. Fixed-size by default; optionally grows on demand up to `maxSize`.
 
 ```ts
 const pool = new WorkerPool<TMsg>({
-  size?: number,               // default 4, clamped to [1, 16]
+  size?: number,               // INITIAL worker count — default 4, clamped to [1, 16]
+  maxSize?: number,            // default = size (growth disabled). Upper bound for runtime growth, clamped to [size, 16]
+  targetPerWorker?: number,    // default 12, min 1. Active hosts/worker that triggers growth toward maxSize
   workerFactory: () => Worker, // required
+});
+```
+
+| Option | Description |
+|--------|-------------|
+| `size` | **Initial** worker count (default `4`, clamped `[1, 16]`). When `maxSize` is larger, the pool starts here and grows on demand |
+| `maxSize` | Upper bound for runtime growth (default `= size`, i.e. growth disabled / fixed-size pool). Clamped to `[size, 16]` |
+| `targetPerWorker` | Active hosts per worker that triggers growth (default `12`, min `1`). Lower it for heavier per-host workloads (e.g. high-Hz streaming) so hosts spread across more workers sooner. Only has an effect when `maxSize > size` |
+
+**Fixed vs. growing** — existing fixed-size usage is unchanged: omit `maxSize` (it defaults to `size`) and the pool stays at exactly `size` workers. When `maxSize > size`, the pool starts at `size` workers and spawns more on demand (up to `maxSize`) as the average active hosts per worker reaches `targetPerWorker`:
+
+```ts
+// Fixed-size pool (unchanged behavior) — always exactly 4 workers
+const fixed = new WorkerPool<TMsg>({ size: 4, workerFactory });
+
+// Growing pool — starts at 2, grows toward 12 as load climbs
+const growing = new WorkerPool<TMsg>({
+  size: 2,
+  maxSize: 12,
+  targetPerWorker: 8, // grow once avg active hosts/worker reaches 8
+  workerFactory,
 });
 ```
 

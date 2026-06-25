@@ -188,4 +188,82 @@ describe("Scheduler", () => {
     (globalThis as any).requestAnimationFrame = raf;
     (globalThis as any).cancelAnimationFrame = caf;
   });
+
+  it("setMaxFps caps the render rate: skips frames under the interval, latches dirty", () => {
+    // Control the render clock directly so the throttle is deterministic
+    // regardless of the fake-timer/rAF cadence.
+    const nowSpy = vi.spyOn(performance, "now");
+    let clock = 1000;
+    nowSpy.mockImplementation(() => clock);
+
+    const tick = vi.fn();
+    const s = new Scheduler(tick);
+    s.setMaxFps(30); // ~33.3 ms minimum between renders
+    s.start();
+
+    s.markDirty();
+    clock = 1000; // first eligible frame (lastRender = -Inf) → renders
+    vi.advanceTimersByTime(20);
+    expect(tick).toHaveBeenCalledTimes(1);
+
+    s.markDirty();
+    clock = 1010; // +10 ms since last render → under interval → skip, dirty latched
+    vi.advanceTimersByTime(20);
+    expect(tick).toHaveBeenCalledTimes(1);
+
+    clock = 1050; // +50 ms since last render → past interval → latched dirty renders
+    vi.advanceTimersByTime(20);
+    expect(tick).toHaveBeenCalledTimes(2);
+
+    s.stop();
+    nowSpy.mockRestore();
+  });
+
+  it("survives a throwing tick: keeps rescheduling so the next frame renders", () => {
+    const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    let throwOnce = true;
+    const tick = vi.fn(() => {
+      if (throwOnce) {
+        throwOnce = false;
+        throw new Error("render boom");
+      }
+    });
+    const s = new Scheduler(tick);
+    s.start();
+
+    s.markDirty();
+    vi.advanceTimersByTime(20); // first frame throws — must NOT kill the loop
+    expect(tick).toHaveBeenCalledTimes(1);
+    expect(errSpy).toHaveBeenCalled();
+
+    s.markDirty();
+    vi.advanceTimersByTime(20); // loop still alive → next frame renders cleanly
+    expect(tick).toHaveBeenCalledTimes(2);
+
+    s.stop();
+    errSpy.mockRestore();
+  });
+
+  it("setMaxFps(undefined) / non-positive restores uncapped rendering", () => {
+    const tick = vi.fn();
+    const s = new Scheduler(tick);
+    s.setMaxFps(30);
+    s.setMaxFps(-1); // non-positive → uncapped
+    s.start();
+
+    s.markDirty();
+    vi.advanceTimersByTime(20);
+    expect(tick).toHaveBeenCalledTimes(1);
+
+    s.markDirty();
+    vi.advanceTimersByTime(20); // uncapped → renders again next frame
+    expect(tick).toHaveBeenCalledTimes(2);
+
+    s.setMaxFps(undefined); // also uncapped
+    s.markDirty();
+    vi.advanceTimersByTime(20);
+    expect(tick).toHaveBeenCalledTimes(3);
+
+    s.stop();
+  });
 });

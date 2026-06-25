@@ -25,9 +25,20 @@ export class Emitter<Args extends unknown[]> {
     };
   }
 
-  /** Invoke every current listener with `args`, in subscription order. */
+  /**
+   * Invoke every current listener with `args`, in subscription order. A
+   * throwing listener is isolated (logged, not rethrown) so it can't skip the
+   * remaining listeners or break the caller (e.g. the worker→main message
+   * handler or a metrics interval).
+   */
   emit(...args: Args): void {
-    for (const fn of this.listeners) fn(...args);
+    for (const fn of this.listeners) {
+      try {
+        fn(...args);
+      } catch (err) {
+        console.error("[fluxion] emitter listener error:", err);
+      }
+    }
   }
 
   /** Current listener count — lets owners gate shared resources (e.g. a timer). */

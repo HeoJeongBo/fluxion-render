@@ -202,6 +202,55 @@ describe("ReplayPlayer", () => {
     player.dispose();
   });
 
+  it("isolates a throwing onTick listener: sibling still ticks, playback survives", () => {
+    const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const { player } = makePlayer();
+    const ticks: number[] = [];
+    player.onTick(() => {
+      throw new Error("tick boom");
+    });
+    player.onTick((t) => ticks.push(t));
+    player.play();
+    vi.advanceTimersByTime(50);
+    expect(ticks.length).toBeGreaterThan(0); // sibling not skipped by the thrower
+    expect(errSpy).toHaveBeenCalled();
+    player.stop();
+    player.dispose();
+    errSpy.mockRestore();
+  });
+
+  it("isolates a throwing onFrame listener: sibling still receives the frame", async () => {
+    const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const { player, store, ch } = makePlayer();
+
+    await store.open();
+    store.appendFrame({
+      t: 500,
+      channelId: "cpu",
+      payload: ch.encode({ name: "cpu", value: 42 }),
+    });
+    await store.flush();
+
+    const frames: unknown[] = [];
+    player.onFrame(() => {
+      throw new Error("frame boom");
+    });
+    player.onFrame((f) => frames.push(f));
+    player.play(1.0);
+
+    vi.advanceTimersByTime(100);
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+    vi.advanceTimersByTime(600);
+
+    expect(frames.length).toBeGreaterThan(0); // sibling got the frame despite the thrower
+    expect(errSpy).toHaveBeenCalled();
+    player.stop();
+    player.dispose();
+    errSpy.mockRestore();
+  });
+
   it("seek() resets prefetch buffer and re-clamps", () => {
     const { player } = makePlayer(0, 10_000);
     player.play();

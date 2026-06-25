@@ -92,7 +92,14 @@ export class VirtualClock {
     if (!this._running) return;
     const t = this.currentT;
     for (const listener of this._listeners) {
-      listener(t);
+      // Isolate each listener so one throw can't skip the others — and, more
+      // importantly, can't skip the reschedule below and permanently freeze
+      // playback (the rAF re-arm sits after this loop).
+      try {
+        listener(t);
+      } catch (err) {
+        console.error("[fluxion-replay] clock listener error:", err);
+      }
     }
     if (typeof requestAnimationFrame !== "undefined") {
       this._rafId = requestAnimationFrame(this._loop);

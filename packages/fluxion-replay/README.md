@@ -31,7 +31,7 @@ Built for robotics, ROS2 monitoring, sensor dashboards, and anything that needs 
 ```
 
 - **Recording**: frames are batched into IndexedDB every 500ms. Old frames beyond `retentionMs` are evicted automatically.
-- **Playback**: a `VirtualClock` drives a RAF loop. Frames are prefetched 2 seconds ahead from IDB into a memory buffer, then drained on each tick.
+- **Playback**: a `VirtualClock` drives a RAF loop. Frames are prefetched 2 seconds ahead from IDB into a memory buffer, then drained on each tick. The clock loop and the player's frame/tick fan-outs isolate a throwing listener, so one bad frame is logged and skipped instead of freezing playback.
 - **Video**: raw `VideoFrame`s from `MediaStreamTrackProcessor` are encoded via `VideoEncoder` (WebCodecs) and written to OPFS. On playback, `VideoDecoder` decodes chunks back to canvas.
 
 ---

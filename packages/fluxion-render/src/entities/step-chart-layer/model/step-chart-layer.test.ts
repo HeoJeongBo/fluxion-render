@@ -324,4 +324,84 @@ describe("StepChartLayer", () => {
       for (const y of ys) expect(Number.isFinite(y)).toBe(true);
     });
   });
+
+  describe("draw decimation (decimate)", () => {
+    function fillVarying(layer: StepChartLayer, vp: Viewport, n = 4000) {
+      layer.setConfig({ capacity: n + 100 }); // retain all samples (no eviction)
+      const buf = new Float32Array(n * 2);
+      for (let i = 0; i < n; i++) {
+        buf[i * 2] = (i * 5000) / n;
+        buf[i * 2 + 1] = Math.sin(i * 0.1) * 5;
+      }
+      layer.setData(buf.buffer, buf.length, vp);
+    }
+
+    it("auto-decimates when oversampled (far fewer points than samples)", () => {
+      const layer = new StepChartLayer("st1");
+      const vp = makeViewport();
+      fillVarying(layer, vp, 4000);
+      const ctx = createFakeCtx();
+      layer.draw(ctx as unknown as OffscreenCanvasRenderingContext2D, vp);
+      const points = ctx.calls.filter(
+        (c) => c.name === "moveTo" || c.name === "lineTo",
+      ).length;
+      expect(points).toBeGreaterThan(0);
+      expect(points).toBeLessThan(4000);
+    });
+
+    it("decimate:false draws the full staircase (2 lineTo per sample)", () => {
+      const layer = new StepChartLayer("st1");
+      const vp = makeViewport();
+      const n = 3000;
+      layer.setConfig({ decimate: false, capacity: n + 100 });
+      const buf = new Float32Array(n * 2);
+      for (let i = 0; i < n; i++) {
+        buf[i * 2] = (i * 5000) / n;
+        buf[i * 2 + 1] = i % 2; // alternate so each step has H+V segments
+      }
+      layer.setData(buf.buffer, buf.length, vp);
+      const ctx = createFakeCtx();
+      layer.draw(ctx as unknown as OffscreenCanvasRenderingContext2D, vp);
+      // staircase: 1 moveTo + 2 lineTo per subsequent sample.
+      expect(ctx.calls.filter((c) => c.name === "lineTo").length).toBe((n - 1) * 2);
+    });
+
+    it("decimates in lane mode (band-normalized y)", () => {
+      const layer = new StepChartLayer("st1");
+      // dashArray exercises the decimated path's setLineDash branch too.
+      layer.setConfig({ laneIndex: 0, laneCount: 2, dashArray: [4, 2] });
+      const vp = makeViewport();
+      fillVarying(layer, vp, 4000);
+      vp.beginScan();
+      layer.scan(vp);
+      const ctx = createFakeCtx();
+      layer.draw(ctx as unknown as OffscreenCanvasRenderingContext2D, vp);
+      const ys = ctx.calls
+        .filter((c) => c.name === "moveTo" || c.name === "lineTo")
+        .map((c) => c.args[1] as number);
+      expect(ys.length).toBeGreaterThan(0);
+      for (const y of ys) expect(Number.isFinite(y)).toBe(true);
+    });
+
+    it("breaks the decimated path across a maxGapMs gap (extra moveTo)", () => {
+      const layer = new StepChartLayer("st1");
+      layer.setConfig({ maxGapMs: 5 });
+      const vp = makeViewport();
+      const n = 4000;
+      const buf = new Float32Array(n * 2);
+      for (let i = 0; i < n; i++) {
+        // Two dense halves separated by a > 5ms gap at the midpoint.
+        const half = i < n / 2 ? 0 : 2600;
+        buf[i * 2] = half + (i % (n / 2)) * 0.5;
+        buf[i * 2 + 1] = Math.sin(i * 0.1) * 5;
+      }
+      layer.setData(buf.buffer, buf.length, vp);
+      const ctx = createFakeCtx();
+      layer.draw(ctx as unknown as OffscreenCanvasRenderingContext2D, vp);
+      // A gap forces a second subpath → at least 2 moveTo.
+      expect(ctx.calls.filter((c) => c.name === "moveTo").length).toBeGreaterThanOrEqual(
+        2,
+      );
+    });
+  });
 });

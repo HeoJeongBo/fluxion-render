@@ -39,6 +39,7 @@ function Probe<T>({
   tick,
   onRate,
   shared,
+  trackRate,
 }: {
   host: FluxionHost | null;
   intervalMs: number;
@@ -46,8 +47,16 @@ function Probe<T>({
   tick: (t: number, s: T) => number;
   onRate?: (r: number) => void;
   shared?: boolean;
+  trackRate?: boolean;
 }) {
-  const { rate } = useFluxionStream({ host, intervalMs, setup, tick, shared });
+  const { rate } = useFluxionStream({
+    host,
+    intervalMs,
+    setup,
+    tick,
+    shared,
+    trackRate,
+  });
   onRate?.(rate);
   return <div data-testid="rate">{rate}</div>;
 }
@@ -142,6 +151,30 @@ describe("useFluxionStream", () => {
     });
     expect(latestRate).toBeGreaterThan(200);
     expect(latestRate).toBeLessThan(400);
+    host.dispose();
+  });
+
+  it("trackRate=false keeps pumping but never updates the rate", () => {
+    const host = makeHost();
+    const tick = vi.fn(() => 5);
+    let latestRate = -1;
+    render(
+      <Probe
+        host={host}
+        intervalMs={10}
+        setup={() => null}
+        tick={tick}
+        trackRate={false}
+        onRate={(r) => {
+          latestRate = r;
+        }}
+      />,
+    );
+    act(() => {
+      vi.advanceTimersByTime(600); // well past the 500ms rate window
+    });
+    expect(tick.mock.calls.length).toBeGreaterThan(0); // pump still runs
+    expect(latestRate).toBe(0); // rate state never set → stays 0
     host.dispose();
   });
 

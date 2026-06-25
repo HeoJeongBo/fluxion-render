@@ -20,6 +20,12 @@ export interface FluxionDataSink {
   pushData(id: string, data: Float32Array): void;
   configLayer(id: string, config: unknown): void;
   clearLayer(id: string, opts?: { latestT?: number }): void;
+  /**
+   * Optional allocation-free append fast-path. Present on `FluxionHost` (where
+   * it feeds the per-frame push coalescer); absent on lightweight test stubs
+   * and custom sinks, in which case handles fall back to `pushData`.
+   */
+  stage?(id: string, values: readonly number[]): void;
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -38,9 +44,13 @@ export class LineLayerHandle {
     readonly id: string,
   ) {}
 
-  /** Push a single `[t, y]` sample. Allocates a 2-element Float32Array. */
+  /** Push a single `[t, y]` sample. Coalesced via `stage` when available. */
   push(sample: LineSample): void {
     warnIfAbsoluteEpoch(sample.t, this.id);
+    if (this.sink.stage) {
+      this.sink.stage(this.id, [sample.t, sample.y]);
+      return;
+    }
     const buf = new Float32Array(2);
     buf[0] = sample.t;
     buf[1] = sample.y;
@@ -204,9 +214,13 @@ export class ScatterLayerHandle {
     readonly id: string,
   ) {}
 
-  /** Push a single `[t, y]` sample. */
+  /** Push a single `[t, y]` sample. Coalesced via `stage` when available. */
   push(sample: ScatterSample): void {
     warnIfAbsoluteEpoch(sample.t, this.id);
+    if (this.sink.stage) {
+      this.sink.stage(this.id, [sample.t, sample.y]);
+      return;
+    }
     const buf = new Float32Array(2);
     buf[0] = sample.t;
     buf[1] = sample.y;
@@ -252,6 +266,10 @@ export class AreaLayerHandle {
 
   push(sample: LineSample): void {
     warnIfAbsoluteEpoch(sample.t, this.id);
+    if (this.sink.stage) {
+      this.sink.stage(this.id, [sample.t, sample.y]);
+      return;
+    }
     const buf = new Float32Array(2);
     buf[0] = sample.t;
     buf[1] = sample.y;
@@ -291,6 +309,10 @@ export class StepLayerHandle {
 
   push(sample: LineSample): void {
     warnIfAbsoluteEpoch(sample.t, this.id);
+    if (this.sink.stage) {
+      this.sink.stage(this.id, [sample.t, sample.y]);
+      return;
+    }
     const buf = new Float32Array(2);
     buf[0] = sample.t;
     buf[1] = sample.y;
@@ -368,6 +390,10 @@ export class CandlestickLayerHandle {
   ) {}
 
   push(s: CandlestickSample): void {
+    if (this.sink.stage) {
+      this.sink.stage(this.id, [s.t, s.open, s.high, s.low, s.close]);
+      return;
+    }
     const buf = new Float32Array(5);
     buf[0] = s.t;
     buf[1] = s.open;
@@ -503,6 +529,15 @@ export class ScatterColoredHandle {
   ) {}
 
   push(sample: ScatterColoredSample): void {
+    if (this.sink.stage) {
+      this.sink.stage(this.id, [
+        sample.t,
+        sample.y,
+        sample.colorValue ?? 0.5,
+        sample.size ?? 0.5,
+      ]);
+      return;
+    }
     const buf = new Float32Array(4);
     buf[0] = sample.t;
     buf[1] = sample.y;
@@ -556,6 +591,10 @@ export class TrajectoryHandle {
   ) {}
 
   push(sample: TrajectorySample): void {
+    if (this.sink.stage) {
+      this.sink.stage(this.id, [sample.x, sample.y, sample.t]);
+      return;
+    }
     const buf = new Float32Array(3);
     buf[0] = sample.x;
     buf[1] = sample.y;
@@ -686,6 +725,13 @@ export class StackedAreaHandle {
 
   push(sample: StackedAreaSample): void {
     const k = sample.values.length;
+    if (this.sink.stage) {
+      const vals = new Array<number>(k + 1);
+      vals[0] = sample.t;
+      for (let i = 0; i < k; i++) vals[i + 1] = sample.values[i]!;
+      this.sink.stage(this.id, vals);
+      return;
+    }
     const buf = new Float32Array(k + 1);
     buf[0] = sample.t;
     for (let i = 0; i < k; i++) buf[i + 1] = sample.values[i]!;
@@ -861,6 +907,10 @@ export class PoseArrowHandle {
   ) {}
 
   push(sample: PoseArrowSample): void {
+    if (this.sink.stage) {
+      this.sink.stage(this.id, [sample.t, sample.y, sample.theta]);
+      return;
+    }
     const buf = new Float32Array(3);
     buf[0] = sample.t;
     buf[1] = sample.y;
