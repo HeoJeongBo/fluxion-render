@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.19.1](https://github-personal/HeoJeongBo/fluxion-render/compare/fluxion-render-v0.19.0...fluxion-render-v0.19.1) (2026-06-25)
+
+
+### Bug Fixes
+
+* **render:** release OffscreenCanvas GPU backing on dispose ([fb6a9b8](https://github-personal/HeoJeongBo/fluxion-render/commit/fb6a9b81283043f2e9fb73eb7d59dc7e2553b698))
+
 # [0.19.0](https://github-personal/HeoJeongBo/fluxion-render/compare/fluxion-render-v0.18.0...fluxion-render-v0.19.0) (2026-06-25)
 
 
