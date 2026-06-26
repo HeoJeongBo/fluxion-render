@@ -121,6 +121,7 @@ export class LineChartLayer implements Layer {
   constructor(id: string) {
     this.id = id;
     this.ring = new RingBuffer(2048, 2);
+    this.ring.enableExtent(1);
   }
 
   setConfig(config: unknown): void {
@@ -139,6 +140,7 @@ export class LineChartLayer implements Layer {
     const newCapacity = computeRingCapacity(c);
     if (newCapacity !== undefined && newCapacity !== this.ring.capacity) {
       this.ring = new RingBuffer(newCapacity, 2);
+      this.ring.enableExtent(1);
       // New ring — re-arm the undersized warning so a still-too-small capacity
       // can warn again (and a now-adequate one simply won't).
       this.warnedUndersized = false;
@@ -166,23 +168,21 @@ export class LineChartLayer implements Layer {
     // Lane mode normalizes per-layer (own band), so it neither applies yOffset
     // nor contributes to the shared observed range; it tracks its OWN extent.
     const off0 = lane ? 0 : this.yOffset;
-    let localMin = lane ? Number.POSITIVE_INFINITY : viewport.observedYMin;
-    let localMax = lane ? Number.NEGATIVE_INFINITY : viewport.observedYMax;
-    let oldestT = Number.NaN;
-    this.ring.forEach((data, off, index) => {
-      const t = data[off];
-      if (index === 0) oldestT = t;
-      if (t < xMin) return;
-      const y = data[off + 1] + off0;
-      if (y < localMin) localMin = y;
-      if (y > localMax) localMax = y;
-    });
+    // Sliding-window y-extent in O(log n) (two monotonic deques in the ring),
+    // replacing the per-frame full-ring scan. `rawMin`/`rawMax` are over samples
+    // with t >= xMin; +/-Infinity when the window is empty. Adding the constant
+    // `off0` after the min/max is bit-identical to adding it per sample.
+    const rawMin = this.ring.extentMin(xMin);
     if (lane) {
-      this.scannedYMin = localMin;
-      this.scannedYMax = localMax;
-    } else {
-      viewport.observedYMin = localMin;
-      viewport.observedYMax = localMax;
+      this.scannedYMin = rawMin;
+      this.scannedYMax = this.ring.extentMax(xMin);
+    } else if (rawMin !== Number.POSITIVE_INFINITY) {
+      // Non-empty window: widen the shared observed range (an empty window left
+      // the old loop's min/max at the incoming observed values — a no-op).
+      const lo = rawMin + off0;
+      const hi = this.ring.extentMax(xMin) + off0;
+      if (lo < viewport.observedYMin) viewport.observedYMin = lo;
+      if (hi > viewport.observedYMax) viewport.observedYMax = hi;
     }
 
     // Undersized-capacity guard (once). When the ring is full AND its oldest
@@ -192,7 +192,7 @@ export class LineChartLayer implements Layer {
     if (
       !this.warnedUndersized &&
       this.ring.length === this.ring.capacity &&
-      oldestT >= xMin
+      this.ring.oldestValue(0) >= xMin
     ) {
       this.warnedUndersized = true;
       console.warn(

@@ -61,6 +61,7 @@ export class ScatterChartLayer implements Layer {
   constructor(id: string) {
     this.id = id;
     this.ring = new RingBuffer(2048, 2);
+    this.ring.enableExtent(1);
   }
 
   setConfig(config: unknown): void {
@@ -74,6 +75,7 @@ export class ScatterChartLayer implements Layer {
     const newCapacity = computeRingCapacity(c);
     if (newCapacity !== undefined && newCapacity !== this.ring.capacity) {
       this.ring = new RingBuffer(newCapacity, 2);
+      this.ring.enableExtent(1);
     }
   }
 
@@ -86,17 +88,15 @@ export class ScatterChartLayer implements Layer {
   scan(viewport: Viewport): void {
     if (!this.visible || this.ring.length === 0) return;
     const xMin = viewport.bounds.xMin;
-    let localMin = viewport.observedYMin;
-    let localMax = viewport.observedYMax;
-    this.ring.forEach((data, off) => {
-      const t = data[off];
-      if (t < xMin) return;
-      const y = data[off + 1];
-      if (y < localMin) localMin = y;
-      if (y > localMax) localMax = y;
-    });
-    viewport.observedYMin = localMin;
-    viewport.observedYMax = localMax;
+    // Sliding-window y-extent in O(log n) (monotonic deques in the ring),
+    // replacing the per-frame full-ring scan. +Infinity when no sample is in the
+    // window — leave the observed range untouched, matching the old loop.
+    const rawMin = this.ring.extentMin(xMin);
+    if (rawMin !== Number.POSITIVE_INFINITY) {
+      const rawMax = this.ring.extentMax(xMin);
+      if (rawMin < viewport.observedYMin) viewport.observedYMin = rawMin;
+      if (rawMax > viewport.observedYMax) viewport.observedYMax = rawMax;
+    }
   }
 
   draw(ctx: OffscreenCanvasRenderingContext2D, viewport: Viewport): void {

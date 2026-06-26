@@ -81,6 +81,7 @@ export class StepChartLayer implements Layer {
   constructor(id: string) {
     this.id = id;
     this.ring = new RingBuffer(2048, 2);
+    this.ring.enableExtent(1);
   }
 
   setConfig(config: unknown): void {
@@ -98,6 +99,7 @@ export class StepChartLayer implements Layer {
     const cap = computeRingCapacity(c);
     if (cap !== undefined && cap !== this.ring.capacity) {
       this.ring = new RingBuffer(cap, 2);
+      this.ring.enableExtent(1);
     }
   }
 
@@ -112,20 +114,17 @@ export class StepChartLayer implements Layer {
     const xMin = viewport.bounds.xMin;
     const lane = this.laneActive();
     const off0 = lane ? 0 : this.yOffset; // lanes normalize per-layer
-    let localMin = lane ? Number.POSITIVE_INFINITY : viewport.observedYMin;
-    let localMax = lane ? Number.NEGATIVE_INFINITY : viewport.observedYMax;
-    this.ring.forEach((data, off) => {
-      if (data[off] < xMin) return;
-      const y = data[off + 1] + off0;
-      if (y < localMin) localMin = y;
-      if (y > localMax) localMax = y;
-    });
+    // Sliding-window y-extent in O(log n); see LineChartLayer.scan for the
+    // bit-exactness rationale (constant off0 added after the min/max).
+    const rawMin = this.ring.extentMin(xMin);
     if (lane) {
-      this.scannedYMin = localMin;
-      this.scannedYMax = localMax;
-    } else {
-      viewport.observedYMin = localMin;
-      viewport.observedYMax = localMax;
+      this.scannedYMin = rawMin;
+      this.scannedYMax = this.ring.extentMax(xMin);
+    } else if (rawMin !== Number.POSITIVE_INFINITY) {
+      const lo = rawMin + off0;
+      const hi = this.ring.extentMax(xMin) + off0;
+      if (lo < viewport.observedYMin) viewport.observedYMin = lo;
+      if (hi > viewport.observedYMax) viewport.observedYMax = hi;
     }
   }
 
