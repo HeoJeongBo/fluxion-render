@@ -2,6 +2,7 @@ import { act, render } from "@testing-library/react";
 import { StrictMode, useEffect } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Op } from "../../../shared/protocol";
+import { _resetMountScheduler } from "./mount-scheduler";
 import { type FluxionLayerSpec, useFluxionCanvas } from "./use-fluxion-canvas";
 
 interface RecordedPost {
@@ -27,16 +28,22 @@ function makeFakeWorkerFactory() {
 function Harness({
   workerFactory,
   onHost,
+  staggerMount = false,
 }: {
   workerFactory: () => Worker;
   onHost?: (host: unknown) => void;
+  staggerMount?: boolean;
 }) {
+  // Default `staggerMount: false` here so the mechanics tests below observe
+  // synchronous host creation; the deferred default-on path is exercised in its
+  // own describe block ("default staggered mount + dispose safety").
   const { containerRef, host } = useFluxionCanvas({
     layers: [
       { id: "axis", kind: "axis-grid" },
       { id: "line", kind: "line", config: { color: "#fff" } },
     ],
     hostOptions: { workerFactory },
+    staggerMount,
   });
   useEffect(() => {
     if (host && onHost) onHost(host);
@@ -93,6 +100,7 @@ describe("useFluxionCanvas", () => {
       const { containerRef } = useFluxionCanvas({
         layers,
         hostOptions: { workerFactory },
+        staggerMount: false, // exercise reconciliation against a synchronously-created host
       });
       return <div ref={containerRef} style={{ width: 200, height: 100 }} />;
     }
@@ -173,6 +181,7 @@ describe("useFluxionCanvas", () => {
       const { containerRef } = useFluxionCanvas({
         layers,
         hostOptions: { workerFactory },
+        staggerMount: false, // exercise reconciliation against a synchronously-created host
       });
       return <div ref={containerRef} style={{ width: 200, height: 100 }} />;
     }
@@ -289,6 +298,7 @@ describe("useFluxionCanvas", () => {
       const { containerRef } = useFluxionCanvas({
         layers: [{ id: "axis", kind: "axis-grid" }],
         hostOptions: { pool },
+        staggerMount: false,
       });
       return <div ref={containerRef} />;
     }
@@ -317,8 +327,14 @@ describe("useFluxionCanvas", () => {
       return <div ref={containerRef} style={{ width: 200, height: 100 }} />;
     }
 
-    beforeEach(() => vi.useFakeTimers());
-    afterEach(() => vi.useRealTimers());
+    beforeEach(() => {
+      _resetMountScheduler(); // isolate from any task another test left queued
+      vi.useFakeTimers();
+    });
+    afterEach(() => {
+      vi.useRealTimers();
+      _resetMountScheduler();
+    });
 
     it("defers host creation to a later frame", () => {
       const { factory, posts } = makeFakeWorkerFactory();
@@ -345,6 +361,80 @@ describe("useFluxionCanvas", () => {
       });
       expect(posts).toHaveLength(0); // host never created
       expect(terminate).not.toHaveBeenCalled(); // nothing to tear down
+    });
+  });
+
+  describe("default staggered mount + dispose safety", () => {
+    // No `staggerMount` here → exercises the library DEFAULT (deferred).
+    function DefaultHarness({
+      workerFactory,
+      onHost,
+    }: {
+      workerFactory: () => Worker;
+      onHost?: (host: unknown) => void;
+    }) {
+      const { containerRef, host } = useFluxionCanvas({
+        layers: [
+          { id: "axis", kind: "axis-grid" },
+          { id: "line", kind: "line", config: { color: "#fff" } },
+        ],
+        hostOptions: { workerFactory },
+      });
+      useEffect(() => {
+        if (host && onHost) onHost(host);
+      }, [host, onHost]);
+      return <div ref={containerRef} style={{ width: 200, height: 100 }} />;
+    }
+
+    beforeEach(() => {
+      _resetMountScheduler();
+      vi.useFakeTimers();
+    });
+    afterEach(() => {
+      vi.useRealTimers();
+      _resetMountScheduler();
+    });
+
+    it("defers host creation by default (no staggerMount prop)", () => {
+      const { factory, posts } = makeFakeWorkerFactory();
+      const onHost = vi.fn();
+      render(<DefaultHarness workerFactory={factory} onHost={onHost} />);
+      // Queued — nothing created until the frame drains.
+      expect(posts).toHaveLength(0);
+      expect(onHost).not.toHaveBeenCalled();
+      act(() => vi.advanceTimersByTime(20));
+      const ops = posts.map((p) => (p.msg as { op: number }).op);
+      expect(ops).toContain(Op.INIT);
+      expect(ops.filter((o) => o === Op.ADD_LAYER)).toHaveLength(2);
+      expect(onHost).toHaveBeenCalled();
+    });
+
+    it("disposes the deferred host on unmount after it was created", () => {
+      const { factory, terminate } = makeFakeWorkerFactory();
+      const { unmount } = render(<DefaultHarness workerFactory={factory} />);
+      act(() => vi.advanceTimersByTime(20)); // host created
+      unmount();
+      expect(terminate).toHaveBeenCalledTimes(1);
+    });
+
+    it("creates no host (leaks nothing) when unmounted before its frame", () => {
+      const { factory, posts, terminate } = makeFakeWorkerFactory();
+      const { unmount } = render(<DefaultHarness workerFactory={factory} />);
+      unmount(); // before the drain frame
+      act(() => vi.advanceTimersByTime(20));
+      expect(posts).toHaveLength(0);
+      expect(terminate).not.toHaveBeenCalled();
+    });
+
+    it("rapid mount/unmount churn before the frame creates no hosts", () => {
+      const { factory, posts, terminate } = makeFakeWorkerFactory();
+      for (let i = 0; i < 5; i++) {
+        const { unmount } = render(<DefaultHarness workerFactory={factory} />);
+        unmount();
+      }
+      act(() => vi.advanceTimersByTime(20));
+      expect(posts).toHaveLength(0);
+      expect(terminate).not.toHaveBeenCalled();
     });
   });
 });

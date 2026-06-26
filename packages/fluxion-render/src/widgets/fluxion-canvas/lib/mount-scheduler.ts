@@ -73,3 +73,10 @@ export function configureMountScheduler(opts: { perFrame?: number }): void {
     perFrame = Math.floor(opts.perFrame);
   }
 }
+
+/** Drop all queued tasks and clear the pending-frame flag. Test-only — keeps
+ *  the module-global queue from leaking across tests. */
+export function _resetMountScheduler(): void {
+  queue.length = 0;
+  scheduled = false;
+}

@@ -303,24 +303,32 @@ shrunk to `0×0` immediately rather than waiting for garbage collection), so
 rapidly opening/closing a section of many charts can't accumulate orphaned GPU
 surfaces and exhaust the context budget.
 
-**Stagger a burst of mounts (`staggerMount`).** Mounting many charts in a single
-frame — an accordion section expanding, a grid appearing — runs every host's
-`transferControlToOffscreen` + worker init + first render at once, which can
-make the page stutter for a beat. Set `staggerMount` on the canvas to defer host
-creation through a shared frame-throttled queue: the placeholder is attached
-immediately, but the host spins up on a later frame, so the burst spreads out
-(`host` / `onReady` arrive deferred). Tune the rate globally:
+**Staggered mounts are on by default (`staggerMount`).** Mounting many charts in
+a single frame — an accordion section expanding, a grid appearing — would run
+every host's `transferControlToOffscreen` + worker init + first render at once,
+spiking the main thread. To prevent that, **`<FluxionCanvas>` and
+`useFluxionCanvas` defer host creation through a shared frame-throttled queue by
+default**: the placeholder `<canvas>` is attached immediately, but the host spins
+up on a later frame, so a burst spreads out instead of landing in one frame.
+`host` / `onReady` therefore arrive **one frame deferred** (even for a lone
+chart) — always read the host from `onReady`, never synchronously after mount.
+
+Pass `staggerMount={false}` to opt out (synchronous creation) — e.g. when you
+must call `getHost()` imperatively the moment the chart mounts. Tune the rate
+globally:
 
 ```tsx
 import { configureMountScheduler } from '@heojeongbo/fluxion-render/react';
 
 configureMountScheduler({ perFrame: 6 }); // host creations per frame (default 4)
 
-<FluxionCanvas staggerMount layers={[/* … */]} hostOptions={{ pool }} />
+<FluxionCanvas layers={[/* … */]} hostOptions={{ pool }} />          // staggered (default)
+<FluxionCanvas staggerMount={false} layers={[/* … */]} />            // synchronous (opt out)
 ```
 
 A chart unmounted before its turn in the queue is simply dropped — it never
-creates a host.
+creates a host, and a host that *was* created is always disposed on unmount
+(GPU backing released), so rapid mount/unmount churn leaks nothing.
 
 Because the host only spins up on a later frame, a deferred chart receives **no
 stream data until it mounts** — anything pushed in the meantime had no engine to

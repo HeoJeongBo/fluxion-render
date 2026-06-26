@@ -74,8 +74,11 @@ export interface UseFluxionCanvasOptions {
    * burst of simultaneous mounts (an accordion expanding, a grid appearing)
    * spreads across frames instead of spiking one. The placeholder `<canvas>`
    * is still attached immediately; only the host spins up on a later frame, so
-   * `host` / `onReady` arrive deferred. Tune the rate with
-   * {@link configureMountScheduler}. Default `false` (synchronous).
+   * `host` / `onReady` arrive deferred (by one frame even for a lone chart).
+   * Tune the rate with {@link configureMountScheduler}.
+   *
+   * **Default `true`.** Pass `false` for synchronous host creation — e.g. when
+   * you read the host imperatively right after mount instead of via `onReady`.
    */
   staggerMount?: boolean;
 }
@@ -181,7 +184,16 @@ export function useFluxionCanvas(
     // render — lives in this closure so `staggerMount` can defer it through the
     // shared frame queue, spreading a burst of simultaneous mounts over frames.
     let instance: FluxionHost | null = null;
+    // Flipped true by cleanup. Belt-and-suspenders so a deferred createHost can
+    // never spin up an orphaned host after unmount: cancelMount already removes
+    // the queued task before it runs, so this guard is unreachable on the normal
+    // path, but it makes the lifecycle provably safe against any future change to
+    // the scheduler's dequeue timing.
+    let cancelled = false;
     const createHost = () => {
+      /* v8 ignore start -- defensive: cancelMount removes the queued task on unmount, so createHost is never invoked once cancelled on the normal path */
+      if (cancelled) return;
+      /* v8 ignore stop */
       instance = new FluxionHost(canvas, {
         ...current.hostOptions,
         xAxisElement: xAxisCanvas,
@@ -199,13 +211,18 @@ export function useFluxionCanvas(
       current.onReady?.(instance);
     };
 
-    const cancelMount = current.staggerMount ? enqueueMount(createHost) : null;
+    // Staggered host creation is the DEFAULT (spreads a burst of mounts across
+    // frames); opt out with `staggerMount: false` for synchronous creation.
+    const stagger = current.staggerMount !== false;
+    const cancelMount = stagger ? enqueueMount(createHost) : null;
     if (!cancelMount) createHost();
 
     return () => {
-      // If the host hasn't been created yet (unmounted before its turn in the
-      // frame queue), just drop the queued task — there's no host/worker to tear
-      // down, and nothing leaks. Otherwise dispose the live host.
+      // Mark cancelled FIRST so a not-yet-run deferred createHost bails out, then
+      // drop the queued task. If the host hasn't been created yet (unmounted
+      // before its turn in the frame queue), there's nothing to tear down and
+      // nothing leaks. Otherwise dispose the live host.
+      cancelled = true;
       cancelMount?.();
       if (instance) instance.dispose();
       hostRef.current = null;

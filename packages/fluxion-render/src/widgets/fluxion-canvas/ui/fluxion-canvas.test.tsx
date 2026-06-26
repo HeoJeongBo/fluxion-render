@@ -1,7 +1,8 @@
-import { render } from "@testing-library/react";
+import { act, render } from "@testing-library/react";
 import { createRef, StrictMode } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { Op } from "../../../shared/protocol";
+import { _resetMountScheduler } from "../lib/mount-scheduler";
 import { FluxionCanvas, type FluxionCanvasHandle } from "./fluxion-canvas";
 
 interface RecordedPost {
@@ -32,6 +33,7 @@ describe("FluxionCanvas", () => {
       <FluxionCanvas
         ref={handleRef}
         hostOptions={{ workerFactory: factory }}
+        staggerMount={false}
         layers={[
           { id: "axis", kind: "axis-grid", config: { xRange: [0, 1] } },
           { id: "line", kind: "line", config: { color: "#0ff" } },
@@ -50,6 +52,7 @@ describe("FluxionCanvas", () => {
     const { unmount } = render(
       <FluxionCanvas
         hostOptions={{ workerFactory: factory }}
+        staggerMount={false}
         layers={[{ id: "axis", kind: "axis-grid" }]}
       />,
     );
@@ -67,6 +70,7 @@ describe("FluxionCanvas", () => {
         <StrictMode>
           <FluxionCanvas
             hostOptions={{ workerFactory: factory }}
+            staggerMount={false}
             layers={[{ id: "axis", kind: "axis-grid" }]}
           />
         </StrictMode>,
@@ -82,11 +86,31 @@ describe("FluxionCanvas", () => {
     render(
       <FluxionCanvas
         hostOptions={{ workerFactory: factory }}
+        staggerMount={false}
         layers={[]}
         onReady={onReady}
       />,
     );
     expect(onReady).toHaveBeenCalledTimes(1);
+  });
+
+  it("defers host creation by default (staggerMount on) until a frame passes", () => {
+    vi.useFakeTimers();
+    _resetMountScheduler();
+    const { factory } = makeFakeWorkerFactory();
+    const onReady = vi.fn();
+    render(
+      <FluxionCanvas
+        hostOptions={{ workerFactory: factory }}
+        layers={[{ id: "axis", kind: "axis-grid" }]}
+        onReady={onReady}
+      />,
+    );
+    expect(onReady).not.toHaveBeenCalled(); // queued, not yet created
+    act(() => vi.advanceTimersByTime(20));
+    expect(onReady).toHaveBeenCalledTimes(1);
+    _resetMountScheduler();
+    vi.useRealTimers();
   });
 
   it("renders a single div container when externalAxes is false", () => {

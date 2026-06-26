@@ -1,5 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { configureMountScheduler, enqueueMount } from "./mount-scheduler";
+import {
+  _resetMountScheduler,
+  configureMountScheduler,
+  enqueueMount,
+} from "./mount-scheduler";
 
 /** Advance one animation frame (fires the faked rAF / setTimeout drain). */
 function frame() {
@@ -51,6 +55,19 @@ describe("mount-scheduler", () => {
     expect(ran).toEqual(["b"]);
     cancelA(); // already gone → no-op, must not throw
     expect(ran).toEqual(["b"]);
+  });
+
+  it("_resetMountScheduler drops queued tasks and clears the pending frame", () => {
+    const ran: string[] = [];
+    enqueueMount(() => ran.push("a"));
+    enqueueMount(() => ran.push("b"));
+    _resetMountScheduler(); // queue cleared, scheduled flag reset
+    frame();
+    expect(ran).toEqual([]); // nothing drains
+    // Scheduler is reusable afterwards (a fresh frame is scheduled).
+    enqueueMount(() => ran.push("c"));
+    frame();
+    expect(ran).toEqual(["c"]);
   });
 
   it("isolates a throwing task so later ones in the batch still run", () => {
