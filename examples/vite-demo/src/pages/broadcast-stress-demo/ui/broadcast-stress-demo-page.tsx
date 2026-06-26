@@ -50,6 +50,58 @@ const COLORS = [
   "#ef9a9a",
 ];
 
+// Per-chart waveform — a PURE function of (chart index, host-relative ms). The
+// live pump and the on-mount backfill share this one source of truth so a
+// late-mounted chart's recomputed history matches the stream exactly. Returns
+// the NORMALIZED value ([-1, 1]-ish); the wire multiplies by 32767 and the
+// worker divides it back, so backfill (which pushes straight to the ring) uses
+// this value directly.
+function lineValueAt(idx: number, tMs: number): number {
+  const f = 0.4 + (idx % 11) * 0.25;
+  const p = (idx % 17) * 0.37;
+  return (
+    Math.sin((tMs / 1000) * f * Math.PI * 2 + p) * 0.8 +
+    Math.sin(tMs * 0.013 + idx) * 0.05
+  );
+}
+
+function scatterValueAt(idx: number, tMs: number): number {
+  const f = 0.4 + (idx % 11) * 0.25;
+  const p = (idx % 17) * 0.37;
+  return (
+    Math.sin((tMs / 1000) * f * 0.6 * Math.PI * 2 + p) * 0.45 +
+    Math.sin(tMs * 0.07 + idx * 1.3) * 0.2 +
+    Math.sin(tMs * 0.31 + idx * 2.1) * 0.1
+  );
+}
+
+/**
+ * Regenerate this chart's last `TIME_WINDOW_MS` of samples and push them once so
+ * a staggered (late-mounted) chart shows a FULL window the instant it appears,
+ * instead of filling from empty. Broadcast carries only LIVE samples, so a host
+ * deferred by `staggerMount` missed everything streamed before it existed — we
+ * recompute it from the same pure waveform the pump uses and push straight to
+ * the layer ring (FIFO-merges with the live stream that follows; backfill
+ * timestamps are all <= now, so ring order stays monotonic).
+ */
+function backfillChart(host: FluxionHost, idx: number, timeOrigin: number): void {
+  const nowMs = Date.now() - timeOrigin;
+  const dtMs = DT_US / 1000; // 2 ms @ 500 Hz
+  const n = Math.floor(TIME_WINDOW_MS / dtMs); // ~2000 samples = one full window
+  const startMs = nowMs - n * dtMs;
+  const line = new Float32Array(n * 2);
+  const scatter = new Float32Array(n * 2);
+  for (let j = 0; j < n; j++) {
+    const tt = startMs + j * dtMs;
+    line[j * 2] = tt;
+    line[j * 2 + 1] = lineValueAt(idx, tt);
+    scatter[j * 2] = tt;
+    scatter[j * 2 + 1] = scatterValueAt(idx, tt);
+  }
+  host.line("line").pushRaw(line);
+  host.scatter("scatter").pushRaw(scatter);
+}
+
 type BroadcastPool = ReturnType<typeof useFluxionWorkerPool>;
 
 function BroadcastChart({
@@ -125,6 +177,9 @@ function BroadcastChart({
           emitTicks: false,
         }}
         onReady={onReady}
+        // 300개 host 생성을 공유 rAF 큐로 프레임당 ~4개씩 분산 → 모든 차트가
+        // 한 프레임에 동시 마운트되는 스파이크 제거(점진적으로 채워짐).
+        staggerMount
       />
     </div>
   );
@@ -159,10 +214,6 @@ export function BroadcastStressDemoPage() {
   countRef.current = count;
 
   useEffect(() => {
-    // Per-chart phase/frequency → distinct waveforms.
-    const freqs = Array.from({ length: MAX_COUNT }, (_, i) => 0.4 + (i % 11) * 0.25);
-    const phases = Array.from({ length: MAX_COUNT }, (_, i) => (i % 17) * 0.37);
-
     const id = setInterval(() => {
       const n = countRef.current;
       // TWO channels per chart — a "line" target and a "scatter" target, each
@@ -194,17 +245,10 @@ export function BroadcastStressDemoPage() {
       for (let c = 0; c < channelCount; c++) {
         const idx = hostIdx[c >> 1]!;
         const isLine = (c & 1) === 0;
-        const f = freqs[idx]!;
-        const p = phases[idx]!;
         const base = 3 + c * SAMPLES_PER_BATCH;
         for (let j = 0; j < SAMPLES_PER_BATCH; j++) {
           const tt = tStartMs + j * (DT_US / 1000);
-          const y = isLine
-            ? Math.sin((tt / 1000) * f * Math.PI * 2 + p) * 0.8 +
-              Math.sin(tt * 0.013 + idx) * 0.05
-            : Math.sin((tt / 1000) * f * 0.6 * Math.PI * 2 + p) * 0.45 +
-              Math.sin(tt * 0.07 + idx * 1.3) * 0.2 +
-              Math.sin(tt * 0.31 + idx * 2.1) * 0.1;
+          const y = isLine ? lineValueAt(idx, tt) : scatterValueAt(idx, tt);
           buf[base + j] = y * 32767;
         }
       }
@@ -295,6 +339,10 @@ export function BroadcastStressDemoPage() {
             timeOrigin={timeOrigin}
             onReady={(host) => {
               hostsRef.current[i] = host;
+              // Staggered mount → this chart may have appeared late and missed
+              // the live broadcast. Seed it with the trailing window so it shows
+              // full immediately instead of filling from empty.
+              backfillChart(host, i, timeOrigin);
             }}
           />
         ))}
