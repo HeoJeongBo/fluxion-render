@@ -4,6 +4,7 @@ import type { LineChartConfig } from "../../../entities/line-chart-layer";
 import type { LineChartStaticConfig } from "../../../entities/line-chart-static-layer";
 import type { FluxionWorkerPool } from "../../../features/worker-pool";
 import { getDefaultPool } from "../../../features/worker-pool";
+import { warnArityMismatch } from "../../../shared/lib/arity-guard";
 import { Emitter } from "../../../shared/lib/emitter";
 import {
   type AxisStyle,
@@ -247,6 +248,10 @@ export class FluxionHost {
   // Stride-agnostic — the worker's RingBuffer re-segments by its own stride,
   // so concatenating same-layer chunks is byte-equivalent to N separate pushes.
   private readonly pending = new Map<string, { chunks: number[]; floats: number }>();
+  // Per-layer declared arity (stacked-area seriesCount / heatmap-stream yBins /
+  // lidar stride), recorded from add/config so handles can warn on a mismatched
+  // push. See `expectedArity` + `arity-guard`.
+  private readonly layerArity = new Map<string, number>();
   private flushScheduled = false;
   private flushHandle: number | null = null;
   private flushUsesRaf = false;
@@ -390,12 +395,33 @@ export class FluxionHost {
   addLayer(id: string, kind: LayerKind, config?: unknown): void {
     // Defensive: drain any staged data for a recycled id before re-adding.
     this.flushLayer(id);
+    this.trackArity(id, config);
     this.post({ op: Op.ADD_LAYER, id, kind, config: stripFunctionFields(config) });
   }
 
   removeLayer(id: string): void {
     this.flushLayer(id);
+    this.layerArity.delete(id);
     this.post({ op: Op.REMOVE_LAYER, id });
+  }
+
+  /**
+   * Record a layer's declared arity from its config so layer handles can warn
+   * on a mismatched push. The three field names (stacked-area `seriesCount`,
+   * heatmap-stream `yBins`, lidar `stride`) are unique across layer kinds, so we
+   * needn't know the kind here — other configs simply carry none of them.
+   */
+  private trackArity(id: string, config?: unknown): void {
+    const c = config as
+      | { seriesCount?: number; yBins?: number; stride?: number }
+      | undefined;
+    const arity = c?.seriesCount ?? c?.yBins ?? c?.stride;
+    if (typeof arity === "number") this.layerArity.set(id, arity);
+  }
+
+  /** Declared arity of a layer, for handle-side push validation. */
+  expectedArity(id: string): number | undefined {
+    return this.layerArity.get(id);
   }
 
   /**
@@ -414,6 +440,7 @@ export class FluxionHost {
     // A config change (e.g. capacity → new ring) must not land before queued
     // samples for this layer.
     this.flushLayer(id);
+    this.trackArity(id, config);
     this.post({ op: Op.CONFIG, id, config: stripFunctionFields(config) });
   }
 
@@ -425,7 +452,10 @@ export class FluxionHost {
    */
   configLayers(entries: Array<{ id: string; config: unknown }>): void {
     if (entries.length === 0) return;
-    for (const e of entries) this.flushLayer(e.id);
+    for (const e of entries) {
+      this.flushLayer(e.id);
+      this.trackArity(e.id, e.config);
+    }
     this.post({
       op: Op.CONFIG_BATCH,
       entries: entries.map((e) => ({
@@ -509,6 +539,8 @@ export class FluxionHost {
   }
 
   lidar(id: string, stride: LidarStride = 4): LidarLayerHandle {
+    const exp = this.layerArity.get(id);
+    if (exp !== undefined) warnArityMismatch(id, exp, stride, "lidar handle stride");
     return new LidarLayerHandle(this, id, stride);
   }
 

@@ -1,4 +1,5 @@
 import type { ReferenceLineConfig } from "../../../entities/reference-line-layer";
+import { warnArityMismatch } from "../../../shared/lib/arity-guard";
 import { warnIfAbsoluteEpoch } from "../../../shared/lib/epoch-guard";
 
 /**
@@ -26,6 +27,13 @@ export interface FluxionDataSink {
    * and custom sinks, in which case handles fall back to `pushData`.
    */
   stage?(id: string, values: readonly number[]): void;
+  /**
+   * Optional declared arity of a layer (stacked-area `seriesCount`,
+   * heatmap-stream `yBins`, lidar `stride`) so handles can warn on a mismatched
+   * push. Present on `FluxionHost`; absent on lightweight stubs (validation is
+   * then skipped).
+   */
+  expectedArity?(id: string): number | undefined;
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -725,6 +733,8 @@ export class StackedAreaHandle {
 
   push(sample: StackedAreaSample): void {
     const k = sample.values.length;
+    const exp = this.sink.expectedArity?.(this.id);
+    if (exp !== undefined) warnArityMismatch(this.id, exp, k, "values per sample");
     if (this.sink.stage) {
       const vals = new Array<number>(k + 1);
       vals[0] = sample.t;
@@ -742,10 +752,17 @@ export class StackedAreaHandle {
     const n = samples.length;
     if (n === 0) return;
     const k = samples[0]!.values.length;
+    // Validate against the layer's declared seriesCount when known, else against
+    // the batch's own stride — either way a mismatched sample would encode at the
+    // wrong offset. `k` (samples[0]) sets the encode stride.
+    const want = this.sink.expectedArity?.(this.id) ?? k;
     const stride = k + 1;
     const buf = new Float32Array(n * stride);
     for (let i = 0; i < n; i++) {
       const s = samples[i]!;
+      if (s.values.length !== want) {
+        warnArityMismatch(this.id, want, s.values.length, "values per sample");
+      }
       buf[i * stride] = s.t;
       for (let j = 0; j < k; j++) buf[i * stride + 1 + j] = s.values[j]!;
     }
@@ -853,6 +870,8 @@ export class HeatmapStreamHandle {
    */
   pushColumn(t: number, values: Float32Array | readonly number[]): void {
     const n = values.length;
+    const exp = this.sink.expectedArity?.(this.id);
+    if (exp !== undefined) warnArityMismatch(this.id, exp, n, "column values");
     const buf = new Float32Array(n + 1);
     buf[0] = t;
     if (values instanceof Float32Array) {

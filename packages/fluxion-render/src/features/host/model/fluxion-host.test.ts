@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { _resetArityGuard } from "../../../shared/lib/arity-guard";
 import { Op, WorkerOp } from "../../../shared/protocol";
 import { FluxionHost } from "./fluxion-host";
 
@@ -120,6 +121,14 @@ describe("FluxionHost", () => {
     host.addLayer("x", "line");
     host.pushData("x", new Float32Array([1]));
     expect(posts).toHaveLength(0);
+  });
+
+  it("dispose is idempotent (second call no-ops, worker terminated once)", () => {
+    const { worker, terminate } = makeFakeWorker();
+    const host = new FluxionHost(makeCanvas(), { workerFactory: () => worker });
+    host.dispose();
+    expect(() => host.dispose()).not.toThrow(); // second dispose is a safe no-op
+    expect(terminate).toHaveBeenCalledTimes(1);
   });
 
   it("addLineLayer creates the layer and returns a typed handle", () => {
@@ -1125,5 +1134,66 @@ describe("FluxionHost push coalescing", () => {
     expect(clearSpy).toHaveBeenCalled();
     vi.advanceTimersByTime(5); // the cleared timeout never fires again
     expect(dataPosts(posts)).toHaveLength(1);
+  });
+});
+
+describe("FluxionHost arity tracking", () => {
+  afterEach(() => {
+    _resetArityGuard();
+    vi.restoreAllMocks();
+  });
+
+  it("records declared arity from add/config and clears it on remove", () => {
+    const { worker } = makeFakeWorker();
+    const host = new FluxionHost(makeCanvas(), { workerFactory: () => worker });
+
+    host.addLayer("sa", "stacked-area", { seriesCount: 3 });
+    host.addLayer("hs", "heatmap-stream", { yBins: 32 });
+    host.addLayer("ld", "lidar", { stride: 3 });
+    host.addLayer("ln", "line", { color: "#0ff" }); // carries no arity field
+    host.addLayer("ax", "axis-grid"); // no config at all
+
+    expect(host.expectedArity("sa")).toBe(3);
+    expect(host.expectedArity("hs")).toBe(32);
+    expect(host.expectedArity("ld")).toBe(3);
+    expect(host.expectedArity("ln")).toBeUndefined();
+    expect(host.expectedArity("ax")).toBeUndefined();
+    expect(host.expectedArity("missing")).toBeUndefined();
+
+    host.configLayer("sa", { seriesCount: 4 }); // reconfig updates the arity
+    expect(host.expectedArity("sa")).toBe(4);
+
+    host.configLayers([{ id: "hs", config: { yBins: 16 } }]);
+    expect(host.expectedArity("hs")).toBe(16);
+
+    host.removeLayer("sa");
+    expect(host.expectedArity("sa")).toBeUndefined();
+
+    host.dispose();
+  });
+
+  it("host.lidar(id) warns when the handle stride mismatches the layer config", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const { worker } = makeFakeWorker();
+    const host = new FluxionHost(makeCanvas(), { workerFactory: () => worker });
+
+    host.addLayer("ld", "lidar", { stride: 3 });
+    host.lidar("ld"); // defaults to stride 4 → mismatch → warn
+    expect(warn).toHaveBeenCalledTimes(1);
+
+    host.lidar("untracked"); // no recorded arity → no warn
+    expect(warn).toHaveBeenCalledTimes(1);
+
+    host.dispose();
+  });
+
+  it("host.lidar(id) is silent when the stride matches the config", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const { worker } = makeFakeWorker();
+    const host = new FluxionHost(makeCanvas(), { workerFactory: () => worker });
+    host.addLayer("ld", "lidar", { stride: 2 });
+    host.lidar("ld", 2); // matches → silent
+    expect(warn).not.toHaveBeenCalled();
+    host.dispose();
   });
 });

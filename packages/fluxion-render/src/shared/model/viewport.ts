@@ -55,13 +55,17 @@ export class Viewport {
 
   xToPx(x: number): number {
     const { xMin, xMax } = this.bounds;
-    return ((x - xMin) / (xMax - xMin)) * this.widthPx;
+    // `|| 1` guards a degenerate (xMin === xMax) span so the result is a finite
+    // pixel instead of NaN/Infinity (matches engine.ts's `yMax - yMin || 1`).
+    const span = xMax - xMin || 1;
+    return ((x - xMin) / span) * this.widthPx;
   }
 
   yToPx(y: number): number {
     const { yMin, yMax } = this.bounds;
     const pad = this.yPadPx;
     const usable = this.heightPx - pad * 2;
-    return pad + usable - ((y - yMin) / (yMax - yMin)) * usable;
+    const span = yMax - yMin || 1;
+    return pad + usable - ((y - yMin) / span) * usable;
   }
 }

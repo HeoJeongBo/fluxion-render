@@ -113,14 +113,29 @@ class MonoDeque {
 export class WindowExtent {
   private readonly minDq = new MonoDeque(1);
   private readonly maxDq = new MonoDeque(-1);
+  private prevT = Number.NEGATIVE_INFINITY;
+  private warnedNonMonotonic = false;
 
   /**
-   * Feed one sample. Call in time order with a strictly increasing `seq`.
+   * Feed one sample. Call in **time order** (strictly increasing `seq`, and `t`
+   * never decreasing) — the {@link queryMin}/{@link queryMax} binary search
+   * relies on the deques being sorted ascending by `t`, so a backward `t` (e.g.
+   * a replay seek that forgot to {@link clear}) would yield wrong extents.
    * `minSeq` is the lowest sequence still retained by the backing ring
-   * (`totalPushed - capacity`, clamped at 0) so already-evicted samples are
-   * dropped immediately.
+   * (`totalPushed - capacity`, clamped at 0) so evicted samples are dropped.
+   * A non-monotonic `t` is warned once (per instance) rather than silently
+   * corrupting the window.
    */
   push(seq: number, t: number, value: number, minSeq: number): void {
+    if (t < this.prevT && !this.warnedNonMonotonic) {
+      this.warnedNonMonotonic = true;
+      console.warn(
+        `[fluxion] WindowExtent got a non-monotonic timestamp (t=${t} < previous ` +
+          `${this.prevT}). Sliding-window min/max assumes time-ordered samples; ` +
+          "results may be wrong. Push in time order and clear() on a backward seek.",
+      );
+    }
+    this.prevT = t;
     this.minDq.push(seq, t, value, minSeq);
     this.maxDq.push(seq, t, value, minSeq);
   }
@@ -135,9 +150,11 @@ export class WindowExtent {
     return this.maxDq.query(minSeq, xMin);
   }
 
-  /** Reset to empty (e.g. ring cleared / replay seek). */
+  /** Reset to empty (e.g. ring cleared / replay seek). Re-arms the monotonic guard. */
   clear(): void {
     this.minDq.clear();
     this.maxDq.clear();
+    this.prevT = Number.NEGATIVE_INFINITY;
+    this.warnedNonMonotonic = false;
   }
 }

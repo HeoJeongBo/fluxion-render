@@ -1,4 +1,5 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { _resetArityGuard } from "../../../shared/lib/arity-guard";
 import {
   AreaLayerHandle,
   BarLayerHandle,
@@ -851,5 +852,61 @@ describe("push() stage fast-path (coalescing sink)", () => {
     const { sink, staged } = makeStagingSink();
     new StackedAreaHandle(sink, "sa").push({ t: 1, values: [2, 3, 4] });
     expect(staged[0]!.values).toEqual([1, 2, 3, 4]);
+  });
+});
+
+describe("layer-handle arity validation", () => {
+  afterEach(() => {
+    _resetArityGuard();
+    vi.restoreAllMocks();
+  });
+
+  function sinkWithArity(arity: number | undefined): FluxionDataSink {
+    const { sink } = makeFakeSink();
+    sink.expectedArity = () => arity;
+    return sink;
+  }
+
+  it("StackedAreaHandle.push warns when values.length != declared seriesCount", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const h = new StackedAreaHandle(sinkWithArity(2), "sa");
+    h.push({ t: 1, values: [1, 2] }); // matches → silent
+    expect(warn).not.toHaveBeenCalled();
+    h.push({ t: 2, values: [1, 2, 3] }); // 3 != 2 → warn
+    expect(warn).toHaveBeenCalledTimes(1);
+  });
+
+  it("StackedAreaHandle.pushBatch warns on a heterogeneous batch (no declared arity)", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const h = new StackedAreaHandle(sinkWithArity(undefined), "sa-h");
+    h.pushBatch([
+      { t: 1, values: [1, 2] },
+      { t: 2, values: [1, 2, 3] }, // differs from samples[0] stride → warn
+    ]);
+    expect(warn).toHaveBeenCalledTimes(1);
+  });
+
+  it("StackedAreaHandle.pushBatch warns against the declared seriesCount", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const h = new StackedAreaHandle(sinkWithArity(3), "sa-d");
+    h.pushBatch([{ t: 1, values: [1, 2] }]); // 2 != 3 → warn
+    expect(warn).toHaveBeenCalledTimes(1);
+  });
+
+  it("HeatmapStreamHandle.pushColumn warns when length != declared yBins", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const h = new HeatmapStreamHandle(sinkWithArity(4), "hs");
+    h.pushColumn(1, [1, 2, 3, 4]); // matches → silent
+    expect(warn).not.toHaveBeenCalled();
+    h.pushColumn(2, [1, 2, 3]); // 3 != 4 → warn
+    expect(warn).toHaveBeenCalledTimes(1);
+  });
+
+  it("skips validation when the sink declares no arity for the layer", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const sink = sinkWithArity(undefined);
+    new StackedAreaHandle(sink, "sa-u").push({ t: 1, values: [1] });
+    new HeatmapStreamHandle(sink, "hs-u").pushColumn(1, [1, 2]);
+    expect(warn).not.toHaveBeenCalled();
   });
 });

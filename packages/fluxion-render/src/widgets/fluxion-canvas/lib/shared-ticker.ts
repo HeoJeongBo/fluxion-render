@@ -23,15 +23,29 @@ interface TickerBucket {
 
 const buckets = new Map<number, TickerBucket>();
 
-// Flipped by the `visibilitychange` listener below. While true, buckets skip
-// their fan-out so subscribers stop ticking until the page is visible again.
+// Flipped by the `visibilitychange` listener. While true, buckets skip their
+// fan-out so subscribers stop ticking until the page is visible again.
 let pageHidden = false;
 
-/* v8 ignore start -- SSR guard: no `document` in non-DOM envs; unreachable in the happy-dom test environment. */
-if (typeof document !== "undefined") {
-  document.addEventListener("visibilitychange", () => {
-    pageHidden = document.visibilityState === "hidden";
-  });
+// Named (not an inline arrow at module load) so it can be detached. The listener
+// is attached only while ≥1 bucket exists and removed when the last subscriber
+// leaves, so it never outlives the streams — the load-time version leaked one
+// listener per module evaluation (HMR / repeated imports / test reloads).
+function onVisibilityChange(): void {
+  pageHidden = document.visibilityState === "hidden";
+}
+
+/* v8 ignore start -- SSR guard: `document` is always present in the happy-dom test env, so the no-DOM branch can't be exercised here. */
+function attachVisibility(): void {
+  if (typeof document !== "undefined") {
+    document.addEventListener("visibilitychange", onVisibilityChange);
+  }
+}
+function detachVisibility(): void {
+  if (typeof document !== "undefined") {
+    document.removeEventListener("visibilitychange", onVisibilityChange);
+  }
+  pageHidden = false;
 }
 /* v8 ignore stop */
 
@@ -43,6 +57,7 @@ if (typeof document !== "undefined") {
 export function subscribeTicker(intervalMs: number, fn: Tick): () => void {
   let bucket = buckets.get(intervalMs);
   if (!bucket) {
+    if (buckets.size === 0) attachVisibility();
     const created: TickerBucket = {
       subs: new Set(),
       handle: setInterval(() => {
@@ -76,6 +91,7 @@ export function subscribeTicker(intervalMs: number, fn: Tick): () => void {
     if (bucketRef.subs.size === 0) {
       clearInterval(bucketRef.handle);
       buckets.delete(intervalMs);
+      if (buckets.size === 0) detachVisibility();
     }
   };
 }

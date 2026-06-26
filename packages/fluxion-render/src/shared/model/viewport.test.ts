@@ -69,4 +69,14 @@ describe("Viewport", () => {
     expect(v.xToPx(0)).toBeCloseTo(100);
     expect(v.yToPx(0)).toBeCloseTo(100);
   });
+
+  it("degenerate bounds (xMin===xMax / yMin===yMax) yield finite pixels, not NaN", () => {
+    const v = new Viewport();
+    v.setSize(100, 100, 1);
+    // Zero-span bounds would divide by zero; the `|| 1` guard keeps it finite.
+    v.setBounds({ xMin: 5, xMax: 5, yMin: 5, yMax: 5 });
+    expect(Number.isFinite(v.xToPx(5))).toBe(true);
+    expect(Number.isFinite(v.yToPx(5))).toBe(true);
+    expect(v.xToPx(5)).toBe(0); // (5-5)/1 * 100 = 0
+  });
 });

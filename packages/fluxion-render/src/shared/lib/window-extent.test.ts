@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { WindowExtent } from "./window-extent";
 
 /** Deterministic LCG so a failing case is reproducible. */
@@ -87,5 +87,20 @@ describe("WindowExtent", () => {
     // All scrolled off (xMin past the last t).
     expect(we.queryMin(0, 21)).toBe(Number.POSITIVE_INFINITY);
     expect(we.queryMax(0, 21)).toBe(Number.NEGATIVE_INFINITY);
+  });
+
+  it("warns once on a non-monotonic timestamp and re-arms after clear", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const we = new WindowExtent();
+    we.push(0, 100, 1, 0);
+    we.push(1, 90, 2, 0); // t went backward → warn once
+    we.push(2, 80, 3, 0); // still backward, already warned → silent
+    expect(warn).toHaveBeenCalledTimes(1);
+
+    we.clear(); // re-arms the guard (and resets prevT)
+    we.push(0, 100, 1, 0);
+    we.push(1, 50, 2, 0); // backward again → warns again
+    expect(warn).toHaveBeenCalledTimes(2);
+    warn.mockRestore();
   });
 });
