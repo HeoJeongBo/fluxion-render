@@ -1,6 +1,6 @@
-import { render } from "@testing-library/react";
+import { act, render } from "@testing-library/react";
 import { StrictMode, useEffect } from "react";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Op } from "../../../shared/protocol";
 import { type FluxionLayerSpec, useFluxionCanvas } from "./use-fluxion-canvas";
 
@@ -293,5 +293,58 @@ describe("useFluxionCanvas", () => {
       return <div ref={containerRef} />;
     }
     expect(() => render(<PoolHarness />)).not.toThrow();
+  });
+
+  describe("staggerMount", () => {
+    function StaggerHarness({
+      workerFactory,
+      onHost,
+    }: {
+      workerFactory: () => Worker;
+      onHost?: (host: unknown) => void;
+    }) {
+      const { containerRef, host } = useFluxionCanvas({
+        layers: [
+          { id: "axis", kind: "axis-grid" },
+          { id: "line", kind: "line", config: { color: "#fff" } },
+        ],
+        hostOptions: { workerFactory },
+        staggerMount: true,
+      });
+      useEffect(() => {
+        if (host && onHost) onHost(host);
+      }, [host, onHost]);
+      return <div ref={containerRef} style={{ width: 200, height: 100 }} />;
+    }
+
+    beforeEach(() => vi.useFakeTimers());
+    afterEach(() => vi.useRealTimers());
+
+    it("defers host creation to a later frame", () => {
+      const { factory, posts } = makeFakeWorkerFactory();
+      const onHost = vi.fn();
+      render(<StaggerHarness workerFactory={factory} onHost={onHost} />);
+      // Host creation is queued — nothing posted, no host yet.
+      expect(posts).toHaveLength(0);
+      expect(onHost).not.toHaveBeenCalled();
+      act(() => {
+        vi.advanceTimersByTime(20); // drain one frame
+      });
+      const ops = posts.map((p) => (p.msg as { op: number }).op);
+      expect(ops).toContain(Op.INIT);
+      expect(onHost).toHaveBeenCalled();
+    });
+
+    it("cancels the queued creation if unmounted before its frame", () => {
+      const { factory, posts, terminate } = makeFakeWorkerFactory();
+      const { unmount } = render(<StaggerHarness workerFactory={factory} />);
+      expect(posts).toHaveLength(0); // not created yet
+      unmount(); // before the drain frame
+      act(() => {
+        vi.advanceTimersByTime(20);
+      });
+      expect(posts).toHaveLength(0); // host never created
+      expect(terminate).not.toHaveBeenCalled(); // nothing to tear down
+    });
   });
 });

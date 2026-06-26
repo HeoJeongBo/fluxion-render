@@ -72,6 +72,7 @@ export {
   type CapacityAdvisory,
   candlestickLayer,
   checkCapacity,
+  configureMountScheduler,
   eventMarkerLayer,
   FluxionCanvas,
   type FluxionCanvasHandle,

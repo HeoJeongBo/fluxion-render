@@ -21,6 +21,7 @@ import type { StackedAreaConfig } from "../../../entities/stacked-area-layer";
 import type { StepChartConfig } from "../../../entities/step-chart-layer";
 import type { TrajectoryConfig } from "../../../entities/trajectory-layer";
 import { FluxionHost, type FluxionHostOptions } from "../../../features/host";
+import { enqueueMount } from "./mount-scheduler";
 import { type ResizeInfo, useResizeObserver } from "./use-resize-observer";
 
 /**
@@ -67,6 +68,16 @@ export interface UseFluxionCanvasOptions {
    * Container div for the y-axis canvas. Same lifetime contract as xAxisContainerRef.
    */
   yAxisContainerRef?: RefObject<HTMLDivElement | null>;
+  /**
+   * Defer the expensive host creation (OffscreenCanvas transfer + worker
+   * `POOL_INIT` + first render) through a shared frame-throttled queue so a
+   * burst of simultaneous mounts (an accordion expanding, a grid appearing)
+   * spreads across frames instead of spiking one. The placeholder `<canvas>`
+   * is still attached immediately; only the host spins up on a later frame, so
+   * `host` / `onReady` arrive deferred. Tune the rate with
+   * {@link configureMountScheduler}. Default `false` (synchronous).
+   */
+  staggerMount?: boolean;
 }
 
 export interface UseFluxionCanvasResult {
@@ -166,24 +177,37 @@ export function useFluxionCanvas(
     const xAxisCanvas = xAxisContainer ? makeAxisCanvas(xAxisContainer) : undefined;
     const yAxisCanvas = yAxisContainer ? makeAxisCanvas(yAxisContainer) : undefined;
 
-    const instance = new FluxionHost(canvas, {
-      ...current.hostOptions,
-      xAxisElement: xAxisCanvas,
-      yAxisElement: yAxisCanvas,
-    });
-    hostRef.current = instance;
-    for (const l of current.layers) instance.addLayer(l.id, l.kind, l.config);
-    // Baseline the reconcile map to what addLayer just applied (re-seeded on
-    // every remount so a fresh host never inherits a stale baseline).
-    lastAppliedRef.current = new Map(
-      current.layers.map((l) => [l.id, JSON.stringify(l.config)]),
-    );
-    lastKindsRef.current = new Map(current.layers.map((l) => [l.id, l.kind]));
-    setHost(instance);
-    current.onReady?.(instance);
+    // The expensive part — OffscreenCanvas transfer + worker POOL_INIT + first
+    // render — lives in this closure so `staggerMount` can defer it through the
+    // shared frame queue, spreading a burst of simultaneous mounts over frames.
+    let instance: FluxionHost | null = null;
+    const createHost = () => {
+      instance = new FluxionHost(canvas, {
+        ...current.hostOptions,
+        xAxisElement: xAxisCanvas,
+        yAxisElement: yAxisCanvas,
+      });
+      hostRef.current = instance;
+      for (const l of current.layers) instance.addLayer(l.id, l.kind, l.config);
+      // Baseline the reconcile map to what addLayer just applied (re-seeded on
+      // every remount so a fresh host never inherits a stale baseline).
+      lastAppliedRef.current = new Map(
+        current.layers.map((l) => [l.id, JSON.stringify(l.config)]),
+      );
+      lastKindsRef.current = new Map(current.layers.map((l) => [l.id, l.kind]));
+      setHost(instance);
+      current.onReady?.(instance);
+    };
+
+    const cancelMount = current.staggerMount ? enqueueMount(createHost) : null;
+    if (!cancelMount) createHost();
 
     return () => {
-      instance.dispose();
+      // If the host hasn't been created yet (unmounted before its turn in the
+      // frame queue), just drop the queued task — there's no host/worker to tear
+      // down, and nothing leaks. Otherwise dispose the live host.
+      cancelMount?.();
+      if (instance) instance.dispose();
       hostRef.current = null;
       setHost(null);
       if (canvas.parentNode === container) container.removeChild(canvas);

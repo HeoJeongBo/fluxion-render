@@ -17,6 +17,13 @@ export interface FluxionCanvasProps {
   hostOptions?: FluxionHostOptions;
   onReady?: (host: FluxionHost) => void;
   /**
+   * Defer host creation through a shared frame-throttled queue so a burst of
+   * simultaneous mounts (an accordion expanding, a grid appearing) spreads
+   * across frames instead of spiking one. Tune with `configureMountScheduler`.
+   * Default `false`.
+   */
+  staggerMount?: boolean;
+  /**
    * Renders axis labels in separate canvases drawn by the Worker —
    * y-axis canvas to the LEFT, x-axis canvas BELOW the chart.
    * Default `true`. Set to `false` only to embed the chart without
@@ -66,6 +73,7 @@ export const FluxionCanvas = forwardRef<FluxionCanvasHandle, FluxionCanvasProps>
       className,
       hostOptions,
       onReady,
+      staggerMount,
       externalAxes = true,
       axisLayerId = "",
       yAxisWidth = 60,
@@ -96,6 +104,7 @@ export const FluxionCanvas = forwardRef<FluxionCanvasHandle, FluxionCanvasProps>
         ? { ...hostOptions, xAxisHeight, yAxisWidth, axisStyle }
         : hostOptions,
       onReady,
+      staggerMount,
       xAxisContainerRef: externalAxes ? xAxisContainerRef : undefined,
       yAxisContainerRef: externalAxes ? yAxisContainerRef : undefined,
     });

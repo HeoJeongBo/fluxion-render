@@ -299,6 +299,25 @@ shrunk to `0×0` immediately rather than waiting for garbage collection), so
 rapidly opening/closing a section of many charts can't accumulate orphaned GPU
 surfaces and exhaust the context budget.
 
+**Stagger a burst of mounts (`staggerMount`).** Mounting many charts in a single
+frame — an accordion section expanding, a grid appearing — runs every host's
+`transferControlToOffscreen` + worker init + first render at once, which can
+make the page stutter for a beat. Set `staggerMount` on the canvas to defer host
+creation through a shared frame-throttled queue: the placeholder is attached
+immediately, but the host spins up on a later frame, so the burst spreads out
+(`host` / `onReady` arrive deferred). Tune the rate globally:
+
+```tsx
+import { configureMountScheduler } from '@heojeongbo/fluxion-render/react';
+
+configureMountScheduler({ perFrame: 6 }); // host creations per frame (default 4)
+
+<FluxionCanvas staggerMount layers={[/* … */]} hostOptions={{ pool }} />
+```
+
+A chart unmounted before its turn in the queue is simply dropped — it never
+creates a host.
+
 ---
 
 ## Layer Types
