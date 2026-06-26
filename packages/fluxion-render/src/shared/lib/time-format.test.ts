@@ -67,4 +67,12 @@ describe("formatClock", () => {
     expect(formatClock(t, "HH:mm:ss")).toBe("14:30:45");
     expect(formatClock(t, "H:m:s")).toBe("14:30:45");
   });
+
+  it("identical epoch AND pattern return the cached string (fast path)", () => {
+    const t = at(2026, 5, 2, 3, 4, 5);
+    const first = formatClock(t, "HH:mm:ss");
+    const second = formatClock(t, "HH:mm:ss"); // same (epoch, pattern) → cached
+    expect(second).toBe(first);
+    expect(second).toBe("03:04:05");
+  });
 });

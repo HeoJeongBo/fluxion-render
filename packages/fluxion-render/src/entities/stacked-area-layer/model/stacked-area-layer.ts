@@ -49,6 +49,10 @@ export class StackedAreaLayer implements Layer {
   private normalize = false;
   private visible = true;
   private ring: RingBuffer;
+  // Reused per-draw scratch: visible-sample x pixels and the flat cumulative
+  // tops (`topsScratch[i*sc + s]`). Grown on demand, never per-frame allocated.
+  private xsScratch = new Float64Array(0);
+  private topsScratch = new Float64Array(0);
 
   constructor(id: string) {
     this.id = id;
@@ -117,26 +121,31 @@ export class StackedAreaLayer implements Layer {
     const xMin = viewport.bounds.xMin;
     const norm = this.normalize;
 
-    // Collect visible samples once: px, and the cumulative top after each band.
-    const xs: number[] = [];
-    const tops: number[][] = []; // tops[i] = cumulative value after series s at sample i
+    // Collect visible samples once into reused scratch: x pixel + the flat
+    // cumulative tops (`tops[i*sc + s]`). `ring.length` bounds the visible count.
+    const cap = this.ring.length;
+    if (this.xsScratch.length < cap) this.xsScratch = new Float64Array(cap);
+    if (this.topsScratch.length < cap * sc) this.topsScratch = new Float64Array(cap * sc);
+    const xs = this.xsScratch;
+    const tops = this.topsScratch;
+    let vis = 0;
     this.ring.forEach((data, off) => {
       const t = data[off];
       if (t < xMin) return;
       let total = 0;
       for (let s = 0; s < sc; s++) total += Math.max(0, data[off + 1 + s]!);
       const scale = norm ? (total > 0 ? 1 / total : 0) : 1;
-      const cum: number[] = [];
+      const base = vis * sc;
       let acc = 0;
       for (let s = 0; s < sc; s++) {
         acc += Math.max(0, data[off + 1 + s]!) * scale;
-        cum.push(acc);
+        tops[base + s] = acc;
       }
-      xs.push(viewport.xToPx(t));
-      tops.push(cum);
+      xs[vis] = viewport.xToPx(t);
+      vis++;
     });
 
-    if (xs.length === 0) return;
+    if (vis === 0) return;
 
     ctx.globalAlpha = this.fillOpacity;
     for (let s = 0; s < sc; s++) {
@@ -144,14 +153,14 @@ export class StackedAreaLayer implements Layer {
       ctx.fillStyle = color;
       ctx.beginPath();
       // Upper edge of band s, left → right.
-      for (let i = 0; i < xs.length; i++) {
-        const py = viewport.yToPx(tops[i]![s]!);
+      for (let i = 0; i < vis; i++) {
+        const py = viewport.yToPx(tops[i * sc + s]!);
         if (i === 0) ctx.moveTo(xs[i]!, py);
         else ctx.lineTo(xs[i]!, py);
       }
       // Lower edge (top of band s-1, or baseline for s=0), right → left.
-      for (let i = xs.length - 1; i >= 0; i--) {
-        const lower = s === 0 ? 0 : tops[i]![s - 1]!;
+      for (let i = vis - 1; i >= 0; i--) {
+        const lower = s === 0 ? 0 : tops[i * sc + (s - 1)]!;
         ctx.lineTo(xs[i]!, viewport.yToPx(lower));
       }
       ctx.closePath();

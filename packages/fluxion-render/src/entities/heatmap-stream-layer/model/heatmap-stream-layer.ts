@@ -51,6 +51,11 @@ export class HeatmapStreamLayer implements Layer {
   private colTs: Float32Array; // timestamps per column
   private head = 0;
   private count = 0;
+  // Cached auto value-range over the retained columns. Recomputed on setData
+  // (when minValue/maxValue is auto) instead of rescanning O(cols×bins) every
+  // draw — the ring only changes on setData, so the cache is always fresh.
+  private autoMin = Number.POSITIVE_INFINITY;
+  private autoMax = Number.NEGATIVE_INFINITY;
 
   constructor(id: string) {
     this.id = id;
@@ -63,6 +68,27 @@ export class HeatmapStreamLayer implements Layer {
     this.colTs = new Float32Array(this.maxCols);
     this.head = 0;
     this.count = 0;
+    this.autoMin = Number.POSITIVE_INFINITY;
+    this.autoMax = Number.NEGATIVE_INFINITY;
+  }
+
+  /** Rescan the retained columns for the auto value-range (min/max). */
+  private recomputeAuto(): void {
+    const bins = this.yBins;
+    let mn = Number.POSITIVE_INFINITY;
+    let mx = Number.NEGATIVE_INFINITY;
+    const start = this.count < this.maxCols ? 0 : this.head;
+    for (let i = 0; i < this.count; i++) {
+      const slot = (start + i) % this.maxCols;
+      const base = slot * bins;
+      for (let b = 0; b < bins; b++) {
+        const v = this.colData[base + b]!;
+        if (v < mn) mn = v;
+        if (v > mx) mx = v;
+      }
+    }
+    this.autoMin = mn;
+    this.autoMax = mx;
   }
 
   setConfig(config: unknown): void {
@@ -112,6 +138,11 @@ export class HeatmapStreamLayer implements Layer {
     if (this.count < this.maxCols) this.count++;
 
     if (t > viewport.latestT) viewport.latestT = t;
+
+    // Refresh the auto value-range only when a dimension actually needs it.
+    if (this.minValue === undefined || this.maxValue === undefined) {
+      this.recomputeAuto();
+    }
   }
 
   resize(_viewport: Viewport): void {}
@@ -130,25 +161,12 @@ export class HeatmapStreamLayer implements Layer {
     const lutStrings = this.lutStrings;
     const bins = this.yBins;
 
-    // Determine value range for normalisation.
+    // Determine value range for normalisation — auto bounds come from the cache
+    // maintained on setData (see recomputeAuto), not a per-frame rescan.
     let vMin = this.minValue;
     let vMax = this.maxValue;
-    if (vMin === undefined || vMax === undefined) {
-      let autoMin = Number.POSITIVE_INFINITY;
-      let autoMax = Number.NEGATIVE_INFINITY;
-      const start = this.count < this.maxCols ? 0 : this.head;
-      for (let i = 0; i < this.count; i++) {
-        const slot = (start + i) % this.maxCols;
-        const base = slot * bins;
-        for (let b = 0; b < bins; b++) {
-          const v = this.colData[base + b]!;
-          if (v < autoMin) autoMin = v;
-          if (v > autoMax) autoMax = v;
-        }
-      }
-      if (vMin === undefined) vMin = autoMin;
-      if (vMax === undefined) vMax = autoMax;
-    }
+    if (vMin === undefined) vMin = this.autoMin;
+    if (vMax === undefined) vMax = this.autoMax;
     const range = vMax - vMin || 1;
 
     // Compute cell pixel dimensions.
