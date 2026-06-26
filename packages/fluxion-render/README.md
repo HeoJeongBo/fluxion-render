@@ -266,14 +266,18 @@ streams is cheap out of the box; the rest are opt-outs for niche cases.
 | `maxFps` | `number` | uncapped | Cap the worker engine's render rate. For a large grid of streaming charts sharing a worker, capping to e.g. `30` roughly halves worker scan+draw CPU and is visually indistinguishable for a scrolling time window. Skipped frames keep pending data — nothing is dropped |
 | `emitBounds` | `boolean` | `true` | Whether the worker posts `BOUNDS_UPDATE` to the main thread on auto y-bounds change. Set `false` when nothing consumes `onBoundsChange` / `getMetrics().bounds` (e.g. a thumbnail grid) to skip the per-frame postMessage |
 | `emitTicks` | `boolean` | `true` | Whether the worker posts `TICK_UPDATE` for React-side axis rendering. Only relevant with `externalAxes={false}` and no `onTickUpdate` consumer; set `false` to skip per-frame tick computation + postMessage. No effect when axis canvases render in the worker (`externalAxes` / `xAxisElement` / `yAxisElement`) |
+| `transparent` | `boolean` | `false` | Keep the canvas's alpha channel so the page shows through where the chart doesn't paint. Default `false` (opaque): the engine fills `bgColor` every frame, so an opaque 2D context (`alpha: false`) composites faster — a real win for a wall of many charts. Set `true` only if you use a translucent `bgColor` and want the page visible behind the plot |
 
 (Plus `bgColor`, `pool`, `workerFactory` covered above.)
 
 **Putting it together for a wall of charts.** The adaptive default pool spreads
 hosts across workers as charts mount; `coalesce` (on by default) collapses
 per-sample posts to one message per layer per frame; per-layer `decimate` (auto)
-makes each draw O(width) rather than O(samples); and `maxFps` caps the shared
-worker's frame rate. For a read-only thumbnail grid, also set
+makes each draw O(width) rather than O(samples); `yMode: 'auto'` tracks each
+layer's visible-window min/max with a sliding-window deque (O(log n) per frame)
+instead of rescanning the ring, so auto-scaling cost stays flat as the retained
+window grows; and `maxFps` caps the shared worker's frame rate. For a read-only
+thumbnail grid, also set
 `emitBounds: false` / `emitTicks: false` to drop the per-frame bookkeeping
 postMessages:
 
@@ -317,6 +321,18 @@ configureMountScheduler({ perFrame: 6 }); // host creations per frame (default 4
 
 A chart unmounted before its turn in the queue is simply dropped — it never
 creates a host.
+
+Because the host only spins up on a later frame, a deferred chart receives **no
+stream data until it mounts** — anything pushed in the meantime had no engine to
+land in. This is most visible with a shared broadcast feed (one packet fans out
+to every chart each tick): a late-mounting chart starts empty and fills forward
+from its mount moment rather than showing the history that already streamed past.
+If a chart must look full the instant it appears, backfill the trailing window in
+`onReady` from history you retained (or, for a synthetic/recomputable source,
+regenerate it) and push it once with `handle.pushBatch(...)` — or
+`handle.reset(latestT)` then `pushBatch(...)` to also rewind the time axis. The
+backfill and the live stream share one ring and merge in push order, so keep the
+backfilled timestamps `<=` the next live sample.
 
 ---
 
