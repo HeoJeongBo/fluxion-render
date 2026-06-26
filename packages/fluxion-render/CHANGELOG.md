@@ -1,5 +1,22 @@
 # Changelog
 
+# [0.21.0](https://github-personal/HeoJeongBo/fluxion-render/compare/fluxion-render-v0.20.0...fluxion-render-v0.21.0) (2026-06-26)
+
+
+### Bug Fixes
+
+* **render:** warn on layer-handle arity mismatch; guard degenerate bounds, ticker leak, non-monotonic extent ([191286f](https://github-personal/HeoJeongBo/fluxion-render/commit/191286f475a706daedb85960b04b64c876947ed1))
+
+
+### Features
+
+* **render:** staggered mount on by default with safe mount/dispose lifecycle ([a6cc029](https://github-personal/HeoJeongBo/fluxion-render/commit/a6cc02984d488e20999cadf1e2cf0c44c2d2467c))
+
+
+### Performance Improvements
+
+* **render:** cache heatmap-stream autoscale, reuse stacked-area scratch, memoize clock labels ([0f22390](https://github-personal/HeoJeongBo/fluxion-render/commit/0f22390c8eb6d86ef05af32ce308ec8ada4ee97c))
+
 # [0.20.0](https://github-personal/HeoJeongBo/fluxion-render/compare/fluxion-render-v0.19.1...fluxion-render-v0.20.0) (2026-06-26)
 
 
