@@ -1066,4 +1066,54 @@ describe("Engine", () => {
       expect(canvas.height).toBe(0);
     });
   });
+
+  describe("context + resize optimizations", () => {
+    type WithCtxOpts = { contextOptions: { alpha?: boolean } };
+
+    it("uses an opaque (alpha:false) context by default; transparent keeps alpha", () => {
+      const e1 = new Engine();
+      const c1 = newCanvas(100, 100);
+      e1.dispatch({ op: Op.INIT, canvas: c1, width: 100, height: 100, dpr: 1 });
+      expect((c1 as unknown as WithCtxOpts).contextOptions.alpha).toBe(false);
+      e1.dispatch({ op: Op.DISPOSE });
+
+      const e2 = new Engine();
+      const c2 = newCanvas(100, 100);
+      e2.dispatch({
+        op: Op.INIT,
+        canvas: c2,
+        width: 100,
+        height: 100,
+        dpr: 1,
+        transparent: true,
+      });
+      expect((c2 as unknown as WithCtxOpts).contextOptions.alpha).toBe(true);
+      e2.dispatch({ op: Op.DISPOSE });
+    });
+
+    it("skips a no-op resize (identical dimensions don't reallocate the backing)", () => {
+      const engine = new Engine();
+      const canvas = newCanvas(100, 100);
+      engine.dispatch({ op: Op.INIT, canvas, width: 100, height: 100, dpr: 1 });
+      flushFrame();
+      // Wrap `width` with a counting setter to detect (non-)reallocation.
+      let writes = 0;
+      let w = canvas.width;
+      Object.defineProperty(canvas, "width", {
+        get: () => w,
+        set: (v: number) => {
+          writes++;
+          w = v;
+        },
+        configurable: true,
+      });
+      // Same size → no width assignment (backing not reallocated).
+      engine.dispatch({ op: Op.RESIZE, width: 100, height: 100, dpr: 1 });
+      expect(writes).toBe(0);
+      // Different size → width reassigned.
+      engine.dispatch({ op: Op.RESIZE, width: 200, height: 100, dpr: 1 });
+      expect(writes).toBeGreaterThan(0);
+      engine.dispatch({ op: Op.DISPOSE });
+    });
+  });
 });

@@ -22,6 +22,7 @@ self.onmessage = (e: MessageEvent<HostMsg>) => {
         maxFps: msg.maxFps,
         emitBounds: msg.emitBounds,
         emitTicks: msg.emitTicks,
+        transparent: msg.transparent,
         hostId: msg.hostId,
       });
       return;

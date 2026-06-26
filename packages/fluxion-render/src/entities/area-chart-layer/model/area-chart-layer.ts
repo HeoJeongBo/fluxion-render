@@ -259,6 +259,9 @@ export class AreaChartLayer implements Layer {
     const yPx = (y: number): number =>
       lane ? this.yToBandPx(y, viewport) : viewport.yToPx(y + this.yOffset);
     const gap = this.maxGapMs;
+    // Reused per-column scratch (first/min/max/last) — avoids one array alloc
+    // per pixel column per pass (× many charts × fps).
+    const pts = [0, 0, 0, 0];
 
     // Pass 1 — fill: one closed-to-baseline polygon per gap-segment.
     ctx.beginPath();
@@ -273,7 +276,10 @@ export class AreaChartLayer implements Layer {
     };
     forEachColumn(this.ring, viewport, xMin, gap, {
       onColumn: (colPx, firstY, minY, maxY, lastY) => {
-        const pts = [firstY, minY, maxY, lastY];
+        pts[0] = firstY;
+        pts[1] = minY;
+        pts[2] = maxY;
+        pts[3] = lastY;
         for (let k = 0; k < pts.length; k++) {
           if (k > 0 && pts[k] === pts[k - 1]) continue;
           const py = yPx(pts[k]!);
@@ -305,7 +311,10 @@ export class AreaChartLayer implements Layer {
     let first = true;
     forEachColumn(this.ring, viewport, xMin, gap, {
       onColumn: (colPx, firstY, minY, maxY, lastY) => {
-        const pts = [firstY, minY, maxY, lastY];
+        pts[0] = firstY;
+        pts[1] = minY;
+        pts[2] = maxY;
+        pts[3] = lastY;
         for (let k = 0; k < pts.length; k++) {
           if (k > 0 && pts[k] === pts[k - 1]) continue;
           const py = yPx(pts[k]!);

@@ -217,9 +217,14 @@ export class StepChartLayer implements Layer {
   ): void {
     const lane = this.laneActive();
     let first = true;
+    // Reused per-column scratch — avoids one array alloc per pixel column.
+    const pts = [0, 0, 0, 0];
     forEachColumn(this.ring, viewport, xMin, this.maxGapMs, {
       onColumn: (colPx, firstY, minY, maxY, lastY) => {
-        const pts = [firstY, minY, maxY, lastY];
+        pts[0] = firstY;
+        pts[1] = minY;
+        pts[2] = maxY;
+        pts[3] = lastY;
         for (let k = 0; k < pts.length; k++) {
           if (k > 0 && pts[k] === pts[k - 1]) continue;
           const py = lane

@@ -64,6 +64,8 @@ export interface InitMsg {
   emitBounds?: boolean;
   /** Post TICK_UPDATE to the main thread (React-side axis fallback). Omitted = true. */
   emitTicks?: boolean;
+  /** Keep the canvas alpha channel. Omitted/false = opaque context (faster compositing). */
+  transparent?: boolean;
   hostId?: string;
 }
 
@@ -145,6 +147,7 @@ export interface PoolInitMsg {
   maxFps?: number;
   emitBounds?: boolean;
   emitTicks?: boolean;
+  transparent?: boolean;
 }
 
 /** Pool-only: tear down the engine for `hostId` without terminating the worker. */

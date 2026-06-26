@@ -135,6 +135,14 @@ export interface FluxionHostOptions {
    * worker (`externalAxes` / `xAxisElement` / `yAxisElement`).
    */
   emitTicks?: boolean;
+  /**
+   * Keep the canvas's alpha channel so the page shows through where the chart
+   * doesn't paint. Default `false` (opaque): the engine fills `bgColor` every
+   * frame, so an opaque 2D context (`alpha: false`) composites faster — a real
+   * win for a wall of many charts. Set `true` only if you use a translucent
+   * `bgColor` and want the page visible behind the plot.
+   */
+  transparent?: boolean;
 }
 
 function dtypeOf(arr: FluxionTypedArray): DType {
@@ -275,6 +283,7 @@ export class FluxionHost {
         maxFps: opts.maxFps,
         emitBounds: opts.emitBounds,
         emitTicks: opts.emitTicks,
+        transparent: opts.transparent,
       },
       [offscreen],
     );

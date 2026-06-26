@@ -28,6 +28,7 @@ export class FluxionWorkerHandle extends WorkerHandle<HostMsg> {
         maxFps: m.maxFps,
         emitBounds: m.emitBounds,
         emitTicks: m.emitTicks,
+        transparent: m.transparent,
       };
       this._worker.postMessage(poolMsg, transfer ?? []);
       return;

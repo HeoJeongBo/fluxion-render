@@ -87,12 +87,15 @@ export function createFakeCtx(): FakeCtx {
 class FakeOffscreenCanvas {
   width: number;
   height: number;
+  /** Records the most recent `getContext` options arg (for asserting `alpha` etc.). */
+  contextOptions: unknown;
   private ctx: FakeCtx | null = null;
   constructor(width = 0, height = 0) {
     this.width = width;
     this.height = height;
   }
-  getContext(_type: string): FakeCtx {
+  getContext(_type: string, options?: unknown): FakeCtx {
+    this.contextOptions = options;
     if (!this.ctx) this.ctx = createFakeCtx();
     return this.ctx;
   }

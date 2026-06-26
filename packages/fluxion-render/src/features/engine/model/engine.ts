@@ -127,6 +127,7 @@ export class Engine {
           maxFps: msg.maxFps,
           emitBounds: msg.emitBounds,
           emitTicks: msg.emitTicks,
+          transparent: msg.transparent,
         });
         break;
       case Op.SET_BG_COLOR:
@@ -263,10 +264,14 @@ export class Engine {
       maxFps?: number;
       emitBounds?: boolean;
       emitTicks?: boolean;
+      transparent?: boolean;
     },
   ) {
     this.canvas = canvas;
-    this.ctx = canvas.getContext("2d");
+    // Opaque context (alpha:false) composites faster — the engine fills `bgColor`
+    // over the whole canvas every frame, so it's opaque regardless. `transparent`
+    // opts back into an alpha channel for translucent backgrounds.
+    this.ctx = canvas.getContext("2d", { alpha: opts.transparent === true });
     if (opts.bgColor !== undefined) this.bgColor = opts.bgColor;
     if (opts.maxFps !== undefined) this.scheduler.setMaxFps(opts.maxFps);
     if (opts.emitBounds !== undefined) this.emitBounds = opts.emitBounds;
@@ -278,8 +283,13 @@ export class Engine {
 
   private resize(width: number, height: number, dpr: number) {
     if (!this.canvas) return;
-    this.canvas.width = Math.max(1, Math.round(width * dpr));
-    this.canvas.height = Math.max(1, Math.round(height * dpr));
+    // Assigning width/height reallocates the GPU backing AND clears the canvas
+    // even when the value is unchanged — skip no-op resizes (a ResizeObserver can
+    // re-fire with the same size during layout churn).
+    const w = Math.max(1, Math.round(width * dpr));
+    const h = Math.max(1, Math.round(height * dpr));
+    if (this.canvas.width !== w) this.canvas.width = w;
+    if (this.canvas.height !== h) this.canvas.height = h;
     this.viewport.setSize(width, height, dpr);
     this.stack.resizeAll(this.viewport);
     this.resizeAxisCanvases(width, height, dpr);
@@ -288,12 +298,16 @@ export class Engine {
 
   private resizeAxisCanvases(width: number, height: number, dpr: number): void {
     if (this.xAxisCanvas) {
-      this.xAxisCanvas.width = Math.max(1, Math.round(width * dpr));
-      this.xAxisCanvas.height = Math.max(1, Math.round(this.xAxisHeight * dpr));
+      const w = Math.max(1, Math.round(width * dpr));
+      const h = Math.max(1, Math.round(this.xAxisHeight * dpr));
+      if (this.xAxisCanvas.width !== w) this.xAxisCanvas.width = w;
+      if (this.xAxisCanvas.height !== h) this.xAxisCanvas.height = h;
     }
     if (this.yAxisCanvas) {
-      this.yAxisCanvas.width = Math.max(1, Math.round(this.yAxisWidth * dpr));
-      this.yAxisCanvas.height = Math.max(1, Math.round(height * dpr));
+      const w = Math.max(1, Math.round(this.yAxisWidth * dpr));
+      const h = Math.max(1, Math.round(height * dpr));
+      if (this.yAxisCanvas.width !== w) this.yAxisCanvas.width = w;
+      if (this.yAxisCanvas.height !== h) this.yAxisCanvas.height = h;
     }
   }
 

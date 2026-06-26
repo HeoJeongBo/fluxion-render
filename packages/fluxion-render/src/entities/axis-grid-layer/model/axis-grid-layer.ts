@@ -519,19 +519,15 @@ export class AxisGridLayer implements Layer {
         : niceTicks(this.bounds.xMin, this.bounds.xMax, this.targetTicks);
     const xSpan = this.bounds.xMax - this.bounds.xMin;
 
-    /* v8 ignore start -- empty span ⟹ xRaw is [], so this map body never runs */
-    const fractions = xRaw.map((v) => (xSpan > 0 ? (v - this.bounds.xMin) / xSpan : 0));
-    /* v8 ignore stop */
-    const labels = xRaw.map((v) =>
-      formatTick(v, this.xMode, this.timeOrigin, this.xTickFormat),
-    );
-
+    // Inline the fraction + label per tick — no intermediate arrays per frame.
+    // The loops only run when `xRaw` is non-empty, which (niceTicks/intervalTicks)
+    // implies `xSpan > 0`, so the division is always safe here.
     if (tickSize > 0) {
       ctx.strokeStyle = color;
       ctx.lineWidth = 1;
       ctx.beginPath();
-      for (const frac of fractions) {
-        const x = Math.round(frac * canvasW) + 0.5;
+      for (const v of xRaw) {
+        const x = Math.round(((v - this.bounds.xMin) / xSpan) * canvasW) + 0.5;
         ctx.moveTo(x, 0);
         ctx.lineTo(x, tickSize);
       }
@@ -543,8 +539,9 @@ export class AxisGridLayer implements Layer {
     ctx.textAlign = "center";
     ctx.textBaseline = "top";
     const labelY = tickSize + tickMargin;
-    for (let i = 0; i < fractions.length; i++) {
-      ctx.fillText(labels[i]!, fractions[i]! * canvasW, labelY);
+    for (const v of xRaw) {
+      const label = formatTick(v, this.xMode, this.timeOrigin, this.xTickFormat);
+      ctx.fillText(label, ((v - this.bounds.xMin) / xSpan) * canvasW, labelY);
     }
   }
 
