@@ -27,7 +27,9 @@ export class HeatmapLayer implements Layer {
   private minValue: number | undefined;
   private maxValue: number | undefined;
   private colormap: "viridis" | "plasma" | "hot" = "viridis";
-  private lut: Uint8Array = VIRIDIS_LUT;
+  // Cached `rgb(...)` string per LUT entry — avoids building one string per cell
+  // per frame (a dense heatmap can have tens of thousands of cells).
+  private lutStrings: string[] = VIRIDIS_STRINGS;
   private visible = true;
   private data: Float32Array = new Float32Array(0);
   private dataLength = 0;
@@ -45,12 +47,12 @@ export class HeatmapLayer implements Layer {
     if (c.visible !== undefined) this.visible = c.visible;
     if (c.colormap !== undefined) {
       this.colormap = c.colormap;
-      this.lut =
+      this.lutStrings =
         c.colormap === "plasma"
-          ? PLASMA_LUT
+          ? PLASMA_STRINGS
           : c.colormap === "hot"
-            ? HOT_LUT
-            : VIRIDIS_LUT;
+            ? HOT_STRINGS
+            : VIRIDIS_STRINGS;
     }
   }
 
@@ -98,14 +100,13 @@ export class HeatmapLayer implements Layer {
     const ch = this.cellHeight;
     const halfW = cw / 2;
     const halfH = ch / 2;
-    const lut = this.lut;
+    const lutStrings = this.lutStrings;
 
     for (let i = 0; i + 2 < this.dataLength; i += 3) {
       const px = viewport.xToPx(this.data[i]);
       const py = viewport.yToPx(this.data[i + 1]);
       const norm = Math.max(0, Math.min(1, (this.data[i + 2] - vMin) / range));
-      const lutIdx = Math.floor(norm * 255) * 3;
-      ctx.fillStyle = `rgb(${lut[lutIdx]},${lut[lutIdx + 1]},${lut[lutIdx + 2]})`;
+      ctx.fillStyle = lutStrings[Math.floor(norm * 255)]!;
       ctx.fillRect(px - halfW, py - halfH, cw, ch);
     }
   }
@@ -159,3 +160,17 @@ const HOT_LUT = buildLut([
   [0.667, 255, 255, 0],
   [1.0, 255, 255, 255],
 ]);
+
+/** Pre-format each LUT entry as an `rgb(...)` string once (per colormap). */
+function buildLutStrings(lut: Uint8Array): string[] {
+  const out: string[] = new Array(256);
+  for (let i = 0; i < 256; i++) {
+    const j = i * 3;
+    out[i] = `rgb(${lut[j]},${lut[j + 1]},${lut[j + 2]})`;
+  }
+  return out;
+}
+
+const VIRIDIS_STRINGS = buildLutStrings(VIRIDIS_LUT);
+const PLASMA_STRINGS = buildLutStrings(PLASMA_LUT);
+const HOT_STRINGS = buildLutStrings(HOT_LUT);

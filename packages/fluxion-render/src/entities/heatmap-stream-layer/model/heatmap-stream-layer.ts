@@ -39,7 +39,9 @@ export class HeatmapStreamLayer implements Layer {
   private yMin = 0;
   private yMax = 1;
   private colormap: "viridis" | "plasma" | "hot" = "viridis";
-  private lut: Uint8Array = VIRIDIS_LUT;
+  // Cached `rgb(...)` string per LUT entry — avoids a string alloc per cell per
+  // frame (yBins × visible columns can be large on a streaming spectrogram).
+  private lutStrings: string[] = VIRIDIS_STRINGS;
   private minValue: number | undefined;
   private maxValue: number | undefined;
   private visible = true;
@@ -84,12 +86,12 @@ export class HeatmapStreamLayer implements Layer {
     if (c.visible !== undefined) this.visible = c.visible;
     if (c.colormap !== undefined) {
       this.colormap = c.colormap;
-      this.lut =
+      this.lutStrings =
         c.colormap === "plasma"
-          ? PLASMA_LUT
+          ? PLASMA_STRINGS
           : c.colormap === "hot"
-            ? HOT_LUT
-            : VIRIDIS_LUT;
+            ? HOT_STRINGS
+            : VIRIDIS_STRINGS;
     }
   }
 
@@ -125,7 +127,7 @@ export class HeatmapStreamLayer implements Layer {
     if (!this.visible || this.count === 0) return;
 
     const { xMin, xMax } = viewport.bounds;
-    const lut = this.lut;
+    const lutStrings = this.lutStrings;
     const bins = this.yBins;
 
     // Determine value range for normalisation.
@@ -174,8 +176,7 @@ export class HeatmapStreamLayer implements Layer {
         const yVal = this.yMin + (b / bins) * (this.yMax - this.yMin);
         const py = viewport.yToPx(yVal + (this.yMax - this.yMin) / bins);
         const norm = Math.max(0, Math.min(1, (this.colData[base + b]! - vMin) / range));
-        const li = Math.floor(norm * 255) * 3;
-        ctx.fillStyle = `rgb(${lut[li]},${lut[li + 1]},${lut[li + 2]})`;
+        ctx.fillStyle = lutStrings[Math.floor(norm * 255)]!;
         ctx.fillRect(px - cellW / 2, py, cellW, Math.ceil(cellH) + 1);
       }
     }
@@ -228,3 +229,17 @@ const HOT_LUT = buildLut([
   [0.667, 255, 255, 0],
   [1.0, 255, 255, 255],
 ]);
+
+/** Pre-format each LUT entry as an `rgb(...)` string once (per colormap). */
+function buildLutStrings(lut: Uint8Array): string[] {
+  const out: string[] = new Array(256);
+  for (let i = 0; i < 256; i++) {
+    const j = i * 3;
+    out[i] = `rgb(${lut[j]},${lut[j + 1]},${lut[j + 2]})`;
+  }
+  return out;
+}
+
+const VIRIDIS_STRINGS = buildLutStrings(VIRIDIS_LUT);
+const PLASMA_STRINGS = buildLutStrings(PLASMA_LUT);
+const HOT_STRINGS = buildLutStrings(HOT_LUT);

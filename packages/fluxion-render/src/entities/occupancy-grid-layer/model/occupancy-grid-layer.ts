@@ -36,6 +36,9 @@ export class OccupancyGridLayer implements Layer {
   readonly id: string;
   private occupied: [number, number, number] = [26, 26, 26];
   private free: [number, number, number] = [224, 224, 224];
+  // Cached `rgb(...)` per occupancy percent (0..100), interpolated free→occupied.
+  // Rebuilt only when the colors change — avoids a string + 3 rounds per cell.
+  private cellStrings: string[] = [];
   private unknownColor = "#808080";
   private showGridLines = false;
   private gridLineColor = "rgba(0,0,0,0.15)";
@@ -45,12 +48,16 @@ export class OccupancyGridLayer implements Layer {
 
   constructor(id: string) {
     this.id = id;
+    this.cellStrings = buildCellStrings(this.free, this.occupied);
   }
 
   setConfig(config: unknown): void {
     const c = config as OccupancyGridConfig;
     if (c.occupiedColor !== undefined) this.occupied = hexToRgb(c.occupiedColor);
     if (c.freeColor !== undefined) this.free = hexToRgb(c.freeColor);
+    if (c.occupiedColor !== undefined || c.freeColor !== undefined) {
+      this.cellStrings = buildCellStrings(this.free, this.occupied);
+    }
     if (c.unknownColor !== undefined) this.unknownColor = c.unknownColor;
     if (c.showGridLines !== undefined) this.showGridLines = c.showGridLines;
     if (c.gridLineColor !== undefined) this.gridLineColor = c.gridLineColor;
@@ -82,8 +89,7 @@ export class OccupancyGridLayer implements Layer {
     const rows = this.data[4]! | 0;
     if (cols <= 0 || rows <= 0) return;
 
-    const [or, og, ob] = this.occupied;
-    const [fr, fg, fb] = this.free;
+    const cellStrings = this.cellStrings;
     const lines = this.showGridLines;
 
     for (let row = 0; row < rows; row++) {
@@ -102,11 +108,7 @@ export class OccupancyGridLayer implements Layer {
         if (v < 0) {
           ctx.fillStyle = this.unknownColor;
         } else {
-          const t = Math.max(0, Math.min(1, v / 100));
-          const r = Math.round(fr + (or - fr) * t);
-          const g = Math.round(fg + (og - fg) * t);
-          const b = Math.round(fb + (ob - fb) * t);
-          ctx.fillStyle = `rgb(${r},${g},${b})`;
+          ctx.fillStyle = cellStrings[Math.min(100, Math.round(v))]!;
         }
         ctx.fillRect(px, py, pw, ph);
         if (lines) {
@@ -127,4 +129,22 @@ export class OccupancyGridLayer implements Layer {
     this.data = new Float32Array(0);
     this.dataLength = 0;
   }
+}
+
+/** Pre-format the free→occupied gradient as `rgb(...)` strings per percent (0..100). */
+function buildCellStrings(
+  free: [number, number, number],
+  occupied: [number, number, number],
+): string[] {
+  const [fr, fg, fb] = free;
+  const [or, og, ob] = occupied;
+  const out: string[] = new Array(101);
+  for (let k = 0; k <= 100; k++) {
+    const t = k / 100;
+    const r = Math.round(fr + (or - fr) * t);
+    const g = Math.round(fg + (og - fg) * t);
+    const b = Math.round(fb + (ob - fb) * t);
+    out[k] = `rgb(${r},${g},${b})`;
+  }
+  return out;
 }
