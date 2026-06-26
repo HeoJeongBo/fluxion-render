@@ -1,5 +1,20 @@
 # Changelog
 
+# [0.20.0](https://github-personal/HeoJeongBo/fluxion-render/compare/fluxion-render-v0.19.1...fluxion-render-v0.20.0) (2026-06-26)
+
+
+### Features
+
+* **examples:** stagger broadcast mounts and backfill late charts on ready ([e86f9f5](https://github-personal/HeoJeongBo/fluxion-render/commit/e86f9f56b5f6f2c966dc385654562c602a323855))
+* **render:** staggerMount to spread a burst of mounts across frames ([573912f](https://github-personal/HeoJeongBo/fluxion-render/commit/573912f6cd4bdc81647927db5f7e3faf2305a0e1))
+
+
+### Performance Improvements
+
+* **render:** cache colormap rgb() strings per LUT entry ([a58a09a](https://github-personal/HeoJeongBo/fluxion-render/commit/a58a09aa2a29d7d8cb4df9b95a60660477ff4b03))
+* **render:** opaque context, skip no-op resize, reuse decimation scratch, inline axis ticks ([df96a63](https://github-personal/HeoJeongBo/fluxion-render/commit/df96a63056c7b6baf18ef0adab0d319ef9f86861))
+* **render:** sliding-window y-extent for streaming-layer scan ([5ed1bb3](https://github-personal/HeoJeongBo/fluxion-render/commit/5ed1bb3a87fc930f45b605ef59b05824e3603dd1))
+
 ## [0.19.1](https://github-personal/HeoJeongBo/fluxion-render/compare/fluxion-render-v0.19.0...fluxion-render-v0.19.1) (2026-06-25)
 
 
