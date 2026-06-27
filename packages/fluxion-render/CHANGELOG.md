@@ -1,5 +1,13 @@
 # Changelog
 
+# [0.22.0](https://github-personal/HeoJeongBo/fluxion-render/compare/fluxion-render-v0.21.0...fluxion-render-v0.22.0) (2026-06-27)
+
+
+### Features
+
+* **examples:** mount/unmount churn stress demo with recycle toggle ([f6b6ec0](https://github-personal/HeoJeongBo/fluxion-render/commit/f6b6ec0e60c48e41a9552dcea766f3f20533b2d2))
+* **render:** host recycle pool + mount/unmount lifecycle hardening ([2aa643b](https://github-personal/HeoJeongBo/fluxion-render/commit/2aa643b2a2cee8397cf1cfd719a6e36685b05faa))
+
 # [0.21.0](https://github-personal/HeoJeongBo/fluxion-render/compare/fluxion-render-v0.20.0...fluxion-render-v0.21.0) (2026-06-26)
 
 
