@@ -56,6 +56,14 @@
     "url": "git+https://github.com/HeoJeongBo/fluxion-render.git",
     "directory": "packages/fluxion-replay"
   },
+  "homepage": "https://github.com/HeoJeongBo/fluxion-render/tree/main/packages/fluxion-replay#readme",
+  "bugs": {
+    "url": "https://github.com/HeoJeongBo/fluxion-render/issues"
+  },
+  "engines": {
+    "node": ">=18",
+    "pnpm": ">=9"
+  },
   "publishConfig": {
     "access": "public"
   },

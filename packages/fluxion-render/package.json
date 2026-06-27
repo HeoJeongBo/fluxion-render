@@ -68,6 +68,10 @@
   "bugs": {
     "url": "https://github.com/HeoJeongBo/fluxion-render/issues"
   },
+  "engines": {
+    "node": ">=18",
+    "pnpm": ">=9"
+  },
   "publishConfig": {
     "access": "public"
   },

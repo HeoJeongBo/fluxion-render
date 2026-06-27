@@ -50,6 +50,14 @@
     "url": "git+https://github.com/HeoJeongBo/fluxion-render.git",
     "directory": "packages/fluxion-worker"
   },
+  "homepage": "https://github.com/HeoJeongBo/fluxion-render/tree/main/packages/fluxion-worker#readme",
+  "bugs": {
+    "url": "https://github.com/HeoJeongBo/fluxion-render/issues"
+  },
+  "engines": {
+    "node": ">=18",
+    "pnpm": ">=9"
+  },
   "publishConfig": {
     "access": "public"
   },
