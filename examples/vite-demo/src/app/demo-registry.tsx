@@ -7,6 +7,7 @@ import { BoxPlotDemoPage } from "../pages/box-plot-demo";
 import { BroadcastStressDemoPage } from "../pages/broadcast-stress-demo";
 import { BrushDemoPage } from "../pages/brush-demo";
 import { CandlestickDemoPage } from "../pages/candlestick-demo";
+import { ChurnStressDemoPage } from "../pages/churn-stress-demo";
 import { CrosshairDemoPage } from "../pages/crosshair-demo";
 import { EventMarkerDemoPage } from "../pages/event-marker-demo";
 import { ExternalAxesDemoPage } from "../pages/external-axes-demo";
@@ -130,6 +131,11 @@ export const DEMO_GROUPS: readonly DemoGroup[] = [
       { slug: "historical", label: "Historical", component: HistoricalDemoPage },
       { slug: "lidar", label: "LiDAR 30k", component: LidarDemoPage },
       { slug: "pool", label: "Pool (40 charts)", component: PoolDemoPage },
+      {
+        slug: "churn",
+        label: "Mount/Unmount Churn (300)",
+        component: ChurnStressDemoPage,
+      },
       { slug: "stress", label: "Stress (300@500Hz)", component: StressTestDemoPage },
       {
         slug: "broadcast-stress",
