@@ -19,6 +19,7 @@ export const Op = {
   CLEAR_DATA: 13,
   SET_VISIBLE: 14,
   CONFIG_BATCH: 15,
+  RESET: 16,
 } as const;
 export type Op = (typeof Op)[keyof typeof Op];
 
@@ -208,6 +209,21 @@ export interface SetVisibleMsg {
   hostId?: string;
 }
 
+/**
+ * Reset an engine to a pristine, just-constructed state WITHOUT tearing down
+ * its OffscreenCanvas binding or worker engine — the basis of host recycling.
+ * Disposes every layer (empty stack), rewinds the viewport (`latestT`, bounds,
+ * observed-y, last-emitted-bounds latches) and engine-level bg/axis style back
+ * to defaults, and drops any pending tick/bounds emitter listeners. After a
+ * RESET the engine is indistinguishable from a fresh one, so the normal mount
+ * sequence (ADD_LAYER per spec, SET_BG_COLOR, RESIZE, SET_VISIBLE) re-hydrates
+ * a recycled host exactly as a cold one.
+ */
+export interface ResetMsg {
+  op: typeof Op.RESET;
+  hostId?: string;
+}
+
 /** Update axis rendering style (color, font, tick size, etc.). */
 export interface SetAxisStyleMsg {
   op: typeof Op.SET_AXIS_STYLE;
@@ -234,7 +250,8 @@ export type HostMsg =
   | SetAxisCanvasMsg
   | SetAxisStyleMsg
   | ClearDataMsg
-  | SetVisibleMsg;
+  | SetVisibleMsg
+  | ResetMsg;
 
 /**
  * Stream-channel message for custom worker scripts.

@@ -20,8 +20,13 @@ import type { ScatterColoredConfig } from "../../../entities/scatter-colored-lay
 import type { StackedAreaConfig } from "../../../entities/stacked-area-layer";
 import type { StepChartConfig } from "../../../entities/step-chart-layer";
 import type { TrajectoryConfig } from "../../../entities/trajectory-layer";
-import { FluxionHost, type FluxionHostOptions } from "../../../features/host";
-import { enqueueMount } from "./mount-scheduler";
+import {
+  FluxionHost,
+  type FluxionHostOptions,
+  type HostBundle,
+  type HostRecyclePool,
+} from "../../../features/host";
+import { enqueueDispose, enqueueMount } from "./mount-scheduler";
 import { type ResizeInfo, useResizeObserver } from "./use-resize-observer";
 
 /**
@@ -81,6 +86,24 @@ export interface UseFluxionCanvasOptions {
    * you read the host imperatively right after mount instead of via `onReady`.
    */
   staggerMount?: boolean;
+  /**
+   * Opt into host RECYCLING: instead of creating a `FluxionHost` on mount and
+   * disposing it on unmount, borrow a warm one from this pool and return it on
+   * unmount. The expensive create→destroy cycle (OffscreenCanvas transfer +
+   * worker init + first render) collapses into a cheap re-parent + reset — the
+   * big CPU win for virtualized lists, accordions, and grids that remount.
+   * Create one with {@link useHostRecyclePool} and share it across compatible
+   * charts (same worker pool, axis-canvas presence, etc.). When omitted, the
+   * normal create/dispose lifecycle is used.
+   */
+  recyclePool?: HostRecyclePool;
+  /**
+   * Optional explicit recycle bucket. Charts sharing a {@link recyclePool} but
+   * with structurally different layers/options should pass distinct keys so an
+   * incompatible warm host is never reused. When omitted, a key is derived from
+   * the worker pool identity + axis-canvas presence + render options.
+   */
+  recycleKey?: string;
 }
 
 export interface UseFluxionCanvasResult {
@@ -96,15 +119,42 @@ export interface UseFluxionCanvasResult {
   host: FluxionHost | null;
 }
 
-function makeAxisCanvas(container: HTMLDivElement): HTMLCanvasElement {
-  const canvas = document.createElement("canvas");
+function styleCanvas(canvas: HTMLCanvasElement): HTMLCanvasElement {
   canvas.style.display = "block";
   canvas.style.width = "100%";
   canvas.style.height = "100%";
   canvas.style.minWidth = "0";
   canvas.style.minHeight = "0";
+  return canvas;
+}
+
+function makeMainCanvas(container: HTMLDivElement): HTMLCanvasElement {
+  const canvas = styleCanvas(document.createElement("canvas"));
   container.appendChild(canvas);
   return canvas;
+}
+
+function makeAxisCanvas(container: HTMLDivElement): HTMLCanvasElement {
+  return makeMainCanvas(container);
+}
+
+/** Current pixel size + DPR of a container, for an immediate post-reparent resize. */
+function measure(el: HTMLElement): { width: number; height: number; dpr: number } {
+  const rect = el.getBoundingClientRect();
+  /* v8 ignore start -- devicePixelRatio is always defined in the DOM test env; SSR fallback */
+  const dpr = typeof devicePixelRatio === "number" ? devicePixelRatio : 1;
+  /* v8 ignore stop */
+  return { width: rect.width, height: rect.height, dpr };
+}
+
+/** Remove a canvas from its container if still attached (re-parent / unmount safe). */
+function detachCanvas(
+  canvas: HTMLCanvasElement | undefined,
+  container: HTMLElement | null,
+): void {
+  if (canvas && container && canvas.parentNode === container) {
+    container.removeChild(canvas);
+  }
 }
 
 /**
@@ -148,6 +198,10 @@ export function useFluxionCanvas(
   // Layer kind currently present in the worker, keyed by id. Drives the
   // structural reconcile (add / remove / kind-change) below.
   const lastKindsRef = useRef<Map<string, FluxionLayerSpec["kind"]>>(new Map());
+  // The live recycle bundle this mount owns (host + its canvas(es)). Known
+  // synchronously on the warm path; set inside the deferred work on the cold
+  // path. Carried so cleanup can recycle (park) or dispose it.
+  const bundleRef = useRef<HostBundle | null>(null);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -155,85 +209,148 @@ export function useFluxionCanvas(
     if (!container) return;
     /* v8 ignore stop */
 
-    // StrictMode: parent cleanup disposes the pool and schedules a new one via setPool,
-    // but children effects re-run synchronously before that re-render propagates the new
-    // pool. Bump mountKey so this effect re-runs after the parent re-renders with pool B.
+    // StrictMode: a parent's cleanup disposes the worker pool and schedules a new
+    // one via setState, but children effects re-run synchronously before that
+    // re-render propagates. Bump mountKey so this effect re-runs against the live
+    // pool instead of a disposed one. (A disposed RECYCLE pool needs no such guard:
+    // its `acquire` safely returns null → the cold path, and `release` disposes.)
     const current = optionsRef.current;
     if (current.hostOptions?.pool?.isDisposed) {
       setMountKey((k) => k + 1);
       return;
     }
 
-    // Main chart canvas — created fresh each mount.
-    const canvas = document.createElement("canvas");
-    canvas.style.display = "block";
-    canvas.style.width = "100%";
-    canvas.style.height = "100%";
-    canvas.style.minWidth = "0";
-    canvas.style.minHeight = "0";
-    container.appendChild(canvas);
-
-    // Axis canvases — also created fresh each mount so transferControlToOffscreen
-    // is always called on a brand-new element (StrictMode double-invoke safe).
+    const recyclePool = current.recyclePool ?? null;
     const xAxisContainer = current.xAxisContainerRef?.current ?? null;
     const yAxisContainer = current.yAxisContainerRef?.current ?? null;
-    const xAxisCanvas = xAxisContainer ? makeAxisCanvas(xAxisContainer) : undefined;
-    const yAxisCanvas = yAxisContainer ? makeAxisCanvas(yAxisContainer) : undefined;
+    const keyParams = {
+      hostOptions: current.hostOptions,
+      hasXAxis: xAxisContainer !== null,
+      hasYAxis: yAxisContainer !== null,
+      recycleKey: current.recycleKey,
+    };
 
-    // The expensive part — OffscreenCanvas transfer + worker POOL_INIT + first
-    // render — lives in this closure so `staggerMount` can defer it through the
-    // shared frame queue, spreading a burst of simultaneous mounts over frames.
-    let instance: FluxionHost | null = null;
-    // Flipped true by cleanup. Belt-and-suspenders so a deferred createHost can
-    // never spin up an orphaned host after unmount: cancelMount already removes
-    // the queued task before it runs, so this guard is unreachable on the normal
-    // path, but it makes the lifecycle provably safe against any future change to
-    // the scheduler's dequeue timing.
-    let cancelled = false;
-    const createHost = () => {
-      /* v8 ignore start -- defensive: cancelMount removes the queued task on unmount, so createHost is never invoked once cancelled on the normal path */
-      if (cancelled) return;
-      /* v8 ignore stop */
-      instance = new FluxionHost(canvas, {
-        ...current.hostOptions,
-        xAxisElement: xAxisCanvas,
-        yAxisElement: yAxisCanvas,
-      });
-      hostRef.current = instance;
-      for (const l of current.layers) instance.addLayer(l.id, l.kind, l.config);
-      // Baseline the reconcile map to what addLayer just applied (re-seeded on
-      // every remount so a fresh host never inherits a stale baseline).
+    // Baseline the reconcile maps to the layers we just (re-)applied so the
+    // reconcile effect doesn't re-send what the worker already holds.
+    const seedReconcile = () => {
       lastAppliedRef.current = new Map(
         current.layers.map((l) => [l.id, JSON.stringify(l.config)]),
       );
       lastKindsRef.current = new Map(current.layers.map((l) => [l.id, l.kind]));
-      setHost(instance);
-      current.onReady?.(instance);
     };
 
-    // Staggered host creation is the DEFAULT (spreads a burst of mounts across
-    // frames); opt out with `staggerMount: false` for synchronous creation.
+    // Borrow a warm host for this config, or null → cold create. Parked bundles
+    // are pristine (reset on release), so the warm path can re-add layers onto an
+    // empty stack exactly like a cold one — no duplicate layers.
+    const warm = recyclePool ? recyclePool.acquire(keyParams) : null;
+
+    // The placeholder canvas(es): a warm bundle's already-transferred canvases
+    // re-parented into THIS mount's containers (visible immediately), or fresh
+    // ones for a cold mount. Either way the expensive/deferred work runs later so
+    // `staggerMount` can spread a burst across frames.
+    let canvas: HTMLCanvasElement;
+    let xAxisCanvas: HTMLCanvasElement | undefined;
+    let yAxisCanvas: HTMLCanvasElement | undefined;
+    let cancelled = false;
+    let work: () => void;
+
+    if (warm) {
+      canvas = warm.canvas;
+      xAxisCanvas = warm.xAxisCanvas;
+      yAxisCanvas = warm.yAxisCanvas;
+      container.appendChild(canvas);
+      if (xAxisCanvas && xAxisContainer) xAxisContainer.appendChild(xAxisCanvas);
+      if (yAxisCanvas && yAxisContainer) yAxisContainer.appendChild(yAxisCanvas);
+      // Known synchronously so an unmount before activation can return it.
+      bundleRef.current = warm;
+      // Cheap reactivation (re-add layers + resize + resume) — none of cold's
+      // OffscreenCanvas transfer / worker init / first render.
+      work = () => {
+        /* v8 ignore start -- defensive: cancelMount drops the queued task on unmount, so this never runs once cancelled on the normal path */
+        if (cancelled) return;
+        /* v8 ignore stop */
+        const { host } = warm;
+        for (const l of current.layers) host.addLayer(l.id, l.kind, l.config);
+        if (current.hostOptions?.bgColor !== undefined) {
+          host.setBgColor(current.hostOptions.bgColor);
+        }
+        // Re-parent may have landed in a differently-sized slot — resize now
+        // instead of waiting for the debounced ResizeObserver.
+        const size = measure(container);
+        host.resize(size.width, size.height, size.dpr);
+        host.setVisible(true);
+        seedReconcile();
+        hostRef.current = host;
+        setHost(host);
+        current.onReady?.(host);
+      };
+    } else {
+      canvas = makeMainCanvas(container);
+      // Axis canvases created fresh so transferControlToOffscreen is always called
+      // on a brand-new element (StrictMode double-invoke safe).
+      xAxisCanvas = xAxisContainer ? makeAxisCanvas(xAxisContainer) : undefined;
+      yAxisCanvas = yAxisContainer ? makeAxisCanvas(yAxisContainer) : undefined;
+      work = () => {
+        /* v8 ignore start -- defensive: cancelMount drops the queued task on unmount, so this never runs once cancelled on the normal path */
+        if (cancelled) return;
+        /* v8 ignore stop */
+        recyclePool?.markCreated();
+        const host = new FluxionHost(canvas, {
+          ...current.hostOptions,
+          xAxisElement: xAxisCanvas,
+          yAxisElement: yAxisCanvas,
+        });
+        for (const l of current.layers) host.addLayer(l.id, l.kind, l.config);
+        seedReconcile();
+        bundleRef.current = {
+          host,
+          canvas,
+          xAxisCanvas,
+          yAxisCanvas,
+          key: recyclePool ? recyclePool.keyFor(keyParams) : "",
+        };
+        hostRef.current = host;
+        setHost(host);
+        current.onReady?.(host);
+      };
+    }
+
+    // Staggered work is the DEFAULT (spreads a burst of mounts across frames);
+    // opt out with `staggerMount: false` for synchronous creation.
     const stagger = current.staggerMount !== false;
-    const cancelMount = stagger ? enqueueMount(createHost) : null;
-    if (!cancelMount) createHost();
+    const cancelMount = stagger ? enqueueMount(work) : null;
+    if (!cancelMount) work();
 
     return () => {
-      // Mark cancelled FIRST so a not-yet-run deferred createHost bails out, then
-      // drop the queued task. If the host hasn't been created yet (unmounted
-      // before its turn in the frame queue), there's nothing to tear down and
-      // nothing leaks. Otherwise dispose the live host.
+      // Cancel a not-yet-run deferred work item first, then recycle/dispose the
+      // live bundle if one exists.
       cancelled = true;
       cancelMount?.();
-      if (instance) instance.dispose();
+      const bundle = bundleRef.current;
+      // Detach the placeholder canvas(es) from the live DOM. A warm bundle KEEPS
+      // its canvas references (re-parented on next acquire); a disposed host's
+      // are GC'd with it.
+      detachCanvas(canvas, container);
+      detachCanvas(xAxisCanvas, xAxisContainer);
+      detachCanvas(yAxisCanvas, yAxisContainer);
+      if (bundle) {
+        if (recyclePool && !recyclePool.isDisposed) {
+          // Recycle: reset to pristine + pause (synchronous so the same-commit
+          // remount can borrow it back), then park for the next mount.
+          bundle.host.reset();
+          bundle.host.setVisible(false);
+          recyclePool.release(bundle);
+        } else {
+          // No recycle pool: dispose — deferred through the frame queue when
+          // staggered so a bulk unmount spreads the teardown across frames.
+          const host = bundle.host;
+          if (stagger) enqueueDispose(() => host.dispose());
+          else host.dispose();
+        }
+      }
       hostRef.current = null;
+      bundleRef.current = null;
       setHost(null);
-      if (canvas.parentNode === container) container.removeChild(canvas);
-      if (xAxisCanvas && xAxisCanvas.parentNode === xAxisContainer) {
-        xAxisContainer!.removeChild(xAxisCanvas);
-      }
-      if (yAxisCanvas && yAxisCanvas.parentNode === yAxisContainer) {
-        yAxisContainer!.removeChild(yAxisCanvas);
-      }
     };
   }, [mountKey]); // eslint-disable-line react-hooks/exhaustive-deps
 

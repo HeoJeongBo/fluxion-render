@@ -69,17 +69,10 @@ function computeFromConfig(config: AxisGridConfig, now = Date.now()): AxisTickSe
  *   initial `computeAxisTicks` snapshot until the first worker message arrives.
  *   When `xTickFormat` is a function the worker sends raw x values and the
  *   main thread applies the function before updating state.
- *
- * @param _refreshMs
- *   @deprecated Ignored — tick refresh is worker-driven (time mode) or
- *   memoized (fixed mode). Kept only so existing 4-arg call sites with a
- *   positional `host` don't break. Pass `undefined`.
  */
 export function useAxisTicks(
   layers: FluxionLayerSpec[],
   axisLayerId: string,
-  /** @deprecated Ignored. Kept for positional API compatibility. */
-  _refreshMs = 16,
   host?: FluxionHost | null,
 ): AxisTickSet | null {
   const spec = getAxisSpec(layers, axisLayerId);

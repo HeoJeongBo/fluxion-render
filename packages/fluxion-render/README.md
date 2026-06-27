@@ -11,13 +11,25 @@ Built for robotics and sensor systems: streaming line charts, LiDAR point clouds
 npm install @heojeongbo/fluxion-render
 ```
 
-> **Need time-travel replay?** See [`@heojeongbo/fluxion-replay`](https://www.npmjs.com/package/@heojeongbo/fluxion-replay) — record any data stream and scrub back through the last N minutes, including video.
+> **Need time-travel replay?** See [`@heojeongbo/fluxion-replay`](https://www.npmjs.com/package/@heojeongbo/fluxion-replay) — record any data stream and scrub back through the last N minutes, including video. Part of a three-package set: **fluxion-worker ← fluxion-render ← fluxion-replay**.
+
+---
+
+## Contents
+
+- [Quick Start](#quick-start) · [Worker Pool](#worker-pool) · [Performance / many charts](#performance--many-charts)
+- [Layer Types](#layer-types) — every streaming / static / robot layer and its config
+- [React API](#react-api) — hooks (`useFluxionCanvas`, `useFluxionStream`, crosshair, table, …) + components
+- [Vanilla JS API](#vanilla-js-api) — `FluxionHost` / `FluxionWorkerPool` without React
+- [Data Format](#data-format) · [Custom Worker Script](#custom-worker-script-zero-copy-stream) · [Architecture](#architecture)
+- [Troubleshooting](#troubleshooting) · [Upgrading](#upgrading) · [Testing](#testing)
 
 ---
 
 ## Features
 
 - **Worker Pool** — charts share an adaptive pool that grows with load. Zero config required.
+- **Host recycling** — reuse warm chart hosts across mount/unmount for churny UIs (virtualized lists, accordions) instead of paying create/destroy each time
 - **OffscreenCanvas** — all rendering happens off the main thread
 - **Zero-copy data** — `Float32Array` ownership is transferred to the worker, never copied
 - **React integration** — hooks and components included (`/react` subpath)
@@ -342,6 +354,57 @@ regenerate it) and push it once with `handle.pushBatch(...)` — or
 backfill and the live stream share one ring and merge in push order, so keep the
 backfilled timestamps `<=` the next live sample.
 
+### Recycling hosts under heavy churn (`recyclePool`)
+
+Staggering spreads the cost of a host's creation across frames, but it doesn't
+*remove* it. In a UI that mounts and unmounts charts continuously — a virtualized
+list scrolling, an accordion toggling sections, a grid that periodically remounts
+— the create→destroy cycle itself dominates CPU: every mount runs
+`transferControlToOffscreen` + worker init (new engine + GPU alloc) + a first
+render, and every unmount tears it all down.
+
+A **host recycle pool** keeps a host *warm* on unmount instead of destroying it,
+then hands it back on the next compatible mount. Reuse is cheap: the parked host
+is reset to a pristine state and its `<canvas>` is re-parented into the new slot —
+none of the transfer/init/first-render cost. Create one with `useHostRecyclePool`
+and pass it to each `<FluxionCanvas>` whose churn you want to absorb:
+
+```tsx
+import { useHostRecyclePool, FluxionCanvas } from '@heojeongbo/fluxion-render/react';
+
+function Grid({ items }) {
+  const recyclePool = useHostRecyclePool({ max: 16 }); // disposed on unmount
+  return items.map((it) => (
+    <FluxionCanvas
+      key={it.id}
+      recyclePool={recyclePool}
+      layers={it.layers}
+      hostOptions={{ pool, maxFps: 30 }}
+    />
+  ));
+}
+```
+
+- **Compatibility.** Warm hosts are only reused for a mount with matching
+  construction-fixed options — same worker `pool` (or `workerFactory`), axis-canvas
+  presence, `maxFps`, `transparent`, `emitBounds`/`emitTicks`. The key is derived
+  automatically; pass `recycleKey="…"` to force-separate structurally different
+  chart families that share one pool. A request with no compatible warm host
+  simply falls back to a cold create — recycling never changes correctness, only
+  cost.
+- **`max`** caps warm hosts kept *per key* (default `8`). Higher = fewer cold
+  creates under churn, but more idle memory held (each warm host keeps its
+  worker-side engine + OffscreenCanvas alive). For a virtualized list whose visible
+  working set is small, `8`–`16` is plenty; for a grid that remounts *everything*
+  at once, raise it toward the concurrent count so the whole set recycles.
+- **Stacks with `staggerMount`.** A warm reuse is far cheaper than a cold create,
+  so the per-frame mount budget goes much further. The pool is disposed (tearing
+  down every warm host) when the component holding `useHostRecyclePool` unmounts.
+
+The **Mount/Unmount Churn** demo (`examples/vite-demo`) has a `recycle` toggle and
+a `created` / `recycled` readout: flip it on and `created` stops climbing while
+`recycled` rises and CPU drops.
+
 ---
 
 ## Layer Types
@@ -659,6 +722,10 @@ const { containerRef, host } = useFluxionCanvas({
                                     // (coalesce / maxFps / emitBounds / emitTicks —
                                     // see "Performance / many charts")
   onReady?: (host) => void,         // called once after initialization
+  staggerMount?: boolean,           // defer host creation across frames (default true)
+  recyclePool?: HostRecyclePool,    // reuse warm hosts on mount/unmount instead of
+  recycleKey?: string,              // create/destroy — see "Recycling hosts under
+                                    // heavy churn" in Performance / many charts
 });
 ```
 
@@ -761,6 +828,29 @@ const pool = useFluxionWorkerPool({
   workerFactory: () => Worker, // required
 });
 ```
+
+### `useHostRecyclePool(options)`
+
+Creates a scoped host **recycle** pool (disposed, tearing down every warm host,
+when the component unmounts). Pass it as `recyclePool` to each `<FluxionCanvas>` /
+`useFluxionCanvas` whose mount/unmount churn you want to absorb — warm hosts are
+reused instead of re-created. See
+[Recycling hosts under heavy churn](#recycling-hosts-under-heavy-churn-recyclepool)
+for when and how.
+
+```ts
+const recyclePool = useHostRecyclePool({
+  max?: number,   // warm hosts kept per recycle key, default 8 (higher = fewer
+});                // cold creates, more idle worker/GPU memory held)
+
+// recyclePool.stats → { created, recycled }   // cold creates vs warm reuses
+// recyclePool.size                            // currently parked hosts
+
+<FluxionCanvas recyclePool={recyclePool} hostOptions={{ pool }} layers={…} />;
+```
+
+`stats` is handy for a HUD that shows the recycling working (flip the chart churn
+on and watch `recycled` climb while `created` plateaus).
 
 ### `useFluxionHistorical(options)`
 
@@ -1128,7 +1218,9 @@ Key props: `data: { name, value, fill? }[]` (required), `innerRadius`=0 (>0 = do
 
 ### `<FluxionCanvas>`
 
-Declarative wrapper around `useFluxionCanvas`.
+Declarative wrapper around `useFluxionCanvas`. Forwards the same lifecycle props —
+`staggerMount` (default `true`), `recyclePool`, `recycleKey` (see
+[Performance / many charts](#performance--many-charts)).
 
 ```tsx
 import { FluxionCanvas } from '@heojeongbo/fluxion-render/react';
@@ -1136,6 +1228,7 @@ import { FluxionCanvas } from '@heojeongbo/fluxion-render/react';
 <FluxionCanvas
   layers={[axisGridLayer('axis', { ... }), lineLayer('s1', { ... })]}
   hostOptions={{ bgColor: '#fff', pool }}
+  recyclePool={recyclePool}          // optional — reuse warm hosts under churn
   style={{ width: '100%', height: 300 }}
   onReady={(host) => { /* store ref */ }}
 />
@@ -1170,9 +1263,14 @@ const lidar = host.lidar(id, stride?)
 // Custom worker stream (solo mode only)
 host.emitStream(id, buffer, length)  // transfer raw ArrayBuffer to streamHandler
 
-// Canvas
+// Canvas / lifecycle
 host.resize(width, height, dpr)
 host.setBgColor(color)
+host.setVisible(visible)  // pause/resume the worker render loop (also driven by
+                          // document visibility); pauses a parked recycled host
+host.reset()              // back to pristine: dispose all layers + rewind
+                          // viewport/bounds/bg, KEEPING the worker engine +
+                          // OffscreenCanvas alive — the primitive behind recycling
 host.dispose()
 ```
 
@@ -1511,6 +1609,36 @@ ramp(Date.now() + 1000);                // 0.5 — perfect "is data flowing?" sm
 
 Use these to drive integration tests, Storybook stories, or your own demos with the same fixtures the monorepo's demos use.
 
+### Deterministically testing components that mount/unmount a chart
+
+Because [staggered mount](#performance--many-charts) is on by default, mounting or unmounting a `<FluxionCanvas>` defers host creation / teardown across animation frames — so right after `render()` the host isn't ready yet, and right after `unmount()` it hasn't torn down. `/testing` exports helpers to make that deterministic without juggling fake timers:
+
+```ts
+import { render, act } from '@testing-library/react';
+import {
+  flushMountScheduler,
+  resetMountScheduler,
+} from '@heojeongbo/fluxion-render/testing';
+
+afterEach(resetMountScheduler);             // drop any queued tasks between tests
+
+it('streams once mounted', () => {
+  render(<MyChart />);
+  act(() => flushMountScheduler());         // run the deferred mount now → host + onReady
+  // ...assert the chart is live...
+});
+
+it('tears down on unmount', () => {
+  const { unmount } = render(<MyChart />);
+  act(() => flushMountScheduler());         // mount
+  unmount();
+  act(() => flushMountScheduler());         // run the deferred dispose now
+  // ...assert it was cleaned up...
+});
+```
+
+`flushMountScheduler()` runs **all** queued mount/dispose tasks synchronously (ignoring the per-frame rate); wrap it in `act()` because a flushed mount calls `setHost`. Prefer this over fake timers for lifecycle assertions. Alternatively, pass `staggerMount={false}` to a chart under test to make its mount/unmount fully synchronous (no flush needed). `configureMountScheduler` is re-exported here too for tuning the rate in tests.
+
 ---
 
 ## Testing
@@ -1529,6 +1657,34 @@ branch on every `if` without an `else` (reported with no source location, so it
 can't be tested or ignored) — every reachable branch is covered or carries a
 documented `/* v8 ignore … */`. The coverage badge above is static; the real
 guarantee is the threshold gate, which fails CI if coverage regresses.
+
+---
+
+## Troubleshooting
+
+**`host` is `null` right after mount (or `onReady` never fired synchronously).**
+Host creation is **staggered by default** (see [Performance / many charts](#performance--many-charts)) — the worker host spins up on a later frame, so always read it from `onReady` / the `host` state, never synchronously after render. Pass `staggerMount={false}` if you genuinely need a synchronous host.
+
+**Console: `Layer "…": ring capacity (N) is smaller than the visible window holds`.**
+The ring evicts samples before they scroll off, so the chart drops data. Increase the layer's `capacity`, or set `retentionMs` + `maxHz` and let the ring size itself.
+
+**Console: `Layer "…": values per sample is N, but the layer config declares M` (or `column values` / `lidar handle stride`).**
+A handle is pushing the wrong arity for its layer — the worker would read at the wrong stride and render garbage. Match the push shape to the layer config: stacked-area `seriesCount`, heatmap-stream `yBins`, lidar `stride`.
+
+**Console: `A timestamp (…) looks like an absolute epoch (Date.now())`.**
+Push **host-relative** ms (`Date.now() - timeOrigin`), not absolute epoch ms — Float32 quantises absolute epochs onto a single x-pixel. Use [`useTimeOrigin()`](#react-api).
+
+**Blank chart / nothing draws.** Add an `axisGridLayer(...)` (it owns the x/y bounds and must be in the layer list), and make sure the container has a non-zero size.
+
+---
+
+## Upgrading
+
+**Staggered mount is on by default (since 0.21).** `<FluxionCanvas>` and `useFluxionCanvas` now defer host creation across animation frames, so `host` / `onReady` arrive **one frame later** than before — even for a single chart. If you relied on a synchronous host (e.g. calling `getHost()` immediately after mount), either move that logic into `onReady` or opt out with `staggerMount={false}`. See [Performance / many charts](#performance--many-charts).
+
+**Arity validation warnings (since 0.21).** Pushing the wrong number of values for a stacked-area / heatmap-stream / lidar layer now logs a one-time `console.warn`. These surface a previously-silent data-corruption bug — see Troubleshooting above to resolve them.
+
+**Opaque canvas by default.** The 2D context is created with `alpha: false` for faster compositing. If you use a translucent `bgColor` and want the page to show through, set `transparent: true` in `hostOptions`.
 
 ---
 

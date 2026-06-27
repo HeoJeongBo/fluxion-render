@@ -194,6 +194,76 @@ describe("Engine", () => {
     engine.dispatch({ op: Op.DISPOSE });
   });
 
+  it("RESET disposes every layer and rewinds engine state to a pristine default", () => {
+    const engine = new Engine();
+    const canvas = newCanvas(100, 100);
+    engine.dispatch({
+      op: Op.INIT,
+      canvas,
+      width: 100,
+      height: 100,
+      dpr: 1,
+      bgColor: "#ff0000",
+    });
+    engine.dispatch({
+      op: Op.ADD_LAYER,
+      id: "axis",
+      kind: "axis-grid",
+      config: { xMode: "time", timeWindowMs: 1000, yRange: [-1, 1] },
+    });
+    engine.dispatch({
+      op: Op.ADD_LAYER,
+      id: "line",
+      kind: "line",
+      config: { color: "#0f0", capacity: 8 },
+    });
+    const samples = new Float32Array([0, 0, 200, 0.5, 400, -0.3, 600, 0.8]);
+    engine.dispatch({
+      op: Op.DATA,
+      id: "line",
+      buffer: samples.buffer,
+      dtype: "f32",
+      length: samples.length,
+    });
+    flushFrame();
+    const ctx = (canvas as unknown as { getContext: () => FakeCtx }).getContext();
+    expect(ctx.calls.some((c) => c.name === "stroke")).toBe(true);
+
+    ctx.calls.length = 0;
+    engine.dispatch({ op: Op.RESET });
+    flushFrame();
+    // Every layer disposed → no line stroke, no axis labels; bg back to default.
+    expect(ctx.calls.some((c) => c.name === "stroke")).toBe(false);
+    expect(ctx.calls.some((c) => c.name === "fillText")).toBe(false);
+    expect(ctx.calls.some((c) => c.name === "fillRect")).toBe(true);
+    expect(ctx.fillStyle).toBe("#0b0d12");
+
+    // Re-adding the same ids works on the now-empty stack — no duplicate layers,
+    // no stale data — proving the host can be recycled for a fresh tenant.
+    engine.dispatch({
+      op: Op.ADD_LAYER,
+      id: "axis",
+      kind: "axis-grid",
+      config: { xMode: "time", timeWindowMs: 1000, yRange: [-1, 1] },
+    });
+    engine.dispatch({
+      op: Op.ADD_LAYER,
+      id: "line",
+      kind: "line",
+      config: { color: "#0f0", capacity: 8 },
+    });
+    engine.dispatch({
+      op: Op.DATA,
+      id: "line",
+      buffer: new Float32Array([0, 0, 200, 0.5, 400, -0.3]).buffer,
+      dtype: "f32",
+      length: 6,
+    });
+    flushFrame();
+    expect(ctx.calls.some((c) => c.name === "stroke")).toBe(true);
+    engine.dispatch({ op: Op.DISPOSE });
+  });
+
   it("CONFIG_BATCH applies config to known ids and ignores unknown ones", () => {
     const engine = new Engine();
     const canvas = newCanvas(100, 100);

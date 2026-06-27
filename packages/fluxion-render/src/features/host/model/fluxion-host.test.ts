@@ -131,6 +131,34 @@ describe("FluxionHost", () => {
     expect(terminate).toHaveBeenCalledTimes(1);
   });
 
+  it("dispose completes even when the final flush throws (teardown not aborted)", () => {
+    let throwOnPost = false;
+    const terminate = vi.fn();
+    const worker = {
+      postMessage: vi.fn(() => {
+        if (throwOnPost) throw new Error("worker gone");
+      }),
+      terminate,
+      onmessage: null,
+      onerror: null,
+    } as unknown as Worker;
+    const host = new FluxionHost(makeCanvas(), { workerFactory: () => worker });
+    const line = host.addLineLayer("line");
+    line.push({ t: 1, y: 2 }); // stage a sample → pending non-empty (coalesced)
+
+    throwOnPost = true; // the final flush's DATA post will now throw
+    expect(() => host.dispose()).not.toThrow(); // resilient — teardown still runs
+    expect(terminate).toHaveBeenCalledTimes(1); // worker still terminated
+
+    // Disposed: subsequent ops are no-ops (post is guarded), so no further posts.
+    throwOnPost = false;
+    const post = worker.postMessage as ReturnType<typeof vi.fn>;
+    const before = post.mock.calls.length;
+    host.addLayer("x", "line");
+    host.pushData("x", new Float32Array([1]));
+    expect(post.mock.calls.length).toBe(before);
+  });
+
   it("addLineLayer creates the layer and returns a typed handle", () => {
     const { worker, posts } = makeFakeWorker();
     // coalesce:false so the single push posts its DATA synchronously here.
@@ -894,6 +922,60 @@ describe("FluxionHost", () => {
     addSpy.mockRestore();
     removeSpy.mockRestore();
   });
+
+  it("setVisible(true) forwards a SET_VISIBLE message", () => {
+    const { worker, posts } = makeFakeWorker();
+    const host = new FluxionHost(makeCanvas(), { workerFactory: () => worker });
+    posts.length = 0;
+    host.setVisible(true);
+    expect(posts).toHaveLength(1);
+    expect(posts[0].msg).toMatchObject({ op: Op.SET_VISIBLE, visible: true });
+    host.dispose();
+  });
+
+  it("setVisible(false) drains staged data before SET_VISIBLE", () => {
+    const { worker, posts } = makeFakeWorker();
+    const host = new FluxionHost(makeCanvas(), { workerFactory: () => worker });
+    const line = host.addLineLayer("chart");
+    posts.length = 0;
+    line.push({ t: 1, y: 2 }); // staged (coalesced), not yet posted
+    host.setVisible(false);
+    const ops = posts.map((p) => (p.msg as { op: number }).op);
+    expect(ops.indexOf(Op.DATA)).toBeGreaterThanOrEqual(0);
+    expect(ops.indexOf(Op.DATA)).toBeLessThan(ops.indexOf(Op.SET_VISIBLE));
+    expect(posts.at(-1)!.msg).toMatchObject({ op: Op.SET_VISIBLE, visible: false });
+    host.dispose();
+  });
+
+  it("setVisible is a no-op after dispose", () => {
+    const { worker, posts } = makeFakeWorker();
+    const host = new FluxionHost(makeCanvas(), { workerFactory: () => worker });
+    host.dispose();
+    posts.length = 0;
+    host.setVisible(true);
+    expect(posts).toHaveLength(0);
+  });
+
+  it("reset() posts RESET and drops staged data without posting it", () => {
+    const { worker, posts } = makeFakeWorker();
+    const host = new FluxionHost(makeCanvas(), { workerFactory: () => worker });
+    const line = host.addLineLayer("chart");
+    posts.length = 0;
+    line.push({ t: 1, y: 2 }); // staged → scheduled flush
+    host.reset();
+    // Only RESET — the staged sample is dropped, never posted as Op.DATA.
+    expect(posts.map((p) => (p.msg as { op: number }).op)).toEqual([Op.RESET]);
+    host.dispose();
+  });
+
+  it("reset is a no-op after dispose", () => {
+    const { worker, posts } = makeFakeWorker();
+    const host = new FluxionHost(makeCanvas(), { workerFactory: () => worker });
+    host.dispose();
+    posts.length = 0;
+    host.reset();
+    expect(posts).toHaveLength(0);
+  });
 });
 
 describe("FluxionHost push coalescing", () => {
@@ -1172,28 +1254,34 @@ describe("FluxionHost arity tracking", () => {
     host.dispose();
   });
 
-  it("host.lidar(id) warns when the handle stride mismatches the layer config", () => {
+  it("host.lidar(id) auto-resolves stride from the layer config (no arg)", () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     const { worker } = makeFakeWorker();
     const host = new FluxionHost(makeCanvas(), { workerFactory: () => worker });
 
     host.addLayer("ld", "lidar", { stride: 3 });
-    host.lidar("ld"); // defaults to stride 4 → mismatch → warn
-    expect(warn).toHaveBeenCalledTimes(1);
-
-    host.lidar("untracked"); // no recorded arity → no warn
-    expect(warn).toHaveBeenCalledTimes(1);
+    expect(host.lidar("ld").stride).toBe(3); // resolved from config → no re-passing
+    expect(host.lidar("untracked").stride).toBe(4); // unknown layer → default 4
+    expect(warn).not.toHaveBeenCalled();
 
     host.dispose();
   });
 
-  it("host.lidar(id) is silent when the stride matches the config", () => {
+  it("host.lidar(id, stride) honors an explicit stride and warns only on a config mismatch", () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     const { worker } = makeFakeWorker();
     const host = new FluxionHost(makeCanvas(), { workerFactory: () => worker });
+
     host.addLayer("ld", "lidar", { stride: 2 });
-    host.lidar("ld", 2); // matches → silent
+    expect(host.lidar("ld", 2).stride).toBe(2); // matches config → silent
     expect(warn).not.toHaveBeenCalled();
+
+    expect(host.lidar("ld", 4).stride).toBe(4); // explicit 4 vs config 2 → honored, warned
+    expect(warn).toHaveBeenCalledTimes(1);
+
+    expect(host.lidar("fresh", 3).stride).toBe(3); // explicit on untracked → honored, silent
+    expect(warn).toHaveBeenCalledTimes(1);
+
     host.dispose();
   });
 });

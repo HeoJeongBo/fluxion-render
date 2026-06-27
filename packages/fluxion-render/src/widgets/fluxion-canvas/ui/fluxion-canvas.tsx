@@ -5,7 +5,11 @@ import {
   useMemo,
   useRef,
 } from "react";
-import type { FluxionHost, FluxionHostOptions } from "../../../features/host";
+import type {
+  FluxionHost,
+  FluxionHostOptions,
+  HostRecyclePool,
+} from "../../../features/host";
 import { useXAxisCanvas, useYAxisCanvas } from "../lib/use-axis-canvas";
 import { useAxisTicks } from "../lib/use-axis-ticks";
 import { type FluxionLayerSpec, useFluxionCanvas } from "../lib/use-fluxion-canvas";
@@ -24,6 +28,18 @@ export interface FluxionCanvasProps {
    * `false` for synchronous host creation.
    */
   staggerMount?: boolean;
+  /**
+   * Recycle hosts instead of creating/destroying them per mount. Pass a pool
+   * from {@link useHostRecyclePool} to reuse warm hosts across mounts — the big
+   * CPU win for virtualized lists, accordions, and grids that remount. Omit for
+   * the normal create/dispose lifecycle.
+   */
+  recyclePool?: HostRecyclePool;
+  /**
+   * Optional explicit recycle bucket for charts that share a {@link recyclePool}
+   * but are structurally different. Omit to derive one automatically.
+   */
+  recycleKey?: string;
   /**
    * Renders axis labels in separate canvases drawn by the Worker —
    * y-axis canvas to the LEFT, x-axis canvas BELOW the chart.
@@ -75,6 +91,8 @@ export const FluxionCanvas = forwardRef<FluxionCanvasHandle, FluxionCanvasProps>
       hostOptions,
       onReady,
       staggerMount,
+      recyclePool,
+      recycleKey,
       externalAxes = true,
       axisLayerId = "",
       yAxisWidth = 60,
@@ -106,6 +124,8 @@ export const FluxionCanvas = forwardRef<FluxionCanvasHandle, FluxionCanvasProps>
         : hostOptions,
       onReady,
       staggerMount,
+      recyclePool,
+      recycleKey,
       xAxisContainerRef: externalAxes ? xAxisContainerRef : undefined,
       yAxisContainerRef: externalAxes ? yAxisContainerRef : undefined,
     });
@@ -114,7 +134,7 @@ export const FluxionCanvas = forwardRef<FluxionCanvasHandle, FluxionCanvasProps>
 
     // Legacy React-side axis rendering path (externalAxes=false).
     // Hooks must be called unconditionally — they no-op when host/ticks are absent.
-    const tickSet = useAxisTicks(layers, axisLayerId, 16, externalAxes ? null : host);
+    const tickSet = useAxisTicks(layers, axisLayerId, externalAxes ? null : host);
     const legacyYCanvasRef = useYAxisCanvas(tickSet?.yTicks ?? [], axisStyle);
     const legacyXCanvasRef = useXAxisCanvas(
       xAxisHeight > 0 ? (tickSet?.xTicks ?? []) : [],

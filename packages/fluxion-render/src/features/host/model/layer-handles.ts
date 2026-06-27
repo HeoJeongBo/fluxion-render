@@ -32,6 +32,7 @@ export interface FluxionDataSink {
    * heatmap-stream `yBins`, lidar `stride`) so handles can warn on a mismatched
    * push. Present on `FluxionHost`; absent on lightweight stubs (validation is
    * then skipped).
+   * @internal — plumbing for handle validation; not a stable public API.
    */
   expectedArity?(id: string): number | undefined;
 }
@@ -170,8 +171,9 @@ export type LidarStride = 2 | 3 | 4;
 
 /**
  * Handle for `kind: "lidar"` scatter layers. The stride (2 = xy, 3 = xyz,
- * 4 = xyz+intensity) must match the layer's stride config. Passing a
- * mismatched stride will succeed but the worker will read the wrong fields.
+ * 4 = xyz+intensity) must match the layer's stride config. `host.lidar(id)`
+ * resolves it from the config automatically; only the raw constructor / an
+ * explicit `host.lidar(id, stride)` override can mismatch (and that is warned).
  */
 export class LidarLayerHandle {
   constructor(

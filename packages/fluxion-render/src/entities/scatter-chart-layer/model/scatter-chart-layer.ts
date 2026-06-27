@@ -2,7 +2,7 @@ import { forEachColumn } from "../../../shared/lib/column-reduce";
 import { pushSamples } from "../../../shared/lib/push-samples";
 import { computeRingCapacity } from "../../../shared/lib/ring-capacity";
 import type { Layer } from "../../../shared/model/layer";
-import { RingBuffer } from "../../../shared/model/ring-buffer";
+import { createStreamingRing, type RingBuffer } from "../../../shared/model/ring-buffer";
 import type { Viewport } from "../../../shared/model/viewport";
 
 export interface ScatterChartConfig {
@@ -60,8 +60,7 @@ export class ScatterChartLayer implements Layer {
 
   constructor(id: string) {
     this.id = id;
-    this.ring = new RingBuffer(2048, 2);
-    this.ring.enableExtent(1);
+    this.ring = createStreamingRing(2048);
   }
 
   setConfig(config: unknown): void {
@@ -74,8 +73,7 @@ export class ScatterChartLayer implements Layer {
     if (c.opacity !== undefined) this.opacity = c.opacity;
     const newCapacity = computeRingCapacity(c);
     if (newCapacity !== undefined && newCapacity !== this.ring.capacity) {
-      this.ring = new RingBuffer(newCapacity, 2);
-      this.ring.enableExtent(1);
+      this.ring = createStreamingRing(newCapacity);
     }
   }
 

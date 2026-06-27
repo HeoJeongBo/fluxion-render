@@ -8,6 +8,13 @@ export type {
   MetricsListener,
 } from "./model/fluxion-host";
 export { FluxionHost } from "./model/fluxion-host";
+export type {
+  HostBundle,
+  HostRecyclePool,
+  HostRecyclePoolOptions,
+  RecycleKeyParams,
+} from "./model/host-recycle-pool";
+export { createHostRecyclePool } from "./model/host-recycle-pool";
 export {
   AreaLayerHandle,
   BarLayerHandle,

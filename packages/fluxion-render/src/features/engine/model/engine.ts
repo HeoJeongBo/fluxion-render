@@ -231,7 +231,37 @@ export class Engine {
         this.syncContinuousMode();
         break;
       }
+      case Op.RESET:
+        this.reset();
+        break;
     }
+  }
+
+  /**
+   * Reset to a pristine, just-constructed state while KEEPING the OffscreenCanvas
+   * binding + worker engine alive — the worker side of host recycling. Disposes
+   * every layer (empty stack) and rewinds the viewport/bounds/observed-y, the
+   * emitted-bounds latches, and engine-level bg/axis style back to defaults.
+   * After this, re-running the normal mount sequence (ADD_LAYER…, SET_BG_COLOR,
+   * RESIZE, SET_VISIBLE) re-hydrates a recycled host indistinguishably from a
+   * cold one. Construction-fixed settings (maxFps/emitBounds/emitTicks, the
+   * canvas context, page-visibility) are intentionally preserved — they form
+   * the recycle key, so a reused engine already matches the requesting mount.
+   */
+  private reset(): void {
+    this.stack.disposeAll();
+    this.viewport.latestT = 0;
+    this.viewport.setBounds({ xMin: -1, xMax: 1, yMin: -1, yMax: 1 });
+    this.viewport.yPadPx = 0;
+    this.viewport.observedYMin = Number.POSITIVE_INFINITY;
+    this.viewport.observedYMax = Number.NEGATIVE_INFINITY;
+    this.bgColor = "#0b0d12";
+    this.axisStyle = {};
+    this.lastSentYMin = Number.NaN;
+    this.lastSentYMax = Number.NaN;
+    this.lastSentXTickMs = 0;
+    this.syncContinuousMode();
+    this.scheduler.markDirty();
   }
 
   private setAxisCanvas(msg: SetAxisCanvasMsg): void {

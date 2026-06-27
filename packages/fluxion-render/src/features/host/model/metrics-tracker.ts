@@ -75,6 +75,20 @@ export class MetricsTracker {
     };
   }
 
+  /**
+   * Zero all counters back to a just-constructed state for host recycling,
+   * KEEPING the shared polling subscription intact (a reused host's new consumer
+   * subscribes fresh; the previous tenant already unsubscribed on unmount).
+   */
+  reset(): void {
+    this.pushCount = 0;
+    this.sampleCount = 0;
+    this.bytesTransferred = 0;
+    this.pushesByLayer.clear();
+    this.lastPushAt = null;
+    this.lastBounds = null;
+  }
+
   /** Stop the shared interval and drop all subscribers. */
   dispose(): void {
     if (this.timer !== null) {

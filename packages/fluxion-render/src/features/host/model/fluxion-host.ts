@@ -340,14 +340,53 @@ export class FluxionHost {
     /* v8 ignore next -- the no-document (SSR) arm is unreachable in the DOM test env */
     if (typeof document !== "undefined") {
       this.visibilityHandler = () => {
-        const visible = document.visibilityState === "visible";
-        // While hidden, rAF stops firing, so any staged samples would sit in
-        // the pending buffer until the page returns. Drain them now.
-        if (!visible) this.flushAll();
-        this.post({ op: Op.SET_VISIBLE, visible });
+        this.setVisible(document.visibilityState === "visible");
       };
       document.addEventListener("visibilitychange", this.visibilityHandler);
     }
+  }
+
+  /**
+   * Tell the worker engine whether this host is currently visible. While hidden,
+   * the engine suspends its follow-clock continuous render loop (saving CPU), and
+   * a host recycle pool uses this to PAUSE a warm host so it burns nothing while
+   * parked. On becoming visible the engine re-anchors the follow-clock window to
+   * the current wall clock. Normally driven automatically by `document`'s
+   * `visibilitychange`; exposed so a recycle pool can pause/resume explicitly.
+   */
+  setVisible(visible: boolean): void {
+    if (this.disposed) return;
+    // While hidden, rAF stops firing on the worker's follow-clock loop, so any
+    // staged samples would sit in the pending buffer until the host is visible
+    // again. Drain them now (parity with the visibilitychange handler).
+    if (!visible) this.flushAll();
+    this.post({ op: Op.SET_VISIBLE, visible });
+  }
+
+  /**
+   * Reset the host to a pristine, just-constructed state WITHOUT tearing down the
+   * worker engine or its OffscreenCanvas binding — the basis of host recycling
+   * (see `createHostRecyclePool`). Drops every layer worker-side (RESET), discards
+   * staged samples and main-thread listener/metric state from the previous tenant,
+   * and rewinds the worker viewport/bounds. After `reset()` the host behaves like
+   * a fresh one, so the normal mount sequence (`addLayer` per spec, `setBgColor`,
+   * `resize`, `setVisible`) re-hydrates it for the next consumer.
+   */
+  reset(): void {
+    if (this.disposed) return;
+    // Drop staged samples WITHOUT posting them — the worker is about to dispose
+    // every layer on RESET, so flushing would send Op.DATA to layers that
+    // immediately vanish. Cancel any scheduled flush too.
+    this.cancelScheduledFlush();
+    this.pending.clear();
+    // Drop previous-tenant main-thread state so a recycled host starts clean;
+    // the next consumer re-records arity on addLayer and re-subscribes its
+    // bounds/tick/metrics listeners after acquire.
+    this.layerArity.clear();
+    this.boundsEmitter.clear();
+    this.tickEmitter.clear();
+    this.metrics.reset();
+    this.post({ op: Op.RESET });
   }
 
   /**
@@ -419,7 +458,10 @@ export class FluxionHost {
     if (typeof arity === "number") this.layerArity.set(id, arity);
   }
 
-  /** Declared arity of a layer, for handle-side push validation. */
+  /**
+   * Declared arity of a layer, for handle-side push validation.
+   * @internal — plumbing for the typed layer handles; not a stable public API.
+   */
   expectedArity(id: string): number | undefined {
     return this.layerArity.get(id);
   }
@@ -538,10 +580,18 @@ export class FluxionHost {
     return new LineStaticLayerHandle(this, id);
   }
 
-  lidar(id: string, stride: LidarStride = 4): LidarLayerHandle {
-    const exp = this.layerArity.get(id);
-    if (exp !== undefined) warnArityMismatch(id, exp, stride, "lidar handle stride");
-    return new LidarLayerHandle(this, id, stride);
+  /**
+   * Attach a handle to an existing lidar layer. `stride` is resolved from the
+   * layer's `config.stride` automatically — omit it for the common case. Pass it
+   * only to override (a mismatch with the recorded config is warned). Falls back
+   * to 4 (x,y,z,intensity) when the layer wasn't added through this host.
+   */
+  lidar(id: string, stride?: LidarStride): LidarLayerHandle {
+    const recorded = this.layerArity.get(id) as LidarStride | undefined;
+    if (stride !== undefined && recorded !== undefined && stride !== recorded) {
+      warnArityMismatch(id, recorded, stride, "lidar handle stride");
+    }
+    return new LidarLayerHandle(this, id, stride ?? recorded ?? 4);
   }
 
   scatter(id: string): ScatterLayerHandle {
@@ -806,20 +856,34 @@ export class FluxionHost {
     this.post({ op: Op.RESIZE, width, height, dpr });
   }
 
-  dispose(): void {
-    if (this.disposed) return;
-    // Cancel the scheduled flush first (flushAll would null the handle), then
-    // drain the last frame's staged samples synchronously (flushLayer posts via
-    // this.post, still allowed until `disposed` is set).
+  /**
+   * Cancel a pending coalesce flush (rAF or timeout) and clear the scheduled
+   * flag. Shared by `dispose` and `reset` — `flushUsesRaf` records which API
+   * scheduled it, so the matching canceller is always the right one.
+   */
+  private cancelScheduledFlush(): void {
     if (this.flushHandle != null) {
-      // flushUsesRaf records which API scheduled it; the matching canceller is
-      // always available in that same runtime.
       if (this.flushUsesRaf) cancelAnimationFrame(this.flushHandle);
       else clearTimeout(this.flushHandle);
       this.flushHandle = null;
     }
     this.flushScheduled = false;
-    this.flushAll();
+  }
+
+  dispose(): void {
+    if (this.disposed) return;
+    // Cancel the scheduled flush first (flushAll would null the handle), then
+    // drain the last frame's staged samples synchronously (flushLayer posts via
+    // this.post, still allowed until `disposed` is set).
+    this.cancelScheduledFlush();
+    // A throwing final flush (e.g. a detached buffer) must NOT abort teardown —
+    // otherwise `disposed` never flips, the `Op.DISPOSE` message never goes out,
+    // and a pool host leaks its slot + worker-side engine. Best-effort flush.
+    try {
+      this.flushAll();
+    } catch {
+      // ignore — the DISPOSE below tears the layer down regardless
+    }
     this.pending.clear();
     this.disposed = true;
     // Remove worker→main message listener

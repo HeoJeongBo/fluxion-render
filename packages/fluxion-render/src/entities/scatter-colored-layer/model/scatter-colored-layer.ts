@@ -1,3 +1,4 @@
+import { hexToRgb } from "../../../shared/lib/colormap";
 import { pushSamples } from "../../../shared/lib/push-samples";
 import { computeRingCapacity } from "../../../shared/lib/ring-capacity";
 import type { Layer } from "../../../shared/model/layer";
@@ -152,19 +153,6 @@ export class ScatterColoredLayer implements Layer {
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
-
-function hexToRgb(hex: string): [number, number, number] {
-  const h = hex.replace("#", "");
-  const full =
-    h.length === 3
-      ? h
-          .split("")
-          .map((c) => c + c)
-          .join("")
-      : h;
-  const n = parseInt(full, 16);
-  return [(n >> 16) & 0xff, (n >> 8) & 0xff, n & 0xff];
-}
 
 function buildGradientLut(fromHex: string, toHex: string): Uint8Array {
   const [r0, g0, b0] = hexToRgb(fromHex);

@@ -1,8 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
-  _resetMountScheduler,
   configureMountScheduler,
+  enqueueDispose,
   enqueueMount,
+  flushMountScheduler,
+  resetMountScheduler,
 } from "./mount-scheduler";
 
 /** Advance one animation frame (fires the faked rAF / setTimeout drain). */
@@ -46,6 +48,31 @@ describe("mount-scheduler", () => {
     expect(order).toEqual([0, 1]);
   });
 
+  it("enqueueDispose defers teardown and shares the perFrame budget with mounts", () => {
+    configureMountScheduler({ perFrame: 2 });
+    const order: string[] = [];
+    enqueueMount(() => order.push("mount"));
+    enqueueDispose(() => order.push("dispose1"));
+    enqueueDispose(() => order.push("dispose2"));
+    expect(order).toEqual([]); // nothing synchronous — teardown burst deferred
+    frame();
+    expect(order).toEqual(["mount", "dispose1"]); // perFrame=2 across both kinds
+    frame();
+    expect(order).toEqual(["mount", "dispose1", "dispose2"]);
+  });
+
+  it("cancelled tasks are skipped for free (don't consume the perFrame budget)", () => {
+    configureMountScheduler({ perFrame: 2 });
+    const ran: number[] = [];
+    const cancels = Array.from({ length: 6 }, (_, i) => enqueueMount(() => ran.push(i)));
+    cancels[0]!(); // cancel tasks 0..3 → only 4 and 5 are live
+    cancels[1]!();
+    cancels[2]!();
+    cancels[3]!();
+    frame(); // the 4 tombstones are dropped for free; both live tasks still run
+    expect(ran).toEqual([4, 5]);
+  });
+
   it("cancel removes a not-yet-run task; cancelling after it ran is a no-op", () => {
     const ran: string[] = [];
     const cancelA = enqueueMount(() => ran.push("a"));
@@ -57,11 +84,39 @@ describe("mount-scheduler", () => {
     expect(ran).toEqual(["b"]);
   });
 
-  it("_resetMountScheduler drops queued tasks and clears the pending frame", () => {
+  it("flushMountScheduler runs every queued task now, ignoring perFrame", () => {
+    configureMountScheduler({ perFrame: 2 });
+    const order: number[] = [];
+    for (let i = 0; i < 5; i++) enqueueMount(() => order.push(i));
+    flushMountScheduler(); // no fake-timer advance — all 5 run synchronously
+    expect(order).toEqual([0, 1, 2, 3, 4]);
+    // Reusable afterwards: a fresh enqueue schedules a real frame again.
+    enqueueDispose(() => order.push(99));
+    frame();
+    expect(order).toEqual([0, 1, 2, 3, 4, 99]);
+  });
+
+  it("flushMountScheduler skips cancelled tasks and isolates a throwing one", () => {
+    const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const ran: string[] = [];
+    enqueueMount(() => ran.push("a"));
+    const cancelB = enqueueMount(() => ran.push("b"));
+    enqueueMount(() => {
+      throw new Error("boom");
+    });
+    enqueueMount(() => ran.push("c"));
+    cancelB(); // tombstone — skipped by flush
+    flushMountScheduler();
+    expect(ran).toEqual(["a", "c"]); // b cancelled, the throw didn't strand c
+    expect(spy).toHaveBeenCalled();
+    spy.mockRestore();
+  });
+
+  it("resetMountScheduler drops queued tasks and clears the pending frame", () => {
     const ran: string[] = [];
     enqueueMount(() => ran.push("a"));
     enqueueMount(() => ran.push("b"));
-    _resetMountScheduler(); // queue cleared, scheduled flag reset
+    resetMountScheduler(); // queue cleared, scheduled flag reset
     frame();
     expect(ran).toEqual([]); // nothing drains
     // Scheduler is reusable afterwards (a fresh frame is scheduled).

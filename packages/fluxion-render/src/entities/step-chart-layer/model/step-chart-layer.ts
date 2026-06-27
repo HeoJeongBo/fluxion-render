@@ -2,7 +2,7 @@ import { forEachColumn } from "../../../shared/lib/column-reduce";
 import { pushSamples } from "../../../shared/lib/push-samples";
 import { computeRingCapacity } from "../../../shared/lib/ring-capacity";
 import type { Layer } from "../../../shared/model/layer";
-import { RingBuffer } from "../../../shared/model/ring-buffer";
+import { createStreamingRing, type RingBuffer } from "../../../shared/model/ring-buffer";
 import type { Viewport } from "../../../shared/model/viewport";
 
 export interface StepChartConfig {
@@ -80,8 +80,7 @@ export class StepChartLayer implements Layer {
 
   constructor(id: string) {
     this.id = id;
-    this.ring = new RingBuffer(2048, 2);
-    this.ring.enableExtent(1);
+    this.ring = createStreamingRing(2048);
   }
 
   setConfig(config: unknown): void {
@@ -98,8 +97,7 @@ export class StepChartLayer implements Layer {
     if (c.laneGapPx !== undefined) this.laneGapPx = c.laneGapPx;
     const cap = computeRingCapacity(c);
     if (cap !== undefined && cap !== this.ring.capacity) {
-      this.ring = new RingBuffer(cap, 2);
-      this.ring.enableExtent(1);
+      this.ring = createStreamingRing(cap);
     }
   }
 

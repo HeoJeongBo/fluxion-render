@@ -1,8 +1,9 @@
 import { act, render } from "@testing-library/react";
-import { StrictMode, useEffect } from "react";
+import { StrictMode, useEffect, useRef } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { createHostRecyclePool } from "../../../features/host";
 import { Op } from "../../../shared/protocol";
-import { _resetMountScheduler } from "./mount-scheduler";
+import { configureMountScheduler, resetMountScheduler } from "./mount-scheduler";
 import { type FluxionLayerSpec, useFluxionCanvas } from "./use-fluxion-canvas";
 
 interface RecordedPost {
@@ -328,12 +329,12 @@ describe("useFluxionCanvas", () => {
     }
 
     beforeEach(() => {
-      _resetMountScheduler(); // isolate from any task another test left queued
+      resetMountScheduler(); // isolate from any task another test left queued
       vi.useFakeTimers();
     });
     afterEach(() => {
       vi.useRealTimers();
-      _resetMountScheduler();
+      resetMountScheduler();
     });
 
     it("defers host creation to a later frame", () => {
@@ -387,12 +388,13 @@ describe("useFluxionCanvas", () => {
     }
 
     beforeEach(() => {
-      _resetMountScheduler();
+      resetMountScheduler();
       vi.useFakeTimers();
     });
     afterEach(() => {
       vi.useRealTimers();
-      _resetMountScheduler();
+      resetMountScheduler();
+      configureMountScheduler({ perFrame: 4 }); // restore default for other suites
     });
 
     it("defers host creation by default (no staggerMount prop)", () => {
@@ -409,11 +411,14 @@ describe("useFluxionCanvas", () => {
       expect(onHost).toHaveBeenCalled();
     });
 
-    it("disposes the deferred host on unmount after it was created", () => {
+    it("defers the host teardown on unmount, then disposes on a later frame", () => {
       const { factory, terminate } = makeFakeWorkerFactory();
       const { unmount } = render(<DefaultHarness workerFactory={factory} />);
       act(() => vi.advanceTimersByTime(20)); // host created
       unmount();
+      // Teardown is staggered too — not run synchronously in the unmount commit.
+      expect(terminate).not.toHaveBeenCalled();
+      act(() => vi.advanceTimersByTime(20)); // drain the deferred dispose
       expect(terminate).toHaveBeenCalledTimes(1);
     });
 
@@ -436,5 +441,205 @@ describe("useFluxionCanvas", () => {
       expect(posts).toHaveLength(0);
       expect(terminate).not.toHaveBeenCalled();
     });
+
+    it("does not run a bulk unmount's teardown synchronously (the accordion-collapse fix)", () => {
+      const fs = Array.from({ length: 6 }, () => makeFakeWorkerFactory());
+      const Grid = () => (
+        <>
+          {fs.map((f, i) => (
+            <DefaultHarness key={i} workerFactory={f.factory} />
+          ))}
+        </>
+      );
+      const { unmount } = render(<Grid />);
+      act(() => vi.advanceTimersByTime(200)); // drain all staggered mounts
+      expect(fs.every((f) => f.posts.length > 0)).toBe(true); // all created
+
+      const teardownCount = () =>
+        fs.filter((f) => f.terminate.mock.calls.length > 0).length;
+
+      unmount(); // 6 charts unmount in one commit
+      expect(teardownCount()).toBe(0); // KEY: no synchronous teardown burst
+      act(() => vi.advanceTimersByTime(200)); // drain the deferred disposes
+      expect(teardownCount()).toBe(6); // all eventually torn down
+    });
+  });
+});
+
+describe("useFluxionCanvas host recycling", () => {
+  function RecycleHarness({
+    workerFactory,
+    recyclePool,
+    onHost,
+    bgColor,
+  }: {
+    workerFactory: () => Worker;
+    recyclePool: ReturnType<typeof createHostRecyclePool>;
+    onHost?: (host: unknown) => void;
+    bgColor?: string;
+  }) {
+    const { containerRef, host } = useFluxionCanvas({
+      layers: [
+        { id: "axis", kind: "axis-grid" },
+        { id: "line", kind: "line", config: { color: "#fff" } },
+      ],
+      hostOptions: { workerFactory, bgColor },
+      recyclePool,
+      staggerMount: false,
+    });
+    useEffect(() => {
+      if (host && onHost) onHost(host);
+    }, [host, onHost]);
+    return <div ref={containerRef} style={{ width: 200, height: 100 }} />;
+  }
+
+  // Variant with external axis canvases, to exercise the axis re-parent path.
+  function AxisRecycleHarness({
+    workerFactory,
+    recyclePool,
+    onHost,
+  }: {
+    workerFactory: () => Worker;
+    recyclePool: ReturnType<typeof createHostRecyclePool>;
+    onHost?: (host: unknown) => void;
+  }) {
+    const xRef = useRef<HTMLDivElement>(null);
+    const yRef = useRef<HTMLDivElement>(null);
+    const { containerRef, host } = useFluxionCanvas({
+      layers: [
+        { id: "axis", kind: "axis-grid" },
+        { id: "line", kind: "line", config: { color: "#fff" } },
+      ],
+      hostOptions: { workerFactory },
+      recyclePool,
+      staggerMount: false,
+      xAxisContainerRef: xRef,
+      yAxisContainerRef: yRef,
+    });
+    useEffect(() => {
+      if (host && onHost) onHost(host);
+    }, [host, onHost]);
+    return (
+      <div>
+        <div ref={yRef} />
+        <div ref={containerRef} style={{ width: 200, height: 100 }} />
+        <div ref={xRef} />
+      </div>
+    );
+  }
+
+  const opsOf = (posts: RecordedPost[]) => posts.map((p) => (p.msg as { op: number }).op);
+  const initCount = (posts: RecordedPost[]) =>
+    opsOf(posts).filter((o) => o === Op.INIT).length;
+
+  it("reuses a warm host on remount instead of creating a new one", () => {
+    const { factory, posts, terminate } = makeFakeWorkerFactory();
+    const pool = createHostRecyclePool();
+    const hosts: unknown[] = [];
+    const onHost = (h: unknown) => hosts.push(h);
+
+    const first = render(
+      <RecycleHarness
+        workerFactory={factory}
+        recyclePool={pool}
+        onHost={onHost}
+        bgColor="#101010"
+      />,
+    );
+    expect(initCount(posts)).toBe(1);
+    const firstHost = hosts[0];
+
+    first.unmount();
+    expect(terminate).not.toHaveBeenCalled(); // parked, not disposed
+    expect(pool.size).toBe(1);
+
+    posts.length = 0;
+    const second = render(
+      <RecycleHarness
+        workerFactory={factory}
+        recyclePool={pool}
+        onHost={onHost}
+        bgColor="#202020"
+      />,
+    );
+    // Same host reused — no new worker INIT; layers re-hydrated, bg re-applied, resumed.
+    expect(hosts[hosts.length - 1]).toBe(firstHost);
+    expect(initCount(posts)).toBe(0);
+    const ops = opsOf(posts);
+    expect(ops.filter((o) => o === Op.ADD_LAYER)).toHaveLength(2);
+    expect(ops).toContain(Op.SET_BG_COLOR);
+    expect(ops).toContain(Op.RESIZE);
+    expect(ops).toContain(Op.SET_VISIBLE);
+    expect(pool.stats).toEqual({ created: 1, recycled: 1 });
+
+    second.unmount();
+    pool.dispose();
+  });
+
+  it("re-parents axis canvases when recycling a host with external axes", () => {
+    const { factory, posts } = makeFakeWorkerFactory();
+    const pool = createHostRecyclePool();
+    const hosts: unknown[] = [];
+    const onHost = (h: unknown) => hosts.push(h);
+
+    const first = render(
+      <AxisRecycleHarness workerFactory={factory} recyclePool={pool} onHost={onHost} />,
+    );
+    expect(opsOf(posts)).toContain(Op.SET_AXIS_CANVAS); // axis transferred on cold create
+    first.unmount();
+
+    posts.length = 0;
+    const second = render(
+      <AxisRecycleHarness workerFactory={factory} recyclePool={pool} onHost={onHost} />,
+    );
+    expect(hosts[hosts.length - 1]).toBe(hosts[0]); // reused
+    expect(initCount(posts)).toBe(0);
+    // Axis canvases stay bound to the reused host — never re-transferred.
+    expect(opsOf(posts)).not.toContain(Op.SET_AXIS_CANVAS);
+
+    second.unmount();
+    pool.dispose();
+  });
+
+  it("disposing the recycle pool tears down a parked host", () => {
+    const { factory, terminate } = makeFakeWorkerFactory();
+    const pool = createHostRecyclePool();
+    const { unmount } = render(
+      <RecycleHarness workerFactory={factory} recyclePool={pool} />,
+    );
+    unmount();
+    expect(terminate).not.toHaveBeenCalled(); // parked
+    pool.dispose();
+    expect(terminate).toHaveBeenCalledTimes(1); // torn down with the pool
+  });
+
+  it("disposes the host directly when the recycle pool is already disposed", () => {
+    const { factory, terminate } = makeFakeWorkerFactory();
+    const pool = createHostRecyclePool();
+    const { unmount } = render(
+      <RecycleHarness workerFactory={factory} recyclePool={pool} />,
+    );
+    pool.dispose(); // pool dies while the chart is still mounted
+    unmount(); // cleanup sees a disposed pool → disposes the host instead of parking
+    expect(terminate).toHaveBeenCalledTimes(1);
+  });
+
+  it("StrictMode double-invoke reuses the same host (one worker, none terminated)", () => {
+    const { factory, posts, terminate } = makeFakeWorkerFactory();
+    const pool = createHostRecyclePool();
+    let result: ReturnType<typeof render> | undefined;
+    expect(() => {
+      result = render(
+        <StrictMode>
+          <RecycleHarness workerFactory={factory} recyclePool={pool} />
+        </StrictMode>,
+      );
+    }).not.toThrow();
+    // mount→unmount→mount: the first host is parked then reused.
+    expect(initCount(posts)).toBe(1);
+    expect(terminate).not.toHaveBeenCalled();
+    result!.unmount(); // park the in-use host back
+    pool.dispose();
+    expect(terminate).toHaveBeenCalledTimes(1);
   });
 });

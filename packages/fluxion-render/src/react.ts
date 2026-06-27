@@ -45,10 +45,15 @@ export {
 } from "./features/gauge";
 export {
   configureDefaultPool,
+  createHostRecyclePool,
   FluxionHost,
   FluxionWorkerPool,
   type FluxionWorkerPoolOptions,
   getDefaultPool,
+  type HostBundle,
+  type HostRecyclePool,
+  type HostRecyclePoolOptions,
+  type RecycleKeyParams,
 } from "./features/host";
 export {
   FluxionPieChart,
@@ -123,6 +128,7 @@ export {
   useFluxionStream,
   useFluxionTable,
   useFluxionWorkerPool,
+  useHostRecyclePool,
   useLayerConfig,
   useLayersConfig,
   useResizeObserver,

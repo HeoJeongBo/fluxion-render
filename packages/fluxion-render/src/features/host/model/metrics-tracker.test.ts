@@ -26,6 +26,28 @@ describe("MetricsTracker", () => {
     expect(snap.bounds).toBeNull();
   });
 
+  it("reset() zeros all counters but keeps subscribers polling", () => {
+    const m = new MetricsTracker();
+    const cb = vi.fn();
+    m.onMetricsUpdate(cb, { intervalMs: 100 });
+    m.recordPush("a", 10, 40);
+    m.recordBounds(-1, 2, 99);
+
+    m.reset();
+    const snap = m.getMetrics();
+    expect(snap.pushCount).toBe(0);
+    expect(snap.sampleCount).toBe(0);
+    expect(snap.bytesTransferred).toBe(0);
+    expect(snap.pushesByLayer).toEqual({});
+    expect(snap.lastPushAt).toBeNull();
+    expect(snap.bounds).toBeNull();
+
+    // Subscription survives a reset — the shared interval still fires.
+    vi.advanceTimersByTime(100);
+    expect(cb).toHaveBeenCalledTimes(1);
+    m.dispose();
+  });
+
   it("reflects the latest recorded bounds (copied, not aliased)", () => {
     const m = new MetricsTracker();
     m.recordBounds(-1, 2, 1234);

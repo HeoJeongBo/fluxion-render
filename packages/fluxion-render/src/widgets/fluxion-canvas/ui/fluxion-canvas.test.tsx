@@ -2,7 +2,7 @@ import { act, render } from "@testing-library/react";
 import { createRef, StrictMode } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { Op } from "../../../shared/protocol";
-import { _resetMountScheduler } from "../lib/mount-scheduler";
+import { resetMountScheduler } from "../lib/mount-scheduler";
 import { FluxionCanvas, type FluxionCanvasHandle } from "./fluxion-canvas";
 
 interface RecordedPost {
@@ -96,7 +96,7 @@ describe("FluxionCanvas", () => {
 
   it("defers host creation by default (staggerMount on) until a frame passes", () => {
     vi.useFakeTimers();
-    _resetMountScheduler();
+    resetMountScheduler();
     const { factory } = makeFakeWorkerFactory();
     const onReady = vi.fn();
     render(
@@ -109,7 +109,7 @@ describe("FluxionCanvas", () => {
     expect(onReady).not.toHaveBeenCalled(); // queued, not yet created
     act(() => vi.advanceTimersByTime(20));
     expect(onReady).toHaveBeenCalledTimes(1);
-    _resetMountScheduler();
+    resetMountScheduler();
     vi.useRealTimers();
   });
 

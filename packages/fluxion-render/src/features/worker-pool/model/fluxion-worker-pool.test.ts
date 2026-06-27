@@ -328,3 +328,45 @@ describe("FluxionWorkerHandle.emitStream", () => {
     expect(fakeWorkers[0]!.postMessage).not.toHaveBeenCalled();
   });
 });
+
+// ─── Host teardown is sibling-safe + leak-free ───────────────────────────────
+
+describe("FluxionWorkerPool — host teardown", () => {
+  it("disposing one host does NOT terminate the shared worker (sibling-safe)", () => {
+    const { pool, fakeWorkers } = makePool(1); // one worker shared by both hosts
+    const h1 = pool.acquire();
+    const h2 = pool.acquire();
+    expect(fakeWorkers).toHaveLength(1);
+
+    // Op.DISPOSE on h1 → handle converts to POOL_DISPOSE + releases the slot.
+    h1.postMessage({ op: Op.DISPOSE } as HostMsg);
+    expect(fakeWorkers[0]!.terminate).not.toHaveBeenCalled(); // shared worker alive
+    expect(pool.hasHost(h1.hostId)).toBe(false); // h1 released
+    expect(pool.hasHost(h2.hostId)).toBe(true); // sibling intact
+
+    // h2 still routes to the shared worker.
+    fakeWorkers[0]!.postMessage.mockClear();
+    h2.postMessage(makeInitMsg(), []);
+    expect(fakeWorkers[0]!.postMessage).toHaveBeenCalledTimes(1);
+
+    // Only pool.dispose() terminates the worker.
+    pool.dispose();
+    expect(fakeWorkers[0]!.terminate).toHaveBeenCalledTimes(1);
+  });
+
+  it("repeated acquire/dispose leaves no registry residue (no leak across churn)", () => {
+    const { pool, fakeWorkers } = makePool(1);
+    const ids: string[] = [];
+    for (let i = 0; i < 20; i++) {
+      const h = pool.acquire();
+      ids.push(h.hostId);
+      h.postMessage({ op: Op.DISPOSE } as HostMsg); // release the slot each cycle
+    }
+    expect(fakeWorkers).toHaveLength(1); // worker reused, never re-created
+    for (const id of ids) expect(pool.hasHost(id)).toBe(false); // nothing lingers
+    // The pool still works for a fresh host on the reused worker.
+    const fresh = pool.acquire();
+    expect(pool.hasHost(fresh.hostId)).toBe(true);
+    pool.dispose();
+  });
+});

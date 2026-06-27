@@ -35,17 +35,15 @@ function makeHostStub(): FluxionHost & {
 function Harness({
   layers,
   axisLayerId,
-  refreshMs,
   host,
   onTicks,
 }: {
   layers: FluxionLayerSpec[];
   axisLayerId: string;
-  refreshMs?: number;
   host?: FluxionHost | null;
   onTicks: (t: AxisTickSet | null) => void;
 }) {
-  const ticks = useAxisTicks(layers, axisLayerId, refreshMs, host);
+  const ticks = useAxisTicks(layers, axisLayerId, host);
   const onTicksRef = useRef(onTicks);
   onTicksRef.current = onTicks;
   useEffect(() => {

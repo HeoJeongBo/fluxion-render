@@ -48,6 +48,7 @@ export type {
 } from "./lib/use-fluxion-table";
 export { useFluxionTable } from "./lib/use-fluxion-table";
 export { useFluxionWorkerPool } from "./lib/use-fluxion-worker-pool";
+export { useHostRecyclePool } from "./lib/use-host-recycle-pool";
 export { useLayerConfig } from "./lib/use-layer-config";
 export { useLayersConfig } from "./lib/use-layers-config";
 export type { ResizeInfo } from "./lib/use-resize-observer";

@@ -121,3 +121,14 @@ export class RingBuffer {
     this.extent?.clear();
   }
 }
+
+/**
+ * Create a stride-2 `[t, y]` ring that tracks the sliding-window y-extent of the
+ * value column — the standard setup for a streaming time-series layer, so
+ * `scan()` reads the visible-window min/max in O(log n). See {@link RingBuffer.enableExtent}.
+ */
+export function createStreamingRing(capacity: number): RingBuffer {
+  const ring = new RingBuffer(capacity, 2);
+  ring.enableExtent(1);
+  return ring;
+}
