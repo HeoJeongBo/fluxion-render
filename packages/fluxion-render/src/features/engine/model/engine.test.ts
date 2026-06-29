@@ -1087,6 +1087,80 @@ describe("Engine", () => {
       engine.dispatch({ op: Op.DISPOSE });
       postSpy.mockRestore();
     });
+
+    it("emitRenderStats posts RENDER_STATS once a ~1s render window elapses", () => {
+      const postSpy = vi.spyOn(self, "postMessage").mockImplementation(() => {});
+      let t = 0;
+      const nowSpy = vi.spyOn(performance, "now").mockImplementation(() => t);
+      const engine = new Engine();
+      engine.dispatch({
+        op: Op.INIT,
+        canvas: newCanvas(100, 100),
+        width: 100,
+        height: 100,
+        dpr: 1,
+        emitRenderStats: true,
+      });
+      addAxisAndLine(engine);
+      flushFrame(); // first render at t=0 → opens the window, nothing emitted yet
+      const has = () =>
+        postSpy.mock.calls.some(
+          (c) => (c[0] as { op?: number })?.op === WorkerOp.RENDER_STATS,
+        );
+      expect(has()).toBe(false);
+
+      t = 1200; // advance past the 1s window
+      const buf = new Float32Array([0, 0, 100, 1]);
+      engine.dispatch({
+        op: Op.DATA,
+        id: "line",
+        buffer: buf.buffer,
+        dtype: "f32",
+        length: 4,
+      });
+      flushFrame(); // render at t=1200 → windowMs ≥ 1000 → emit
+
+      const stats = postSpy.mock.calls
+        .map((c) => c[0] as { op: number; renders: number; windowMs: number })
+        .find((m) => m?.op === WorkerOp.RENDER_STATS);
+      expect(stats).toBeTruthy();
+      expect(stats!.renders).toBeGreaterThanOrEqual(1);
+      expect(stats!.windowMs).toBeGreaterThanOrEqual(1000);
+      engine.dispatch({ op: Op.DISPOSE });
+      postSpy.mockRestore();
+      nowSpy.mockRestore();
+    });
+
+    it("does not post RENDER_STATS when emitRenderStats is off (default)", () => {
+      const postSpy = vi.spyOn(self, "postMessage").mockImplementation(() => {});
+      let t = 0;
+      const nowSpy = vi.spyOn(performance, "now").mockImplementation(() => t);
+      const engine = new Engine();
+      engine.dispatch({
+        op: Op.INIT,
+        canvas: newCanvas(100, 100),
+        width: 100,
+        height: 100,
+        dpr: 1,
+      });
+      addAxisAndLine(engine);
+      flushFrame();
+      t = 1200;
+      const buf = new Float32Array([0, 0, 100, 1]);
+      engine.dispatch({
+        op: Op.DATA,
+        id: "line",
+        buffer: buf.buffer,
+        dtype: "f32",
+        length: 4,
+      });
+      flushFrame();
+      const ops = postSpy.mock.calls.map((c) => (c[0] as { op?: number })?.op);
+      expect(ops).not.toContain(WorkerOp.RENDER_STATS);
+      engine.dispatch({ op: Op.DISPOSE });
+      postSpy.mockRestore();
+      nowSpy.mockRestore();
+    });
   });
 
   describe("dispose releases canvas backing", () => {

@@ -67,6 +67,8 @@ export interface InitMsg {
   emitTicks?: boolean;
   /** Keep the canvas alpha channel. Omitted/false = opaque context (faster compositing). */
   transparent?: boolean;
+  /** Periodically post RENDER_STATS (render count + CPU time) for perf HUDs. Omitted = off. */
+  emitRenderStats?: boolean;
   hostId?: string;
 }
 
@@ -149,6 +151,7 @@ export interface PoolInitMsg {
   emitBounds?: boolean;
   emitTicks?: boolean;
   transparent?: boolean;
+  emitRenderStats?: boolean;
 }
 
 /** Pool-only: tear down the engine for `hostId` without terminating the worker. */
@@ -298,6 +301,7 @@ export interface FluxionPoolStreamMsg {
 export const WorkerOp = {
   BOUNDS_UPDATE: 100,
   TICK_UPDATE: 101,
+  RENDER_STATS: 102,
 } as const;
 export type WorkerOp = (typeof WorkerOp)[keyof typeof WorkerOp];
 
@@ -338,4 +342,22 @@ export interface TickUpdateMsg {
   xRawValues: number[];
 }
 
-export type WorkerMsg = BoundsUpdateMsg | TickUpdateMsg;
+/**
+ * Periodic render-load report from the engine, opt-in via `emitRenderStats`.
+ * Lets a perf HUD distinguish a main-thread mount spike from worker-thread
+ * saturation: `busyMs` is the wall-clock time the engine spent rendering during
+ * the `windowMs` window, and `renders` the frame count. Summing `busyMs/windowMs`
+ * across all hosts on a worker estimates that worker's render utilization.
+ */
+export interface RenderStatsMsg {
+  op: typeof WorkerOp.RENDER_STATS;
+  hostId?: string;
+  /** Frames rendered during the window. */
+  renders: number;
+  /** Wall-clock ms spent inside render() during the window. */
+  busyMs: number;
+  /** Window length in ms (wall-clock between emits). */
+  windowMs: number;
+}
+
+export type WorkerMsg = BoundsUpdateMsg | TickUpdateMsg | RenderStatsMsg;

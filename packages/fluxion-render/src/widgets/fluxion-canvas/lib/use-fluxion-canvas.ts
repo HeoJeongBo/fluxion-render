@@ -403,13 +403,13 @@ export function useFluxionCanvas(
   }, [host, layers]);
 
   const handleResize = useCallback((info: ResizeInfo) => {
+    // Forward to the host only once it exists (under staggerMount a resize can
+    // arrive before the deferred host is created) and the size is real (a
+    // detached / pre-layout element reports 0×0).
     const instance = hostRef.current;
-    /* v8 ignore start -- host is set before RO fires; jsdom rects are 0×0 so the
-       non-zero resize path never runs in tests (defensive guards + real resize). */
-    if (!instance) return;
-    if (info.width === 0 || info.height === 0) return;
-    instance.resize(info.width, info.height, info.dpr);
-    /* v8 ignore stop */
+    if (instance && info.width > 0 && info.height > 0) {
+      instance.resize(info.width, info.height, info.dpr);
+    }
   }, []);
 
   useResizeObserver(containerRef, handleResize);

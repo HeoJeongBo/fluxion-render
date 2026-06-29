@@ -7,12 +7,19 @@ export interface ResizeInfo {
 }
 
 /**
- * Observes both element size (ResizeObserver) and devicePixelRatio changes
+ * Observes element size (ResizeObserver) and devicePixelRatio changes
  * (matchMedia on the current DPR). Fires `onResize` whenever either changes.
  *
- * `debounceMs` (default 100) batches rapid resize events — e.g. when many
- * charts are mounted simultaneously and a window resize fires 160 callbacks
- * at once. Set to 0 to disable debouncing.
+ * The size is read from the **ResizeObserver entry** the browser already
+ * computed (`contentRect`), NOT a synchronous `getBoundingClientRect()`. That
+ * matters when many charts mount in one commit: a per-mount layout READ
+ * interleaved with each chart's canvas APPEND would force one reflow per chart
+ * (layout thrashing). Reading from the entry lets the browser batch the
+ * measurement, so a burst of mounts can't thrash. (The chart containers carry no
+ * border/padding, so `contentRect` equals the old bounding-rect size.)
+ *
+ * `debounceMs` (default 100) batches rapid changes; the FIRST measurement fires
+ * promptly so a chart sizes without waiting out the debounce.
  */
 export function useResizeObserver(
   ref: RefObject<HTMLElement>,
@@ -31,24 +38,46 @@ export function useResizeObserver(
     let mql: MediaQueryList | null = null;
     let cancelled = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
+    // Cached from the latest ResizeObserver entry so a DPR change can re-fire
+    // with the current size (DPR changes don't trigger the ResizeObserver).
+    let lastWidth = 0;
+    let lastHeight = 0;
+    let measured = false;
 
-    const fire = () => {
-      if (cancelled) return;
-      const rect = el.getBoundingClientRect();
+    const emit = () => {
+      if (cancelled || !measured) return;
       onResizeRef.current({
-        width: rect.width,
-        height: rect.height,
+        width: lastWidth,
+        height: lastHeight,
         dpr: window.devicePixelRatio || 1,
       });
     };
 
-    const debouncedFire =
+    const debouncedEmit =
       debounceMs > 0
         ? () => {
             clearTimeout(timer);
-            timer = setTimeout(fire, debounceMs);
+            timer = setTimeout(emit, debounceMs);
           }
-        : fire;
+        : emit;
+
+    const ro = new ResizeObserver((entries) => {
+      // Read the size the browser already computed for this batch — no
+      // getBoundingClientRect(), so N simultaneous mounts don't force N reflows.
+      const box = entries[entries.length - 1]?.contentRect;
+      if (box) {
+        lastWidth = box.width;
+        lastHeight = box.height;
+      }
+      if (measured) {
+        debouncedEmit();
+      } else {
+        // First measurement fires immediately (don't wait out the debounce).
+        measured = true;
+        emit();
+      }
+    });
+    ro.observe(el);
 
     const subscribeDpr = () => {
       if (mql) mql.removeEventListener("change", handleDpr);
@@ -56,14 +85,10 @@ export function useResizeObserver(
       mql.addEventListener("change", handleDpr);
     };
     const handleDpr = () => {
-      debouncedFire();
+      debouncedEmit();
       subscribeDpr();
     };
-
-    const ro = new ResizeObserver(debouncedFire);
-    ro.observe(el);
     subscribeDpr();
-    fire(); // initial fire is immediate (not debounced)
 
     return () => {
       cancelled = true;

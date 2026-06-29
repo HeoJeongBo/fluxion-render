@@ -54,6 +54,8 @@ export {
   type HostRecyclePool,
   type HostRecyclePoolOptions,
   type RecycleKeyParams,
+  type RenderStats,
+  type RenderStatsListener,
 } from "./features/host";
 export {
   FluxionPieChart,
@@ -122,6 +124,7 @@ export {
   type UseFluxionStreamResult,
   type UseFluxionTableOptions,
   type UseFluxionTableResult,
+  type UseStaggeredMountOptions,
   useAxisTicks,
   useFluxionCanvas,
   useFluxionHistorical,
@@ -133,6 +136,7 @@ export {
   useLayersConfig,
   useResizeObserver,
   useSharedTicker,
+  useStaggeredMount,
   useXAxisCanvas,
   useYAxisCanvas,
 } from "./widgets/fluxion-canvas";

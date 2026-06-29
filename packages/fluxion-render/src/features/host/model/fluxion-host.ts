@@ -14,6 +14,7 @@ import {
   type HostMsg,
   type LayerKind,
   Op,
+  type RenderStatsMsg,
   type SerializedTick,
   type TickUpdateMsg,
   type WorkerMsg,
@@ -144,6 +145,14 @@ export interface FluxionHostOptions {
    * `bgColor` and want the page visible behind the plot.
    */
   transparent?: boolean;
+  /**
+   * Periodically report worker-side render load (frames + CPU ms) via
+   * {@link FluxionHost.onRenderStats}. Opt-in for perf HUDs — off by default so
+   * there's zero per-frame timing overhead. Aggregating `busyMs/windowMs` across
+   * all hosts on a worker estimates that worker thread's render utilization,
+   * which distinguishes a main-thread mount spike from worker-thread saturation.
+   */
+  emitRenderStats?: boolean;
 }
 
 function dtypeOf(arr: FluxionTypedArray): DType {
@@ -195,6 +204,19 @@ export type TickUpdateListener = (
   yTicks: SerializedTick[],
 ) => void;
 
+/** Worker-side render-load snapshot delivered to `onRenderStats`. */
+export interface RenderStats {
+  /** Frames rendered during the window. */
+  renders: number;
+  /** Wall-clock ms the worker spent inside render() during the window. */
+  busyMs: number;
+  /** Window length in ms. `busyMs / windowMs` ≈ this engine's render duty cycle. */
+  windowMs: number;
+}
+
+/** Callback shape for `onRenderStats`. Receives a periodic render-load snapshot. */
+export type RenderStatsListener = (stats: RenderStats) => void;
+
 /** Callback shape for `onMetricsUpdate`. Receives a fresh metrics snapshot. */
 export type MetricsListener = (metrics: FluxionMetrics) => void;
 
@@ -236,6 +258,7 @@ export class FluxionHost {
   private readonly tickEmitter = new Emitter<
     [xTicks: SerializedTick[], yTicks: SerializedTick[]]
   >();
+  private readonly renderStatsEmitter = new Emitter<[stats: RenderStats]>();
   // Diagnostics — see getMetrics().
   private readonly metrics = new MetricsTracker();
   private workerMsgHandler: EventListener | null = null;
@@ -289,6 +312,7 @@ export class FluxionHost {
         emitBounds: opts.emitBounds,
         emitTicks: opts.emitTicks,
         transparent: opts.transparent,
+        emitRenderStats: opts.emitRenderStats,
       },
       [offscreen],
     );
@@ -328,6 +352,14 @@ export class FluxionHost {
       if (msg.op === WorkerOp.TICK_UPDATE) {
         const tu = msg as TickUpdateMsg;
         this.tickEmitter.emit(tu.xTicks, tu.yTicks);
+      }
+      if (msg.op === WorkerOp.RENDER_STATS) {
+        const rs = msg as RenderStatsMsg;
+        this.renderStatsEmitter.emit({
+          renders: rs.renders,
+          busyMs: rs.busyMs,
+          windowMs: rs.windowMs,
+        });
       }
     };
     if (this.worker.addEventListener) {
@@ -385,6 +417,7 @@ export class FluxionHost {
     this.layerArity.clear();
     this.boundsEmitter.clear();
     this.tickEmitter.clear();
+    this.renderStatsEmitter.clear();
     this.metrics.reset();
     this.post({ op: Op.RESET });
   }
@@ -414,6 +447,17 @@ export class FluxionHost {
    */
   onTickUpdate(listener: TickUpdateListener): () => void {
     return this.tickEmitter.subscribe(listener);
+  }
+
+  /**
+   * Subscribe to periodic worker render-load snapshots (frames + CPU ms per
+   * ~1s window). Requires `emitRenderStats: true` in the host options — without
+   * it the worker never reports and this never fires. Returns an unsubscribe.
+   * Aggregating `busyMs` across all hosts on a worker estimates that worker
+   * thread's render utilization (vs a main-thread mount spike).
+   */
+  onRenderStats(listener: RenderStatsListener): () => void {
+    return this.renderStatsEmitter.subscribe(listener);
   }
 
   /**
@@ -899,6 +943,7 @@ export class FluxionHost {
     this.metrics.dispose();
     this.boundsEmitter.clear();
     this.tickEmitter.clear();
+    this.renderStatsEmitter.clear();
     try {
       this.post({ op: Op.DISPOSE });
     } catch {

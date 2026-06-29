@@ -23,6 +23,7 @@ self.onmessage = (e: MessageEvent<HostMsg>) => {
         emitBounds: msg.emitBounds,
         emitTicks: msg.emitTicks,
         transparent: msg.transparent,
+        emitRenderStats: msg.emitRenderStats,
         hostId: msg.hostId,
       });
       return;

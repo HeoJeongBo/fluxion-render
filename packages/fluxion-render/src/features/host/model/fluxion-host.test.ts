@@ -611,6 +611,54 @@ describe("FluxionHost", () => {
     host.dispose();
   });
 
+  it("onRenderStats fires on RENDER_STATS and stops after unsubscribe", () => {
+    const { worker } = makeFakeWorker();
+    let messageHandler: ((evt: Event) => void) | null = null;
+    const workerWithEvents = {
+      ...worker,
+      addEventListener: (_type: string, fn: EventListener) => {
+        messageHandler = fn as (evt: Event) => void;
+      },
+      removeEventListener: () => {},
+    };
+    const host = new FluxionHost(makeCanvas(), {
+      workerFactory: () => workerWithEvents as unknown as Worker,
+      emitRenderStats: true,
+    });
+    const received: { renders: number; busyMs: number; windowMs: number }[] = [];
+    const unsub = host.onRenderStats((s) => received.push(s));
+    const fire = () =>
+      messageHandler!({
+        data: {
+          op: WorkerOp.RENDER_STATS,
+          hostId: "x",
+          renders: 30,
+          busyMs: 12,
+          windowMs: 1000,
+        },
+      } as unknown as Event);
+    fire();
+    expect(received).toHaveLength(1);
+    expect(received[0]).toEqual({ renders: 30, busyMs: 12, windowMs: 1000 });
+    unsub();
+    fire();
+    expect(received).toHaveLength(1); // unsubscribed → no further calls
+    host.dispose();
+  });
+
+  it("emitRenderStats threads into the INIT message", () => {
+    const { worker, posts } = makeFakeWorker();
+    const host = new FluxionHost(makeCanvas(), {
+      workerFactory: () => worker,
+      emitRenderStats: true,
+    });
+    const init = posts.find((p) => (p.msg as { op: number }).op === Op.INIT)!.msg as {
+      emitRenderStats?: boolean;
+    };
+    expect(init.emitRenderStats).toBe(true);
+    host.dispose();
+  });
+
   it("onBoundsChange unsubscribe removes listener", () => {
     const { worker } = makeFakeWorker();
     let messageHandler: ((evt: Event) => void) | null = null;

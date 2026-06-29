@@ -643,3 +643,47 @@ describe("useFluxionCanvas host recycling", () => {
     expect(terminate).toHaveBeenCalledTimes(1);
   });
 });
+
+describe("useFluxionCanvas resize forwarding", () => {
+  let roCb: ((entries: unknown[]) => void) | null;
+  const realRO = globalThis.ResizeObserver;
+
+  beforeEach(() => {
+    roCb = null;
+    (globalThis as unknown as { ResizeObserver: unknown }).ResizeObserver = class {
+      constructor(cb: (entries: unknown[]) => void) {
+        roCb = cb;
+      }
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    };
+  });
+  afterEach(() => {
+    (globalThis as unknown as { ResizeObserver: unknown }).ResizeObserver = realRO;
+  });
+
+  const deliver = (w: number, h: number) =>
+    act(() => {
+      roCb?.([{ contentRect: { width: w, height: h } }]);
+    });
+
+  const ops = (posts: RecordedPost[]) => posts.map((p) => (p.msg as { op: number }).op);
+
+  it("forwards a non-zero observer size to host.resize", () => {
+    const { factory, posts } = makeFakeWorkerFactory();
+    // staggerMount defaults to false in Harness → host created synchronously.
+    render(<Harness workerFactory={factory} />);
+    posts.length = 0;
+    deliver(200, 100);
+    expect(ops(posts)).toContain(Op.RESIZE);
+  });
+
+  it("ignores a zero-sized observer entry", () => {
+    const { factory, posts } = makeFakeWorkerFactory();
+    render(<Harness workerFactory={factory} />);
+    posts.length = 0;
+    deliver(0, 0);
+    expect(ops(posts)).not.toContain(Op.RESIZE);
+  });
+});

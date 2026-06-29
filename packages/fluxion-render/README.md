@@ -279,6 +279,7 @@ streams is cheap out of the box; the rest are opt-outs for niche cases.
 | `emitBounds` | `boolean` | `true` | Whether the worker posts `BOUNDS_UPDATE` to the main thread on auto y-bounds change. Set `false` when nothing consumes `onBoundsChange` / `getMetrics().bounds` (e.g. a thumbnail grid) to skip the per-frame postMessage |
 | `emitTicks` | `boolean` | `true` | Whether the worker posts `TICK_UPDATE` for React-side axis rendering. Only relevant with `externalAxes={false}` and no `onTickUpdate` consumer; set `false` to skip per-frame tick computation + postMessage. No effect when axis canvases render in the worker (`externalAxes` / `xAxisElement` / `yAxisElement`) |
 | `transparent` | `boolean` | `false` | Keep the canvas's alpha channel so the page shows through where the chart doesn't paint. Default `false` (opaque): the engine fills `bgColor` every frame, so an opaque 2D context (`alpha: false`) composites faster — a real win for a wall of many charts. Set `true` only if you use a translucent `bgColor` and want the page visible behind the plot |
+| `emitRenderStats` | `boolean` | `false` | Diagnostics opt-in (not a throughput knob): periodically post worker-side render load to `onRenderStats` for a perf HUD. Off by default — zero overhead. See [Diagnostics](#diagnostics-getmetrics--onmetricsupdate) |
 
 (Plus `bgColor`, `pool`, `workerFactory` covered above.)
 
@@ -353,6 +354,38 @@ regenerate it) and push it once with `handle.pushBatch(...)` — or
 `handle.reset(latestT)` then `pushBatch(...)` to also rewind the time axis. The
 backfill and the live stream share one ring and merge in push order, so keep the
 backfilled timestamps `<=` the next live sample.
+
+### Spreading the React mount of a big grid (`useStaggeredMount`)
+
+`staggerMount` defers each host's *worker* creation, but React still mounts all N
+`<FluxionCanvas>` **components** in a single commit — reconciling N components and
+creating N canvases (and their layout) synchronously. For a large grid appearing
+at once that synchronous commit can spike the main thread on its own.
+
+`useStaggeredMount` lets the **library spread the component mount across frames**:
+it returns a `shown` count that grows from one batch up to `total` at `perFrame`
+items per frame; render `shown` of your list. Every chart still mounts — this is a
+fast progressive reveal (a few frames), NOT virtualization (nothing is unmounted
+offscreen) and NOT a slow drip.
+
+```tsx
+import { useStaggeredMount, FluxionCanvas } from '@heojeongbo/fluxion-render/react';
+
+function Grid({ items }) {
+  const shown = useStaggeredMount(items.length, { perFrame: 24 });
+  return items.slice(0, shown).map((it) => <FluxionCanvas key={it.id} {...it} />);
+}
+```
+
+- A `total <= perFrame` list shows in full on the first frame (no delay for small
+  grids). To re-run the reveal for a grid that periodically remounts, give the
+  rendering subtree a React `key` so the hook re-mounts.
+- It composes with `staggerMount` (host stagger) and `recyclePool`: the reveal
+  bounds how many components mount per frame, the host scheduler bounds how many
+  workers spin up per frame, and recycling makes each of those cheap.
+- The internal `ResizeObserver` reads each chart's size from the observer entry
+  (not a synchronous `getBoundingClientRect`), so a large reveal batch doesn't
+  force a per-chart reflow.
 
 ### Recycling hosts under heavy churn (`recyclePool`)
 
@@ -852,6 +885,24 @@ const recyclePool = useHostRecyclePool({
 `stats` is handy for a HUD that shows the recycling working (flip the chart churn
 on and watch `recycled` climb while `created` plateaus).
 
+### `useStaggeredMount(total, options?)`
+
+Returns a `shown` count that ramps from one batch to `total` across animation
+frames, so the library spreads the **React mount** of a big grid instead of
+mounting all N components in one commit. See
+[Spreading the React mount](#spreading-the-react-mount-of-a-big-grid-usestaggeredmount).
+
+```ts
+const shown = useStaggeredMount(total, {
+  perFrame?: number,   // items revealed per frame, default 16
+  disabled?: boolean,  // return total immediately (opt out)
+});
+// render items.slice(0, shown) / Array.from({ length: shown }, …)
+```
+
+Every item still mounts (not virtualization); `total <= perFrame` shows at once.
+Distinct from the `staggerMount` prop (which staggers each host's worker creation).
+
 ### `useFluxionHistorical(options)`
 
 Pushes a full dataset into a `line-static` layer whenever `data` changes. Handles are memoized — re-renders that don't change `data` are free.
@@ -1300,6 +1351,27 @@ const stop = host.onMetricsUpdate((m) => setHud(m), { intervalMs: 500 });
 // …later
 stop();
 ```
+
+`getMetrics`/`onMetricsUpdate` report **main-thread** activity (what was sent).
+To see **worker-thread render load** — the cost of actually drawing the charts —
+opt in with `emitRenderStats: true` in the host options and subscribe with
+`host.onRenderStats(cb)`. The worker posts a `{ renders, busyMs, windowMs }`
+snapshot ~once per second; `busyMs / windowMs` is that engine's render duty cycle.
+
+```ts
+new FluxionHost(canvas, { ...opts, emitRenderStats: true });
+const stop = host.onRenderStats(({ renders, busyMs, windowMs }) => {
+  // summing busyMs across all hosts on a worker ≈ that worker thread's CPU time
+});
+```
+
+This is how you tell a one-shot **main-thread mount spike** (high during a bulk
+mount, near-zero while streaming) from sustained **worker-thread saturation**
+(many live charts redrawing): if `busyMs/s` summed across charts stays high while
+the main thread is idle, the cost is worker-side rendering, which mount-side
+tools (`staggerMount` / `useStaggeredMount` / `recyclePool`) don't reduce — lower
+`maxFps` or the number of concurrently-streaming charts instead. Off by default,
+so there's zero timing overhead unless you opt in.
 
 ### `FluxionWorkerPool`
 

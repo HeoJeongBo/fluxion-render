@@ -27,6 +27,7 @@ import type {
   AxisStyle,
   HostMsg,
   LayerKind,
+  RenderStatsMsg,
   SetAxisCanvasMsg,
   TickUpdateMsg,
 } from "../../../shared/protocol";
@@ -106,6 +107,11 @@ export class Engine {
   // skip per-frame postMessage + tick computation.
   private emitBounds = true;
   private emitTicks = true;
+  // Opt-in render-load reporting (RENDER_STATS) for perf HUDs. Off → zero cost.
+  private emitRenderStats = false;
+  private rsRenders = 0;
+  private rsBusyMs = 0;
+  private rsWindowStart = -1;
   private hostId: string | undefined;
   private lastSentYMin = Number.NaN;
   private lastSentYMax = Number.NaN;
@@ -128,6 +134,7 @@ export class Engine {
           emitBounds: msg.emitBounds,
           emitTicks: msg.emitTicks,
           transparent: msg.transparent,
+          emitRenderStats: msg.emitRenderStats,
         });
         break;
       case Op.SET_BG_COLOR:
@@ -260,6 +267,9 @@ export class Engine {
     this.lastSentYMin = Number.NaN;
     this.lastSentYMax = Number.NaN;
     this.lastSentXTickMs = 0;
+    this.rsRenders = 0;
+    this.rsBusyMs = 0;
+    this.rsWindowStart = -1;
     this.syncContinuousMode();
     this.scheduler.markDirty();
   }
@@ -295,6 +305,7 @@ export class Engine {
       emitBounds?: boolean;
       emitTicks?: boolean;
       transparent?: boolean;
+      emitRenderStats?: boolean;
     },
   ) {
     this.canvas = canvas;
@@ -306,6 +317,7 @@ export class Engine {
     if (opts.maxFps !== undefined) this.scheduler.setMaxFps(opts.maxFps);
     if (opts.emitBounds !== undefined) this.emitBounds = opts.emitBounds;
     if (opts.emitTicks !== undefined) this.emitTicks = opts.emitTicks;
+    if (opts.emitRenderStats !== undefined) this.emitRenderStats = opts.emitRenderStats;
     this.resize(width, height, dpr);
     this.scheduler.start();
     this.scheduler.markDirty();
@@ -346,6 +358,7 @@ export class Engine {
     /* v8 ignore start -- render only runs via the scheduler after init; ctx/canvas are always set */
     if (!ctx || !this.canvas) return;
     /* v8 ignore stop */
+    const rsStart = this.emitRenderStats ? performance.now() : 0;
     // 2-pass: scan (orchestration: time window, observed y, bounds) then
     // draw. AxisGridLayer.scan writes bounds; LineChartLayer.scan reads
     // bounds and publishes observed y extents; AxisGridLayer.draw finishes
@@ -423,6 +436,37 @@ export class Engine {
     // fallback) and a consumer wants them.
     if (this.emitTicks && !this.xAxisCanvas && !this.yAxisCanvas) {
       this.maybeSendTickUpdate(boundsChanged);
+    }
+
+    if (this.emitRenderStats) this.recordRenderStats(rsStart);
+  }
+
+  /**
+   * Accumulate this frame's render time and, once a ~1s wall-clock window has
+   * elapsed, post a RENDER_STATS snapshot. Opt-in (emitRenderStats); lets a perf
+   * HUD tell main-thread mount spikes from worker-thread render saturation.
+   */
+  private recordRenderStats(startMs: number): void {
+    const now = performance.now();
+    this.rsBusyMs += now - startMs;
+    this.rsRenders++;
+    if (this.rsWindowStart < 0) this.rsWindowStart = startMs;
+    const windowMs = now - this.rsWindowStart;
+    if (windowMs >= 1000) {
+      try {
+        self.postMessage({
+          op: WorkerOp.RENDER_STATS,
+          hostId: this.hostId,
+          renders: this.rsRenders,
+          busyMs: this.rsBusyMs,
+          windowMs,
+        } satisfies RenderStatsMsg);
+      } catch {
+        // Worker context may not support postMessage in tests
+      }
+      this.rsRenders = 0;
+      this.rsBusyMs = 0;
+      this.rsWindowStart = now;
     }
   }
 

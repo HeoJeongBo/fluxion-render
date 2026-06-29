@@ -66,6 +66,8 @@ export type {
   PolarPoint,
   PoseArrowSample,
   RecycleKeyParams,
+  RenderStats,
+  RenderStatsListener,
   ScatterColoredSample,
   ScatterSample,
   StackedAreaSample,

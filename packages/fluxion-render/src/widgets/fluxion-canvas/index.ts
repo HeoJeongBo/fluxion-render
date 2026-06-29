@@ -53,6 +53,8 @@ export { useLayerConfig } from "./lib/use-layer-config";
 export { useLayersConfig } from "./lib/use-layers-config";
 export type { ResizeInfo } from "./lib/use-resize-observer";
 export { useResizeObserver } from "./lib/use-resize-observer";
+export type { UseStaggeredMountOptions } from "./lib/use-staggered-mount";
+export { useStaggeredMount } from "./lib/use-staggered-mount";
 export type { FluxionCanvasHandle, FluxionCanvasProps } from "./ui/fluxion-canvas";
 export { FluxionCanvas } from "./ui/fluxion-canvas";
 export type {
