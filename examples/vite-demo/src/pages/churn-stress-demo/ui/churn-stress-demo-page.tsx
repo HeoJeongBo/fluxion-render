@@ -26,12 +26,21 @@ import {
   FluxionCanvas,
   type HostRecyclePool,
   lineLayer,
+  type RenderStats,
   useFluxionStream,
   useFluxionWorkerPool,
   useHostRecyclePool,
+  useStaggeredMount,
   useTimeOrigin,
 } from "@heojeongbo/fluxion-render/react";
-import { type CSSProperties, useCallback, useEffect, useMemo, useState } from "react";
+import {
+  type CSSProperties,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { generateFloat32StampedBatch, stampToMs } from "../../../shared/lib/test-data";
 import { THEME } from "../../../shared/ui/theme";
 
@@ -97,22 +106,72 @@ function useFrameStats(): { fps: number; worstMs: number; maxMs: number } {
   return stats;
 }
 
+/**
+ * Main-thread busy meter via the Long Tasks API. A `longtask` is any ≥50ms block
+ * of the main thread, so `busyPct` (long-task ms / window) spikes during a
+ * synchronous mount burst (component A) and sits near 0 while the main thread is
+ * idle during streaming. Cross-reference with the worker-render readout: high
+ * main busy at mount = A; main idle but workers hot = B (worker saturation).
+ */
+function useMainThreadStats(): { busyPct: number; longTasks: number } {
+  const [stats, setStats] = useState({ busyPct: 0, longTasks: 0 });
+  useEffect(() => {
+    if (typeof PerformanceObserver === "undefined") return;
+    let count = 0;
+    let ms = 0;
+    let windowStart = performance.now();
+    const obs = new PerformanceObserver((list) => {
+      for (const e of list.getEntries()) {
+        count++;
+        ms += e.duration;
+      }
+    });
+    try {
+      obs.observe({ entryTypes: ["longtask"] });
+    } catch {
+      return; // longtask entry type unsupported (e.g. Safari/Firefox)
+    }
+    const id = setInterval(() => {
+      const now = performance.now();
+      const win = now - windowStart;
+      setStats({ busyPct: Math.round((ms / win) * 100), longTasks: count });
+      count = 0;
+      ms = 0;
+      windowStart = now;
+    }, 500);
+    return () => {
+      obs.disconnect();
+      clearInterval(id);
+    };
+  }, []);
+  return stats;
+}
+
 function MiniChart({
   index,
   pool,
   recyclePool,
   timeOrigin,
   onHostReady,
+  onRenderStats,
 }: {
   index: number;
   pool: Pool;
   recyclePool: HostRecyclePool | undefined;
   timeOrigin: number;
   onHostReady: () => void;
+  onRenderStats: (index: number, stats: RenderStats) => void;
 }) {
   const color = COLORS[index % COLORS.length]!;
   const freqHz = 0.4 + (index % 11) * 0.25;
   const [host, setHost] = useState<FluxionHost | null>(null);
+
+  // Forward this host's worker-side render-load reports up to the parent's
+  // aggregate (component B meter). Unsubscribes when the host changes/unmounts.
+  useEffect(() => {
+    if (!host) return;
+    return host.onRenderStats((s) => onRenderStats(index, s));
+  }, [host, index, onRenderStats]);
 
   const layers = useMemo(
     () => [
@@ -177,12 +236,69 @@ function MiniChart({
           maxFps: 30,
           emitBounds: false,
           emitTicks: false,
+          emitRenderStats: true, // worker reports render load → component B meter
         }}
         onReady={(h) => {
           setHost(h);
           onHostReady();
         }}
       />
+    </div>
+  );
+}
+
+/**
+ * The chart grid. Keyed by `generation` in the parent so a remount re-creates
+ * this component — which re-inits `useStaggeredMount`, re-running the reveal
+ * from scratch each churn cycle. With `reveal` on, the library spreads the
+ * React mount of all charts across a few frames (fast — they still all appear),
+ * so a 300-chart burst doesn't reconcile + lay out in one synchronous commit.
+ */
+function ChartGrid({
+  count,
+  cols,
+  pool,
+  recyclePool,
+  timeOrigin,
+  onHostReady,
+  onRenderStats,
+  reveal,
+}: {
+  count: number;
+  cols: number;
+  pool: Pool;
+  recyclePool: HostRecyclePool | undefined;
+  timeOrigin: number;
+  onHostReady: () => void;
+  onRenderStats: (index: number, stats: RenderStats) => void;
+  reveal: boolean;
+}) {
+  // perFrame 24 → ~13 frames for 300 charts (≈200ms); disabled → all at once.
+  const shown = useStaggeredMount(count, { perFrame: 24, disabled: !reveal });
+  return (
+    <div
+      style={{
+        flex: 1,
+        minHeight: 0,
+        padding: 6,
+        display: "grid",
+        gridTemplateColumns: `repeat(${cols}, 1fr)`,
+        gridAutoRows: "1fr",
+        gap: 3,
+        background: THEME.page.background,
+      }}
+    >
+      {Array.from({ length: shown }, (_, i) => (
+        <MiniChart
+          key={i}
+          index={i}
+          pool={pool}
+          recyclePool={recyclePool}
+          timeOrigin={timeOrigin}
+          onHostReady={onHostReady}
+          onRenderStats={onRenderStats}
+        />
+      ))}
     </div>
   );
 }
@@ -212,6 +328,7 @@ export function ChurnStressDemoPage() {
   const [churnMs, setChurnMs] = useState<number>(2000);
   const [perFrame, setPerFrame] = useState<number>(4);
   const [recycle, setRecycle] = useState(false);
+  const [reveal, setReveal] = useState(false);
   const [running, setRunning] = useState(true);
 
   // remount mode: bumping `generation` remounts the whole grid (bulk unmount +
@@ -227,6 +344,33 @@ export function ChurnStressDemoPage() {
   const handleHostReady = useCallback(() => setHostsReady((c) => c + 1), []);
 
   const stats = useFrameStats();
+  const mainStats = useMainThreadStats();
+
+  // Component B meter: aggregate per-host worker render reports. Each host posts
+  // {renders, busyMs, windowMs} ~1×/s; we keep its latest per-second rate and sum
+  // across hosts. `busyMs/s ÷ 1000` ≈ worker cores kept busy by rendering.
+  const renderStatsRef = useRef<Map<number, { rps: number; bps: number }>>(new Map());
+  const [workerStats, setWorkerStats] = useState({ rps: 0, bps: 0 });
+  const handleRenderStats = useCallback((index: number, s: RenderStats) => {
+    if (s.windowMs > 0) {
+      renderStatsRef.current.set(index, {
+        rps: (s.renders / s.windowMs) * 1000,
+        bps: (s.busyMs / s.windowMs) * 1000,
+      });
+    }
+  }, []);
+  useEffect(() => {
+    const id = setInterval(() => {
+      let rps = 0;
+      let bps = 0;
+      for (const v of renderStatsRef.current.values()) {
+        rps += v.rps;
+        bps += v.bps;
+      }
+      setWorkerStats({ rps, bps });
+    }, 500);
+    return () => clearInterval(id);
+  }, []);
 
   // Drives the mount-scheduler drain rate; restored to the library default on
   // leave so other demos aren't affected.
@@ -240,6 +384,7 @@ export function ChurnStressDemoPage() {
   // show that batch staggering in.
   useEffect(() => {
     setHostsReady(0);
+    renderStatsRef.current.clear(); // old grid's per-host render reports are stale
   }, [generation, visible]);
 
   useEffect(() => {
@@ -356,6 +501,15 @@ export function ChurnStressDemoPage() {
 
         <button
           type="button"
+          onClick={() => setReveal((r) => !r)}
+          style={chipStyle(reveal)}
+          title="Spread the React mount across frames (useStaggeredMount) so the burst doesn't reconcile + lay out in one commit"
+        >
+          reveal {reveal ? "on" : "off"}
+        </button>
+
+        <button
+          type="button"
           onClick={() => setRunning((r) => !r)}
           style={chipStyle(running)}
         >
@@ -385,6 +539,30 @@ export function ChurnStressDemoPage() {
               {recyclePool.stats.recycled}
             </strong>
           </span>
+          <span
+            title="Main-thread busy % via Long Tasks API — spikes during a mount burst (component A)"
+            style={{
+              color: mainStats.busyPct > 30 ? "#d14b4b" : THEME.page.textSecondary,
+            }}
+          >
+            main busy <strong>{mainStats.busyPct}%</strong> ({mainStats.longTasks} long)
+          </span>
+          <span
+            title="Worker render load: frames/s and CPU-ms/s across all engines. busyMs/s ÷ 1000 ≈ worker cores kept busy (component B)"
+            style={{
+              color: workerStats.bps > 1000 ? "#c98a2e" : THEME.page.textSecondary,
+            }}
+          >
+            worker{" "}
+            <strong style={{ color: THEME.page.textPrimary }}>
+              {Math.round(workerStats.rps)}
+            </strong>{" "}
+            rend/s ·{" "}
+            <strong style={{ color: THEME.page.textPrimary }}>
+              {Math.round(workerStats.bps)}
+            </strong>{" "}
+            ms/s (~{(workerStats.bps / 1000).toFixed(1)} cores)
+          </span>
           <span>
             cycles <strong style={{ color: THEME.page.textPrimary }}>{cycles}</strong>
           </span>
@@ -401,40 +579,27 @@ export function ChurnStressDemoPage() {
           flexShrink: 0,
         }}
       >
-        The whole grid mounts/unmounts at once (React, synchronous) — that's the stress.
-        The library staggers only the worker-host spin-up/teardown: watch{" "}
-        <em>hosts ready</em> climb 0 → N across frames (lower <em>perFrame</em> to spread
-        it further) and <em>worst frame</em> stay low. Toggle <em>recycle</em> to reuse
-        warm hosts instead of recreating them — <em>created</em> stops climbing while{" "}
-        <em>recycled</em> rises, and CPU drops sharply (the host create/destroy cost is
-        what dominates churn).
+        Two CPU costs to tell apart. <strong>(A) main-thread mount spike</strong>:{" "}
+        <em>main busy %</em> jumps as the grid appears — <em>reveal</em>/<em>recycle</em>/
+        <em>perFrame</em> target this. <strong>(B) worker render load</strong>:{" "}
+        <em>worker ms/s (~cores)</em> while streaming — mount-side fixes do NOT touch it;
+        it's the cost of drawing N live charts (lower <em>charts</em> or maxFps). If main
+        busy is low but worker cores are high, your 90% is (B). Cross-check Chrome Task
+        Manager (Shift+Esc) per-worker CPU.
       </div>
 
       {showGrid ? (
-        <div
+        <ChartGrid
           key={generation}
-          style={{
-            flex: 1,
-            minHeight: 0,
-            padding: 6,
-            display: "grid",
-            gridTemplateColumns: `repeat(${cols}, 1fr)`,
-            gridAutoRows: "1fr",
-            gap: 3,
-            background: THEME.page.background,
-          }}
-        >
-          {Array.from({ length: count }, (_, i) => (
-            <MiniChart
-              key={i}
-              index={i}
-              pool={pool}
-              recyclePool={recycle ? recyclePool : undefined}
-              timeOrigin={timeOrigin}
-              onHostReady={handleHostReady}
-            />
-          ))}
-        </div>
+          count={count}
+          cols={cols}
+          pool={pool}
+          recyclePool={recycle ? recyclePool : undefined}
+          timeOrigin={timeOrigin}
+          onHostReady={handleHostReady}
+          onRenderStats={handleRenderStats}
+          reveal={reveal}
+        />
       ) : (
         <div
           style={{
