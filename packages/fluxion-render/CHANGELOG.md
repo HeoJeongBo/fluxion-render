@@ -1,5 +1,13 @@
 # Changelog
 
+# [0.23.0](https://github-personal/HeoJeongBo/fluxion-render/compare/fluxion-render-v0.22.0...fluxion-render-v0.23.0) (2026-06-29)
+
+
+### Features
+
+* **examples:** churn demo reveal toggle + main/worker CPU HUD ([caf6d5f](https://github-personal/HeoJeongBo/fluxion-render/commit/caf6d5fb6f67b1a5c11100fd7baf3fa6034f245c))
+* **render:** staggered-list reveal + worker render-load reporting ([6cc7b63](https://github-personal/HeoJeongBo/fluxion-render/commit/6cc7b6381a138c8c116a04403a96438b427b9346))
+
 # [0.22.0](https://github-personal/HeoJeongBo/fluxion-render/compare/fluxion-render-v0.21.0...fluxion-render-v0.22.0) (2026-06-27)
 
 
