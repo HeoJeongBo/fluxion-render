@@ -1,5 +1,34 @@
 # Changelog
 
+# [0.13.0](https://github-personal/HeoJeongBo/fluxion-render/compare/fluxion-replay-v0.12.1...fluxion-replay-v0.13.0) (2026-07-01)
+
+
+### Bug Fixes
+
+* **render:** release OffscreenCanvas GPU backing on dispose ([fb6a9b8](https://github-personal/HeoJeongBo/fluxion-render/commit/fb6a9b81283043f2e9fb73eb7d59dc7e2553b698))
+* **render:** warn on layer-handle arity mismatch; guard degenerate bounds, ticker leak, non-monotonic extent ([191286f](https://github-personal/HeoJeongBo/fluxion-render/commit/191286f475a706daedb85960b04b64c876947ed1))
+
+
+### Features
+
+* **examples:** churn demo reveal toggle + main/worker CPU HUD ([caf6d5f](https://github-personal/HeoJeongBo/fluxion-render/commit/caf6d5fb6f67b1a5c11100fd7baf3fa6034f245c))
+* **examples:** mount/unmount churn stress demo with recycle toggle ([f6b6ec0](https://github-personal/HeoJeongBo/fluxion-render/commit/f6b6ec0e60c48e41a9552dcea766f3f20533b2d2))
+* **examples:** stagger broadcast mounts and backfill late charts on ready ([e86f9f5](https://github-personal/HeoJeongBo/fluxion-render/commit/e86f9f56b5f6f2c966dc385654562c602a323855))
+* **examples:** surface replay video-write errors as a storage-full badge ([cb80dc4](https://github-personal/HeoJeongBo/fluxion-render/commit/cb80dc44f91e6b8c81b7187ba13e3edc0194c591))
+* **render:** host recycle pool + mount/unmount lifecycle hardening ([2aa643b](https://github-personal/HeoJeongBo/fluxion-render/commit/2aa643b2a2cee8397cf1cfd719a6e36685b05faa))
+* **render:** staggered mount on by default with safe mount/dispose lifecycle ([a6cc029](https://github-personal/HeoJeongBo/fluxion-render/commit/a6cc02984d488e20999cadf1e2cf0c44c2d2467c))
+* **render:** staggered-list reveal + worker render-load reporting ([6cc7b63](https://github-personal/HeoJeongBo/fluxion-render/commit/6cc7b6381a138c8c116a04403a96438b427b9346))
+* **render:** staggerMount to spread a burst of mounts across frames ([573912f](https://github-personal/HeoJeongBo/fluxion-render/commit/573912f6cd4bdc81647927db5f7e3faf2305a0e1))
+* **replay:** OPFS-aware eviction with graceful quota handling ([c4c0f45](https://github-personal/HeoJeongBo/fluxion-render/commit/c4c0f450e78343e2b56a36bf4d80e2e5ca151ce2))
+
+
+### Performance Improvements
+
+* **render:** cache colormap rgb() strings per LUT entry ([a58a09a](https://github-personal/HeoJeongBo/fluxion-render/commit/a58a09aa2a29d7d8cb4df9b95a60660477ff4b03))
+* **render:** cache heatmap-stream autoscale, reuse stacked-area scratch, memoize clock labels ([0f22390](https://github-personal/HeoJeongBo/fluxion-render/commit/0f22390c8eb6d86ef05af32ce308ec8ada4ee97c))
+* **render:** opaque context, skip no-op resize, reuse decimation scratch, inline axis ticks ([df96a63](https://github-personal/HeoJeongBo/fluxion-render/commit/df96a63056c7b6baf18ef0adab0d319ef9f86861))
+* **render:** sliding-window y-extent for streaming-layer scan ([5ed1bb3](https://github-personal/HeoJeongBo/fluxion-render/commit/5ed1bb3a87fc930f45b605ef59b05824e3603dd1))
+
 ## [0.12.1](https://github-personal/HeoJeongBo/fluxion-render/compare/fluxion-replay-v0.12.0...fluxion-replay-v0.12.1) (2026-06-25)
 
 
