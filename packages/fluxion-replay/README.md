@@ -30,7 +30,8 @@ Built for robotics, ROS2 monitoring, sensor dashboards, and anything that needs 
 └──────────────────────────────────────────────────────────┘
 ```
 
-- **Recording**: frames are batched into IndexedDB every 500ms. Old frames beyond `retentionMs` are evicted automatically.
+- **Recording**: frames are batched into IndexedDB every 500ms. `retentionMs` trims the in-memory ring buffer (the recent-frames fast path) — it does **not** bound on-disk size.
+- **Storage & eviction**: when origin storage crosses `evictThresholdPct` (default 70%), the oldest slice of the recording is evicted from **both** IndexedDB frames and OPFS video chunks, so usage stabilises instead of climbing to the quota. Eviction is **paused during replay** so time-travel never deletes the history you're viewing.
 - **Playback**: a `VirtualClock` drives a RAF loop. Frames are prefetched 2 seconds ahead from IDB into a memory buffer, then drained on each tick. The clock loop and the player's frame/tick fan-outs isolate a throwing listener, so one bad frame is logged and skipped instead of freezing playback.
 - **Video**: raw `VideoFrame`s from `MediaStreamTrackProcessor` are encoded via `VideoEncoder` (WebCodecs) and written to OPFS. On playback, `VideoDecoder` decodes chunks back to canvas.
 
@@ -179,6 +180,9 @@ const recorder = new VideoRecorder({
   bitrate: 2_000_000,   // default: 1_000_000 (1 Mbps)
   framerate: 30,        // default: 30
   keyframeIntervalSec: 2, // default: 2  — keyframe every N seconds
+  // Called when a chunk can't be persisted (OPFS quota exhausted even after
+  // the store's reclaim + retry): the frame is dropped, no metadata recorded.
+  onWriteError: (e) => console.warn("video-write failed:", e), // optional
 });
 await recorder.start(track);
 ```
@@ -275,7 +279,30 @@ Video dominates storage. IndexedDB holds only tiny metadata (~100 bytes/frame); 
 | Firefox | ~50% of free disk space |
 | Safari | Hard cap around **1 GB** total origin storage |
 
-With `retentionMs: 10 * 60_000` and 2 Mbps, expect ~150 MB — well within limits on all browsers. For long-running sessions on Safari, drop to ≤500 Kbps or reduce resolution.
+Storage is bounded by **quota eviction, not `retentionMs`** (which only trims the in-memory ring buffer). Once usage crosses `evictThresholdPct` (default 70%), the oldest frames and their video chunks are dropped, so a long recording holds steady near the threshold instead of filling the disk. On Safari's ~1 GB cap, drop to ≤500 Kbps or reduce resolution to retain more history.
+
+### Handling storage limits
+
+Long recordings would otherwise fill OPFS and make `writeVideoChunk` throw `QuotaExceededError`. The engine handles this on three levels:
+
+- **Automatic eviction (IDB + OPFS).** After each flush, if origin storage is over `evictThresholdPct`, the oldest ~10% of the recorded span is evicted from IndexedDB **and** its OPFS video chunks are reclaimed (`ReplayStore.deleteVideoChunksBefore`). This is what keeps usage from climbing to the quota. Set `evictThresholdPct: 100` to disable.
+- **Emergency reclaim + retry.** If `writeVideoChunk` still hits `QuotaExceededError`, the store evicts a larger slice (oldest 25%) and retries the write once before giving up.
+- **Graceful drop + notification.** If a chunk still can't persist, the `VideoRecorder` drops that frame (no dangling metadata), logs a throttled warning, and invokes your `onWriteError` callback — no unhandled rejection, recording continues. Wire `onWriteError` (on `VideoRecorder` / `useVideoRecorder`) to a "storage full" indicator.
+
+Eviction is **paused while a `ReplaySession` is in replay mode** (`enterReplay` → `exitReplay`) so time-travel never deletes the history being reviewed; the emergency reclaim above still runs as a backstop.
+
+Classify a caught error yourself with the exported `isQuotaExceededError` (covers the standard `QuotaExceededError` DOMException and legacy Firefox's `NS_ERROR_DOM_QUOTA_REACHED`):
+
+```ts
+import { isQuotaExceededError } from "@heojeongbo/fluxion-replay";
+
+try {
+  await session.store.writeVideoChunk(channelId, filename, bytes);
+} catch (e) {
+  if (isQuotaExceededError(e)) showStorageFullBanner();
+  else throw e;
+}
+```
 
 ### Clearing stored data
 
@@ -356,7 +383,7 @@ All hooks live under `@heojeongbo/fluxion-replay/react`.
 | `useScrubberControls(opts)` | `{ scrubT, onScrubChange, commitScrub }` — encapsulates the drag-preview → release-commit state machine for `<input type="range">` scrubbers. `onScrubChange` previews the drag position and speculatively enters DVR; `commitScrub` (call on `mouseUp`/`touchEnd`/`keyUp`) finalises: live→DVR enter+play, DVR→live exit, or mid-DVR seek+play. Pair with `useReplayScrubber` for the `min`/`max`/`value` bounds. |
 | `useRecordingSession(opts)` | `{ error, isRecording }` — encapsulates the start/stop recording lifecycle, the StrictMode-safe ref guard, and optional per-channel tickers. Use when the page **is** the recording. |
 | `useRecordingTimer(opts)` | `{ elapsedSec }` — elapsed-seconds counter that starts/stops with `isRecording`, for a "REC 02:14" display. |
-| `useVideoRecorder(opts)` | `void` — manages a `VideoRecorder` lifecycle: starts encoding `track` into `channelId` when `isRecording && session && track` are all present, stops on cleanup. Tune `width`/`height`/`bitrate`/`framerate`. |
+| `useVideoRecorder(opts)` | `void` — manages a `VideoRecorder` lifecycle: starts encoding `track` into `channelId` when `isRecording && session && track` are all present, stops on cleanup. Tune `width`/`height`/`bitrate`/`framerate`, and pass `onWriteError` to be notified when a chunk fails to persist (storage quota). |
 | `useVideoReplayer(player, canvasRef, store, channelId, opts?)` | `void` — decodes a video channel's frames onto a `<canvas>`. Subscribes to `player.onSeek` and re-decodes from the nearest keyframe (via `VideoReplayer.seekTo`) so a backward/paused scrub never shows garbled VP8 deltas. Pass `opts.onOtherFrame` to receive frames whose `channelId` is **not** this video channel, so one `player.onFrame` subscription fans out to both the canvas and your own log/metric collectors. |
 | `useReplayFrameLog(player, opts?)` | `ReplayPlayerFrame[]` — collects the player's frames into a bounded, newest-friendly array (the `onFrame` → filter → `slice(-N)` pattern DVR UIs hand-roll). `opts.exclude` drops channels (e.g. `[videoChannelId]`); `opts.max` caps retained frames (default `100`). Resets when `player` changes and unsubscribes on unmount. |
 | `useStorageInfo(session, opts?)` | `{ usedBytes, quotaBytes, percentUsed, idbFrameCount }` — periodic IDB + OPFS quota inspector. |
@@ -381,6 +408,8 @@ Headless scrubber built on `<input type="range">`. Fully styleable.
 ## DVR / Time-travel pattern
 
 `useReplayDvr` bundles the "freeze the live edge → seek → autoplay → auto-return to live" state machine that DVR-style UIs end up writing by hand. Combined with `useReplayScrubber` and `useScrubberControls` it gives you a video-timeline-style scrubber with 1-Hz cursor snap:
+
+> **Eviction is paused during replay.** `enterReplay()` suspends automatic quota eviction and `exitReplay()` resumes it, so scrubbing into the past never deletes the frames you're reviewing. A genuinely-full disk is still handled by the emergency reclaim on `writeVideoChunk` (see [Handling storage limits](#handling-storage-limits)).
 
 ```tsx
 const { session, isReady, enterReplay, exitReplay } = useReplaySession(SESSION_OPTS);
@@ -716,18 +745,36 @@ await session.clearRecording();     // wipe all stored data, restart recorder
 session.dispose();                  // cleanup everything
 ```
 
-`enterReplay` accepts an optional `opts.timeRange` so callers can freeze the player's `latest` bound to the live edge the user actually saw at click time (`useReplayDvr` uses this). Inside, the session also calls `store.flush()` before reading `getTimeRange()` so the recorder's pending batch is visible to the new player — without that flush the last ~500 ms of frames would be a tail gap in the chart.
+`enterReplay` accepts an optional `opts.timeRange` so callers can freeze the player's `latest` bound to the live edge the user actually saw at click time (`useReplayDvr` uses this). Inside, the session also calls `store.flush()` before reading `getTimeRange()` so the recorder's pending batch is visible to the new player — without that flush the last ~500 ms of frames would be a tail gap in the chart. `enterReplay` also **pauses quota eviction** for the duration of replay (`exitReplay` resumes it), so time-travel review never deletes the history being viewed.
 
 ### `ReplaySession` options
 
 | Option | Type | Default | Description |
 |---|---|---|---|
 | `channels` | `BaseChannel[]` | required | Channel instances to register |
-| `retentionMs` | `number` | `600_000` (10 min) | How long to keep frames in IDB |
-| `memoryCapacity` | `number` | `10_000` | Ring buffer capacity in frames |
+| `retentionMs` | `number` | `600_000` (10 min) | Trims the in-memory ring buffer (recent-frames fast path). Does **not** bound IDB/OPFS — that's `evictThresholdPct`. |
+| `memoryCapacity` | `number` | `50_000` | Ring buffer capacity in frames |
 | `indexIntervalMs` | `number` | `1_000` | Sparse timeline index granularity |
+| `evictThresholdPct` | `number` | `70` | Storage-usage % that triggers eviction of the oldest IDB frames + OPFS video chunks. `100`+ disables. Paused during replay. |
+| `storageLogIntervalMs` | `number` | `0` | ms interval to `console.log` storage usage; `0` disables. |
 | `storeOptions.dbName` | `string` | `"fluxion-replay"` | IndexedDB database name |
 | `storeOptions.batchIntervalMs` | `number` | `500` | IDB write batch interval |
+
+### `ReplayStore` API
+
+The store is reachable as `session.store`. Most apps never touch it directly (the session/hooks drive
+it), but these methods are public for advanced storage control:
+
+```ts
+store.setEvictionPaused(paused);                 // suspend/resume automatic quota eviction
+                                                 // (ReplaySession toggles this on enter/exitReplay)
+await store.deleteVideoChunksBefore(cutoffMs, limit?); // manually reclaim OPFS video chunks with t < cutoff
+await store.getStorageInfo();                    // { usedBytes, quotaBytes, percentUsed, idbFrameCount }
+await store.getStorageInfo({ withCount: false }); // skip the IDB frame count (cheaper; used by the eviction gate)
+```
+
+`getStorageInfo({ withCount: false })` returns `idbFrameCount: 0` and avoids a full IDB `count()` — the
+eviction gate uses it since it only needs `percentUsed`; the default (`withCount: true`) includes the count for UI.
 
 ---
 
