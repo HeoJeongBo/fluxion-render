@@ -140,6 +140,14 @@ export function DvrApp() {
 
   const [liveLogs, setLiveLogs] = useState<LiveLogEntry[]>([]);
   const [rightTab, setRightTab] = useState<"logs" | "charts">("logs");
+  const [writeError, setWriteError] = useState<string | null>(null);
+
+  // Surface a video-chunk persist failure (OPFS quota exhausted even after the
+  // store's reclaim + retry). Stable identity so it doesn't re-create the
+  // VideoRecorder on every render (onWriteError is in useVideoRecorder's deps).
+  const handleVideoWriteError = useCallback(() => {
+    setWriteError("Video write failed — storage may be full");
+  }, []);
 
   // ── Log append ref (stable across renders) ────────────────────────────────
   const appendLog = useRef(setLiveLogs);
@@ -185,6 +193,7 @@ export function DvrApp() {
     session,
     isRecording,
     track: stream?.getVideoTracks()[0] ?? null,
+    onWriteError: handleVideoWriteError,
   });
   const { elapsedSec } = useRecordingTimer({ isRecording });
 
@@ -270,6 +279,7 @@ export function DvrApp() {
   const dvrLogs = useReplayFrameLog(dvr.player, { exclude: [VIDEO_CHANNEL_ID] });
 
   const handleStartCapture = useCallback(async () => {
+    setWriteError(null);
     try {
       await startCapture({
         video: { frameRate: 30 } as MediaTrackConstraints,
@@ -343,6 +353,15 @@ export function DvrApp() {
               </span>
               <span className="text-app-muted text-[10px]">/ 10:00 max</span>
             </>
+          )}
+
+          {writeError && (
+            <span
+              className="border border-app-red rounded px-2 py-0.5 text-[10px] font-bold text-app-red flex items-center gap-1 bg-app-red/[0.18]"
+              title={writeError}
+            >
+              ⚠ Storage full
+            </span>
           )}
 
           {isDvr && (

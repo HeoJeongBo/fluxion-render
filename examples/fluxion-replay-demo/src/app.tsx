@@ -124,6 +124,14 @@ export function App() {
   const appendLiveLog = useRef(setLiveLogs);
   appendLiveLog.current = setLiveLogs;
 
+  // ── Video-write error surface ─────────────────────────────────────────────
+  const [writeError, setWriteError] = useState<string | null>(null);
+  // Stable identity — onWriteError is in useVideoRecorder's effect deps, so an
+  // inline arrow would re-create the recorder on every render.
+  const handleVideoWriteError = useCallback(() => {
+    setWriteError("Video write failed — storage may be full");
+  }, []);
+
   // ── Recording session (manages start/stop, metric + log tickers) ──────────
   const { isRecording } = useRecordingSession({
     session,
@@ -174,6 +182,7 @@ export function App() {
     session,
     isRecording,
     track: stream?.getVideoTracks()[0] ?? null,
+    onWriteError: handleVideoWriteError,
   });
   const { elapsedSec } = useRecordingTimer({ isRecording });
 
@@ -199,6 +208,7 @@ export function App() {
 
   // ── Screen capture ────────────────────────────────────────────────────────
   const startCapture = useCallback(async () => {
+    setWriteError(null);
     try {
       const s = await navigator.mediaDevices.getDisplayMedia({
         video: { frameRate: 30 },
@@ -285,6 +295,15 @@ export function App() {
                 ⏺ Start Recording
               </button>
             </>
+          )}
+
+          {writeError && (
+            <span
+              className="border border-app-red rounded px-2 py-0.5 text-[10px] font-bold text-app-red flex items-center gap-1 bg-app-red/[0.18]"
+              title={writeError}
+            >
+              ⚠ Storage full
+            </span>
           )}
 
           {mode === "live" && isRecording && (
