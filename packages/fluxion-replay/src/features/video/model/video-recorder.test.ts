@@ -25,6 +25,65 @@ function makeRecorder() {
   return { store, recorder };
 }
 
+/**
+ * Install a fake `VideoEncoder` that captures its `output` callback so a test
+ * can drive `_onEncodedChunk` synchronously. Mirrors the harness used by the
+ * "_onEncodedChunk writes chunk to store" test. Returns the captured-output
+ * ref and a `restore()` for teardown.
+ */
+function installImmediateEncoder() {
+  const orig = globalThis.VideoEncoder;
+  const ref: {
+    output: ((chunk: EncodedVideoChunk, meta: unknown) => void) | null;
+  } = { output: null };
+  class ImmediateVideoEncoder {
+    state = "unconfigured";
+    constructor(init: {
+      output: (chunk: EncodedVideoChunk, meta: unknown) => void;
+      error: (e: Error) => void;
+    }) {
+      ref.output = init.output;
+    }
+    configure(_config: unknown) {
+      this.state = "configured";
+    }
+    encode(_frame: unknown, _opts?: unknown) {}
+    async flush() {}
+    close() {
+      this.state = "closed";
+    }
+  }
+  Object.defineProperty(globalThis, "VideoEncoder", {
+    value: ImmediateVideoEncoder,
+    writable: true,
+    configurable: true,
+  });
+  return {
+    ref,
+    restore() {
+      Object.defineProperty(globalThis, "VideoEncoder", {
+        value: orig,
+        writable: true,
+        configurable: true,
+      });
+    },
+  };
+}
+
+function makeChunk(type: "key" | "delta" = "key"): EncodedVideoChunk {
+  return new EncodedVideoChunk({
+    type,
+    timestamp: 0,
+    duration: 33333,
+    data: new Uint8Array([1, 2, 3]).buffer,
+  });
+}
+
+/** Drain the write→record async chain kicked off by the encoder callback. */
+async function flushMicrotasks(): Promise<void> {
+  for (let i = 0; i < 10; i++) await Promise.resolve();
+}
+
 describe("VideoRecorder", () => {
   it("isRunning is false by default", () => {
     const { store, recorder } = makeRecorder();
@@ -304,5 +363,104 @@ describe("VideoRecorder", () => {
       expect.objectContaining({ isKeyframe: true }),
       expect.any(Number),
     );
+  });
+
+  it("_onEncodedChunk drops the frame and reports when the write fails", async () => {
+    const { store, recorder } = await makeOpenRecorder();
+    const recordSpy = vi.spyOn(recorder, "record");
+    vi.spyOn(store, "writeVideoChunk").mockRejectedValue(
+      new DOMException("quota", "QuotaExceededError"),
+    );
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const onWriteError = vi.fn();
+    const enc = installImmediateEncoder();
+
+    const vr = new VideoRecorder({ channelId: "cam", store, recorder, onWriteError });
+    await vr.start({} as MediaStreamTrack);
+    enc.ref.output!(makeChunk(), {});
+    await flushMicrotasks();
+    vr.stop();
+    enc.restore();
+
+    // Frame dropped: no metadata recorded, error surfaced once, warned once.
+    expect(recordSpy).not.toHaveBeenCalled();
+    expect(onWriteError).toHaveBeenCalledTimes(1);
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining("video-write failed"),
+      expect.anything(),
+    );
+    warnSpy.mockRestore();
+  });
+
+  it("_onEncodedChunk throttles the warning but reports every dropped frame", async () => {
+    const { store, recorder } = await makeOpenRecorder();
+    vi.spyOn(store, "writeVideoChunk").mockRejectedValue(
+      new DOMException("quota", "QuotaExceededError"),
+    );
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const onWriteError = vi.fn();
+    const enc = installImmediateEncoder();
+
+    const vr = new VideoRecorder({ channelId: "cam", store, recorder, onWriteError });
+    await vr.start({} as MediaStreamTrack);
+    enc.ref.output!(makeChunk(), {});
+    await flushMicrotasks();
+    enc.ref.output!(makeChunk(), {});
+    await flushMicrotasks();
+    vr.stop();
+    enc.restore();
+
+    // Two failures: only the first warns, but both are reported.
+    expect(warnSpy).toHaveBeenCalledTimes(1);
+    expect(onWriteError).toHaveBeenCalledTimes(2);
+    warnSpy.mockRestore();
+  });
+
+  it("_onEncodedChunk recovers: a success between failures re-arms the warning", async () => {
+    const { store, recorder } = await makeOpenRecorder();
+    const recordSpy = vi.spyOn(recorder, "record");
+    vi.spyOn(store, "writeVideoChunk")
+      .mockRejectedValueOnce(new DOMException("quota", "QuotaExceededError"))
+      .mockResolvedValueOnce(undefined)
+      .mockRejectedValueOnce(new DOMException("quota", "QuotaExceededError"));
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const enc = installImmediateEncoder();
+
+    const vr = new VideoRecorder({ channelId: "cam", store, recorder });
+    await vr.start({} as MediaStreamTrack);
+    enc.ref.output!(makeChunk(), {}); // fail → warn #1
+    await flushMicrotasks();
+    enc.ref.output!(makeChunk(), {}); // success → record, counter reset
+    await flushMicrotasks();
+    enc.ref.output!(makeChunk(), {}); // fail again → warn #2 (re-armed)
+    await flushMicrotasks();
+    vr.stop();
+    enc.restore();
+
+    expect(recordSpy).toHaveBeenCalledTimes(1);
+    expect(warnSpy).toHaveBeenCalledTimes(2);
+    warnSpy.mockRestore();
+  });
+
+  it("_onEncodedChunk drops the frame without onWriteError provided", async () => {
+    const { store, recorder } = await makeOpenRecorder();
+    const recordSpy = vi.spyOn(recorder, "record");
+    vi.spyOn(store, "writeVideoChunk").mockRejectedValue(
+      new DOMException("quota", "QuotaExceededError"),
+    );
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const enc = installImmediateEncoder();
+
+    const vr = new VideoRecorder({ channelId: "cam", store, recorder });
+    await vr.start({} as MediaStreamTrack);
+    enc.ref.output!(makeChunk(), {});
+    await flushMicrotasks();
+    vr.stop();
+    enc.restore();
+
+    // No callback wired → no throw, frame still dropped, still warned once.
+    expect(recordSpy).not.toHaveBeenCalled();
+    expect(warnSpy).toHaveBeenCalledTimes(1);
+    warnSpy.mockRestore();
   });
 });

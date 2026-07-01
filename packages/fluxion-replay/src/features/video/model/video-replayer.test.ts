@@ -200,6 +200,64 @@ describe("VideoReplayer", () => {
     replayer.dispose();
   });
 
+  it("skips a keyframe whose chunk was evicted (readVideoChunk → null) without decoding", async () => {
+    // The chunk is never written to OPFS — mimics a frame whose metadata
+    // survives an eviction pass but whose `.chunk` file was reclaimed. The
+    // replayer must skip it (no decode, no throw): the self-healing guarantee.
+    const decode = vi.fn();
+    const origVideoDecoder = globalThis.VideoDecoder;
+    class DecodeSpyVideoDecoder {
+      state = "unconfigured";
+      constructor(_init: { output: unknown; error: unknown }) {}
+      configure(_config: unknown) {
+        this.state = "configured";
+      }
+      decode(chunk: unknown) {
+        decode(chunk);
+      }
+      async flush() {}
+      close() {
+        this.state = "closed";
+      }
+    }
+    Object.defineProperty(globalThis, "VideoDecoder", {
+      value: DecodeSpyVideoDecoder,
+      writable: true,
+      configurable: true,
+    });
+
+    // Use an isolated channel so the module-global fake-OPFS map (shared across
+    // tests in this file) can't contain this chunk from an earlier test.
+    const replayer = new VideoReplayer({
+      store,
+      channelId: "evicted-cam",
+      outputCanvas: makeCanvas(),
+    });
+    replayer.feedFrame({
+      channelId: "evicted-cam",
+      data: {
+        opfsPath: "video/evicted-cam/1000.chunk", // never written → readVideoChunk() null
+        isKeyframe: true,
+        durationUs: 33333,
+        byteLength: 3,
+        codedWidth: 640,
+        codedHeight: 480,
+      },
+      t: 1000,
+    });
+    // Flush the async OPFS read; _decodeChunk bails at `if (!data) return`.
+    for (let i = 0; i < 10; i++) await Promise.resolve();
+
+    Object.defineProperty(globalThis, "VideoDecoder", {
+      value: origVideoDecoder,
+      writable: true,
+      configurable: true,
+    });
+
+    expect(decode).not.toHaveBeenCalled();
+    replayer.dispose();
+  });
+
   it("feedFrame triggers decode and renders to canvas", async () => {
     const drawImage = vi.fn();
     const canvas = {

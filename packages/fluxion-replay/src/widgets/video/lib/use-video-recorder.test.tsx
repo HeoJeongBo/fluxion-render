@@ -126,6 +126,41 @@ describe("useVideoRecorder", () => {
     expect(stopSpy).toHaveBeenCalledTimes(1);
   });
 
+  it("forwards onWriteError and re-creates the recorder when its identity changes", () => {
+    const starts: VideoRecorder[] = [];
+    (VideoRecorder.prototype.start as ReturnType<typeof vi.fn>).mockImplementation(
+      function (this: VideoRecorder) {
+        starts.push(this);
+        return Promise.resolve();
+      },
+    );
+    const stopSpy = VideoRecorder.prototype.stop as ReturnType<typeof vi.fn>;
+    const cb1 = vi.fn();
+    const cb2 = vi.fn();
+    const session = makeSession();
+    const { rerender } = renderHook(
+      ({ cb }: { cb: (error: unknown) => void }) =>
+        useVideoRecorder({
+          channelId: "screen",
+          session,
+          isRecording: true,
+          track: TRACK,
+          onWriteError: cb,
+        }),
+      { initialProps: { cb: cb1 } },
+    );
+    expect(starts).toHaveLength(1);
+    // biome-ignore lint/suspicious/noExplicitAny: reading private field
+    expect((starts[0] as any)._onWriteError).toBe(cb1);
+
+    // A new callback identity re-runs the effect: stop old, start a fresh recorder.
+    rerender({ cb: cb2 });
+    expect(stopSpy).toHaveBeenCalledTimes(1);
+    expect(starts).toHaveLength(2);
+    // biome-ignore lint/suspicious/noExplicitAny: reading private field
+    expect((starts[1] as any)._onWriteError).toBe(cb2);
+  });
+
   it("stops the recorder when isRecording flips true → false", () => {
     const stopSpy = VideoRecorder.prototype.stop as ReturnType<typeof vi.fn>;
     const session = makeSession();

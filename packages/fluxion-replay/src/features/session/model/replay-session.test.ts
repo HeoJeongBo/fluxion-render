@@ -209,6 +209,38 @@ describe("ReplaySession", () => {
       session.dispose();
     });
 
+    it("pauses eviction on enterReplay and resumes on exitReplay", async () => {
+      const session = new ReplaySession({
+        channels: [new MetricChannel("cpu")],
+        evictThresholdPct: 0, // would evict on any flush if not paused
+        storeOptions: { batchIntervalMs: 99_999 },
+      });
+      await session.open();
+      await session.startRecording();
+      const pauseSpy = vi.spyOn(session.store, "setEvictionPaused");
+      const deleteSpy = vi.spyOn(session.store, "deleteFramesBefore");
+      vi.spyOn(session.store, "getStorageInfo").mockResolvedValue({
+        usedBytes: 900,
+        quotaBytes: 1_000,
+        percentUsed: 90,
+        idbFrameCount: 3,
+      });
+      for (const t of [1_000, 2_000, 3_000]) {
+        session.record("cpu", { name: "cpu", value: t }, t);
+      }
+
+      // enterReplay pauses eviction BEFORE its flush → the entry flush commits
+      // pending frames without deleting the history we're about to review.
+      await session.enterReplay(1_000);
+      expect(pauseSpy).toHaveBeenCalledWith(true);
+      expect(deleteSpy).not.toHaveBeenCalled();
+
+      session.exitReplay();
+      expect(pauseSpy).toHaveBeenLastCalledWith(false);
+
+      session.dispose();
+    });
+
     it("uses opts.timeRange when provided (clamped into IDB's actual range)", async () => {
       const session = new ReplaySession({
         channels: [new MetricChannel("cpu")],

@@ -659,5 +659,294 @@ describe("ReplayStore", () => {
       const frames = await store.getFrames(8900, 9200);
       expect(frames).toHaveLength(2);
     });
+
+    // ─── OPFS video-chunk eviction ────────────────────────────────────────────
+
+    it("deleteVideoChunksBefore deletes only video chunks older than the cutoff", async () => {
+      const CH = "dvcb-cam";
+      for (const t of [1000, 2000, 3000]) {
+        await store.writeVideoChunk(CH, `${t}.chunk`, new Uint8Array([1, 2, 3]));
+        store.appendFrame({ t, channelId: CH, payload: new ArrayBuffer(1) });
+      }
+      await store.flush();
+
+      await store.deleteVideoChunksBefore(2500);
+
+      expect(await store.readVideoChunk(CH, "1000.chunk")).toBeNull();
+      expect(await store.readVideoChunk(CH, "2000.chunk")).toBeNull();
+      expect(await store.readVideoChunk(CH, "3000.chunk")).not.toBeNull();
+    });
+
+    it("deleteVideoChunksBefore respects the per-pass limit", async () => {
+      const CH = "dvcb-limit-cam";
+      for (const t of [1000, 2000, 3000]) {
+        await store.writeVideoChunk(CH, `${t}.chunk`, new Uint8Array([1]));
+        store.appendFrame({ t, channelId: CH, payload: new ArrayBuffer(1) });
+      }
+      await store.flush();
+
+      // Only one deletion allowed this pass → the two remaining survive.
+      await store.deleteVideoChunksBefore(9000, 1);
+
+      const survivors = [
+        await store.readVideoChunk(CH, "1000.chunk"),
+        await store.readVideoChunk(CH, "2000.chunk"),
+        await store.readVideoChunk(CH, "3000.chunk"),
+      ].filter((c) => c !== null);
+      expect(survivors).toHaveLength(2);
+    });
+
+    it("deleteVideoChunksBefore is a no-op when no video channel was written", async () => {
+      store.appendFrame({
+        t: 1000,
+        channelId: "metric-only",
+        payload: new ArrayBuffer(1),
+      });
+      await store.flush();
+      await expect(store.deleteVideoChunksBefore(5000)).resolves.toBeUndefined();
+    });
+
+    it("deleteVideoChunksBefore is a no-op when OPFS is unavailable", async () => {
+      await store.writeVideoChunk("noopfs-cam", "1000.chunk", new Uint8Array([1]));
+      // biome-ignore lint/suspicious/noExplicitAny: injecting null OPFS root
+      (store as any)._opfsRoot = null;
+      await expect(store.deleteVideoChunksBefore(5000)).resolves.toBeUndefined();
+    });
+
+    it("deleteVideoChunksBefore swallows query errors (never crashes eviction)", async () => {
+      await store.writeVideoChunk("err-cam", "1000.chunk", new Uint8Array([1]));
+      // biome-ignore lint/suspicious/noExplicitAny: forcing the query to reject
+      vi.spyOn(store as any, "getFramesByChannel").mockRejectedValue(
+        new Error("idb boom"),
+      );
+      await expect(store.deleteVideoChunksBefore(5000)).resolves.toBeUndefined();
+    });
+
+    it("eviction reclaims OPFS video chunks once storage exceeds the threshold", async () => {
+      const evictStore = new ReplayStore({ batchIntervalMs: 9999, evictThresholdPct: 0 });
+      await evictStore.open();
+      const CH = "e2e-cam";
+      for (const t of [1000, 2000, 3000, 4000, 5000]) {
+        await evictStore.writeVideoChunk(CH, `${t}.chunk`, new Uint8Array([1]));
+        evictStore.appendFrame({ t, channelId: CH, payload: new ArrayBuffer(1) });
+      }
+      vi.spyOn(evictStore, "getStorageInfo").mockResolvedValue({
+        usedBytes: 900,
+        quotaBytes: 1000,
+        percentUsed: 90,
+        idbFrameCount: 5,
+      });
+
+      await evictStore.flush();
+
+      // cutoff = 1000 + floor(4000 * 0.1) = 1400 → only the t=1000 chunk is older.
+      expect(await evictStore.readVideoChunk(CH, "1000.chunk")).toBeNull();
+      expect(await evictStore.readVideoChunk(CH, "2000.chunk")).not.toBeNull();
+      evictStore.dispose();
+    });
+
+    // ─── writeVideoChunk quota resilience ─────────────────────────────────────
+
+    it("writeVideoChunk reclaims and retries once on QuotaExceededError, then succeeds", async () => {
+      let writeCalls = 0;
+      const fakeRoot = {
+        getDirectoryHandle: async () => ({
+          getFileHandle: async () => ({
+            createWritable: async () => ({
+              write: async () => {
+                writeCalls++;
+                if (writeCalls === 1) {
+                  throw new DOMException("quota", "QuotaExceededError");
+                }
+              },
+              close: async () => {},
+            }),
+          }),
+        }),
+      };
+      // biome-ignore lint/suspicious/noExplicitAny: injecting fake OPFS root
+      (store as any)._opfsRoot = fakeRoot;
+      // biome-ignore lint/suspicious/noExplicitAny: spying private reclaim
+      const evictSpy = vi.spyOn(store as any, "_evictOldest").mockResolvedValue(null);
+
+      await expect(
+        store.writeVideoChunk("retry-cam", "1.chunk", new Uint8Array([1])),
+      ).resolves.toBeUndefined();
+
+      expect(evictSpy).toHaveBeenCalledWith(0.25);
+      expect(writeCalls).toBe(2);
+    });
+
+    it("writeVideoChunk rethrows when quota is still exhausted after reclaim + retry", async () => {
+      const fakeRoot = {
+        getDirectoryHandle: async () => ({
+          getFileHandle: async () => ({
+            createWritable: async () => ({
+              write: async () => {
+                throw new DOMException("quota", "QuotaExceededError");
+              },
+              close: async () => {},
+            }),
+          }),
+        }),
+      };
+      // biome-ignore lint/suspicious/noExplicitAny: injecting fake OPFS root
+      (store as any)._opfsRoot = fakeRoot;
+      // biome-ignore lint/suspicious/noExplicitAny: spying private reclaim
+      const evictSpy = vi.spyOn(store as any, "_evictOldest").mockResolvedValue(null);
+
+      await expect(
+        store.writeVideoChunk("retry-cam", "1.chunk", new Uint8Array([1])),
+      ).rejects.toThrow("quota");
+      expect(evictSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it("writeVideoChunk rethrows a non-quota error without reclaiming", async () => {
+      const fakeRoot = {
+        getDirectoryHandle: async () => ({
+          getFileHandle: async () => ({
+            createWritable: async () => ({
+              write: async () => {
+                throw new DOMException("nope", "NotFoundError");
+              },
+              close: async () => {},
+            }),
+          }),
+        }),
+      };
+      // biome-ignore lint/suspicious/noExplicitAny: injecting fake OPFS root
+      (store as any)._opfsRoot = fakeRoot;
+      // biome-ignore lint/suspicious/noExplicitAny: spying private reclaim
+      const evictSpy = vi.spyOn(store as any, "_evictOldest").mockResolvedValue(null);
+
+      await expect(
+        store.writeVideoChunk("nq-cam", "1.chunk", new Uint8Array([1])),
+      ).rejects.toThrow("nope");
+      expect(evictSpy).not.toHaveBeenCalled();
+    });
+
+    it("writeVideoChunk runs the REAL emergency reclaim (unmocked _evictOldest) then retries", async () => {
+      const CH = "emergency-cam";
+      for (const t of [1000, 2000, 3000, 4000, 5000]) {
+        await store.writeVideoChunk(CH, `${t}.chunk`, new Uint8Array([1]));
+        store.appendFrame({ t, channelId: CH, payload: new ArrayBuffer(1) });
+      }
+      await store.flush();
+
+      // The next write throws quota on its first attempt → the REAL
+      // _evictOldest(0.25) runs (not mocked) → the retry (2nd attempt) resolves.
+      // biome-ignore lint/suspicious/noExplicitAny: spying the private write
+      const writeSpy = vi
+        .spyOn(store as any, "_writeChunkOnce")
+        .mockRejectedValueOnce(new DOMException("quota", "QuotaExceededError"))
+        .mockResolvedValue(undefined);
+
+      await expect(
+        store.writeVideoChunk(CH, "6000.chunk", new Uint8Array([1])),
+      ).resolves.toBeUndefined();
+
+      // Emergency cutoff = 1000 + floor(4000 * 0.25) = 2000 → the t=1000 chunk
+      // was ACTUALLY reclaimed from OPFS by the real reclaim; t=2000 retained.
+      expect(writeSpy).toHaveBeenCalledTimes(2);
+      expect(await store.readVideoChunk(CH, "1000.chunk")).toBeNull();
+      expect(await store.readVideoChunk(CH, "2000.chunk")).not.toBeNull();
+    });
+
+    it("deleteVideoChunksBefore prunes every registered video channel", async () => {
+      for (const ch of ["mc-cam", "mc-screen"]) {
+        for (const t of [1000, 2000, 3000]) {
+          await store.writeVideoChunk(ch, `${t}.chunk`, new Uint8Array([1]));
+          store.appendFrame({ t, channelId: ch, payload: new ArrayBuffer(1) });
+        }
+      }
+      await store.flush();
+
+      await store.deleteVideoChunksBefore(2500);
+
+      for (const ch of ["mc-cam", "mc-screen"]) {
+        expect(await store.readVideoChunk(ch, "1000.chunk")).toBeNull();
+        expect(await store.readVideoChunk(ch, "2000.chunk")).toBeNull();
+        expect(await store.readVideoChunk(ch, "3000.chunk")).not.toBeNull();
+      }
+    });
+
+    it("deleteVideoChunksBefore shares the per-pass limit across channels", async () => {
+      for (const ch of ["lim-cam", "lim-screen"]) {
+        for (const t of [1000, 2000, 3000]) {
+          await store.writeVideoChunk(ch, `${t}.chunk`, new Uint8Array([1]));
+          store.appendFrame({ t, channelId: ch, payload: new ArrayBuffer(1) });
+        }
+      }
+      await store.flush();
+
+      // Six chunks sit below the cutoff, but the budget is 3 → only 3 delete.
+      await store.deleteVideoChunksBefore(9000, 3);
+
+      let survivors = 0;
+      for (const ch of ["lim-cam", "lim-screen"]) {
+        for (const t of [1000, 2000, 3000]) {
+          if ((await store.readVideoChunk(ch, `${t}.chunk`)) !== null) survivors++;
+        }
+      }
+      expect(survivors).toBe(3);
+    });
+
+    it("_oldestChannelTimestampsBefore returns the oldest `limit` timestamps below the cutoff", async () => {
+      const CH = "oldest-cam";
+      for (const t of [1000, 2000, 3000, 4000]) {
+        store.appendFrame({ t, channelId: CH, payload: new ArrayBuffer(1) });
+      }
+      await store.flush();
+      // Only 2 requested though 3 sit below 3500 → stops at the limit, ascending.
+      // biome-ignore lint/suspicious/noExplicitAny: private cursor helper
+      const capped = await (store as any)._oldestChannelTimestampsBefore(CH, 3500, 2);
+      expect(capped).toEqual([1000, 2000]);
+      // Fewer than the limit below the cutoff → returns them all (end-of-data).
+      // biome-ignore lint/suspicious/noExplicitAny: private cursor helper
+      const all = await (store as any)._oldestChannelTimestampsBefore(CH, 3500, 10);
+      expect(all).toEqual([1000, 2000, 3000]);
+    });
+
+    // ─── eviction pause (no time-travel data loss) ────────────────────────────
+
+    it("setEvictionPaused(true) suppresses threshold eviction; resume re-enables it", async () => {
+      const evictStore = new ReplayStore({ batchIntervalMs: 9999, evictThresholdPct: 0 });
+      await evictStore.open();
+      const deleteSpy = vi.spyOn(evictStore, "deleteFramesBefore");
+      vi.spyOn(evictStore, "getStorageInfo").mockResolvedValue({
+        usedBytes: 900,
+        quotaBytes: 1000,
+        percentUsed: 90,
+        idbFrameCount: 5,
+      });
+      for (const t of [1000, 2000, 3000, 4000, 5000]) {
+        evictStore.appendFrame({ t, channelId: "ch", payload: new ArrayBuffer(4) });
+      }
+
+      evictStore.setEvictionPaused(true);
+      await evictStore.flush();
+      expect(deleteSpy).not.toHaveBeenCalled();
+
+      evictStore.setEvictionPaused(false);
+      await evictStore.flush(); // pending already drained → the final _maybeEvict runs
+      // cutoff = 1000 + floor(4000 * 0.1) = 1400
+      expect(deleteSpy).toHaveBeenCalledWith(1400);
+
+      evictStore.dispose();
+      deleteSpy.mockRestore();
+    });
+
+    it("getStorageInfo({ withCount: false }) skips the frame count", async () => {
+      // biome-ignore lint/suspicious/noExplicitAny: spying private count
+      const countSpy = vi.spyOn(store as any, "_countFrames");
+
+      const light = await store.getStorageInfo({ withCount: false });
+      expect(light.idbFrameCount).toBe(0);
+      expect(countSpy).not.toHaveBeenCalled();
+
+      const full = await store.getStorageInfo();
+      expect(countSpy).toHaveBeenCalledTimes(1);
+      expect(typeof full.idbFrameCount).toBe("number");
+    });
   });
 });

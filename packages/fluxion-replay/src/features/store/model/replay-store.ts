@@ -1,3 +1,4 @@
+import { isQuotaExceededError } from "../../../shared/lib/is-quota-exceeded-error";
 import type { BaseChannel } from "../../../shared/model/base-channel";
 import type { SerializedFrame } from "../../../shared/model/frame";
 
@@ -65,6 +66,14 @@ const EVICT_EVERY_N_FLUSHES = 10;
 // duration of the cursor-delete loop so it doesn't freeze the main thread when
 // there are tens of thousands of stale records to remove.
 const MAX_DELETE_PER_EVICTION = 500;
+// Maximum number of OPFS video chunk files deleted per eviction pass. Chunk
+// files are the bulk of storage and removeEntry is async I/O (not a main-thread
+// cursor loop like IDB deletion), so a higher cap than MAX_DELETE_PER_EVICTION
+// is safe and reclaims the heavy data faster.
+const MAX_OPFS_DELETE_PER_EVICTION = 2000;
+// Number of OPFS removeEntry calls issued concurrently per batch, so a
+// long-recording channel doesn't queue thousands of file ops at once.
+const OPFS_DELETE_BATCH = 64;
 
 interface FrameRecord {
   t: number;
@@ -91,6 +100,16 @@ export class ReplayStore {
   private _storageLogIntervalMs: number;
   private _storageLogTimer: ReturnType<typeof setInterval> | null = null;
   private _flushCount = 0;
+  // channelIds that have had at least one video chunk written this session.
+  // Scopes OPFS chunk eviction to real video channels (metric/log channels
+  // never write chunks) without having to decode opaque frame payloads.
+  private _videoChannelIds = new Set<string>();
+  // When true, the periodic/threshold eviction pass (`_maybeEvict`) is
+  // suppressed — used while a ReplaySession is in replay (DVR) mode so
+  // time-travel doesn't delete the history the user is reviewing. The write
+  // path's emergency reclaim on QuotaExceededError stays active regardless, so
+  // a genuinely-full disk is still handled.
+  private _evictionPaused = false;
 
   constructor(opts?: ReplayStoreOptions) {
     this._dbName = opts?.dbName ?? DEFAULT_DB_NAME;
@@ -258,11 +277,96 @@ export class ReplayStore {
     });
   }
 
-  async getStorageInfo(): Promise<StorageInfo> {
+  /**
+   * Delete OPFS video chunks whose frame timestamp is `< cutoffMs`, for every
+   * channel that has written a chunk this session. Complements
+   * `deleteFramesBefore` (which removes only IDB metadata): the encoded video
+   * files in OPFS are the bulk of storage, so eviction must reclaim them too —
+   * otherwise `navigator.storage.estimate()` keeps climbing to the quota no
+   * matter how many IDB rows are dropped, and `writeVideoChunk` eventually
+   * throws `QuotaExceededError`.
+   *
+   * The chunk filename is reconstructed as `` `${frame.t}.chunk` `` — the exact
+   * name `VideoRecorder` wrote (its `tMs` is recorded as the frame's `t`). Must
+   * run BEFORE `deleteFramesBefore` in an eviction pass so the metadata rows
+   * used to locate the chunks are still present.
+   */
+  async deleteVideoChunksBefore(
+    cutoffMs: number,
+    limit = MAX_OPFS_DELETE_PER_EVICTION,
+  ): Promise<void> {
+    if (!this._opfsRoot || this._videoChannelIds.size === 0) return;
+    try {
+      let remaining = limit;
+      for (const channelId of this._videoChannelIds) {
+        if (remaining <= 0) break;
+        // Capped cursor read: only the oldest `remaining` timestamps below the
+        // cutoff — NOT a getAll over the whole [0, cutoff) span (which grows
+        // unbounded as the recording lengthens and would be re-scanned every
+        // eviction pass).
+        const ts = await this._oldestChannelTimestampsBefore(
+          channelId,
+          cutoffMs,
+          remaining,
+        );
+        remaining -= ts.length;
+        const filenames = ts.map((t) => `${t}.chunk`);
+        for (let i = 0; i < filenames.length; i += OPFS_DELETE_BATCH) {
+          await Promise.all(
+            filenames
+              .slice(i, i + OPFS_DELETE_BATCH)
+              .map((name) => this.deleteVideoChunk(channelId, name)),
+          );
+        }
+      }
+    } catch {
+      // OPFS reclaim must never crash the flush pipeline (mirrors _maybeEvict).
+    }
+  }
+
+  /**
+   * The oldest (up to `limit`) frame timestamps for `channelId` with `t <
+   * beforeMs`, via a capped ascending cursor on the `by_channel_t` index.
+   * Bounded regardless of how many frames sit below the cutoff — unlike a
+   * `getFramesByChannel(0, before)` getAll — and reads no payloads it discards.
+   */
+  private _oldestChannelTimestampsBefore(
+    channelId: string,
+    beforeMs: number,
+    limit: number,
+  ): Promise<number[]> {
+    const db = this._assertOpen();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction("frames", "readonly");
+      const index = tx.objectStore("frames").index("by_channel_t");
+      // Exclusive upper on t (upperOpen) so t === beforeMs is excluded, matching
+      // deleteFramesBefore's upperBound(beforeMs, true).
+      const range = IDBKeyRange.bound([channelId, 0], [channelId, beforeMs], false, true);
+      const req = index.openCursor(range);
+      const out: number[] = [];
+      req.onsuccess = (e) => {
+        const cursor = (e.target as IDBRequest<IDBCursorWithValue | null>).result;
+        if (!cursor || out.length >= limit) {
+          resolve(out);
+          return;
+        }
+        out.push((cursor.value as FrameRecord).t);
+        cursor.continue();
+      };
+      req.onerror = () => reject(req.error);
+    });
+  }
+
+  /**
+   * Origin storage usage. `withCount` (default true) includes `idbFrameCount`,
+   * which costs a full IDB `count()` — the eviction gate passes `false` since
+   * it only needs `percentUsed`, avoiding that count on every ~5 s pass.
+   */
+  async getStorageInfo(opts?: { withCount?: boolean }): Promise<StorageInfo> {
     const est = await navigator.storage.estimate();
     const used = est.usage ?? 0;
     const quota = est.quota ?? 0;
-    const count = this._db ? await this._countFrames() : 0;
+    const count = opts?.withCount !== false && this._db ? await this._countFrames() : 0;
     return {
       usedBytes: used,
       quotaBytes: quota,
@@ -338,6 +442,25 @@ export class ReplayStore {
     filename: string,
     data: Uint8Array,
   ): Promise<void> {
+    this._videoChannelIds.add(channelId);
+    try {
+      await this._writeChunkOnce(channelId, filename, data);
+    } catch (e) {
+      // Quota exhaustion is the one failure we can recover from: aggressively
+      // evict the oldest slice (OPFS chunks + IDB rows) to free space, then
+      // retry the write once. A non-quota error — or a still-full disk after
+      // reclaim — propagates to the caller (VideoRecorder drops the frame).
+      if (!isQuotaExceededError(e)) throw e;
+      await this._evictOldest(0.25).catch(() => {});
+      await this._writeChunkOnce(channelId, filename, data);
+    }
+  }
+
+  private async _writeChunkOnce(
+    channelId: string,
+    filename: string,
+    data: Uint8Array,
+  ): Promise<void> {
     const root = this._assertOpfs();
     const dir = await root.getDirectoryHandle(channelId, { create: true });
     const file = await dir.getFileHandle(filename, { create: true });
@@ -362,6 +485,7 @@ export class ReplayStore {
 
   async clearAll(): Promise<void> {
     this._segments = [];
+    this._videoChannelIds.clear();
     // Clear IDB frames
     const db = this._assertOpen();
     await new Promise<void>((resolve, reject) => {
@@ -408,6 +532,7 @@ export class ReplayStore {
     this._db = null;
     this._opfsRoot = null;
     this._pending = [];
+    this._videoChannelIds.clear();
   }
 
   private _assertOpen(): IDBDatabase {
@@ -449,28 +574,56 @@ export class ReplayStore {
     }
   }
 
+  /**
+   * Pause or resume the periodic/threshold eviction pass. ReplaySession pauses
+   * it on `enterReplay` and resumes on `exitReplay` so time-travel over recorded
+   * history doesn't delete the frames being reviewed. Does NOT affect the
+   * emergency reclaim `writeVideoChunk` runs on `QuotaExceededError`.
+   */
+  setEvictionPaused(paused: boolean): void {
+    this._evictionPaused = paused;
+  }
+
   private async _maybeEvict(): Promise<void> {
-    if (this._evictThresholdPct >= 100) return;
+    if (this._evictionPaused || this._evictThresholdPct >= 100) return;
     try {
-      const info = await this.getStorageInfo();
+      // withCount:false — the eviction gate only needs percentUsed, so skip the
+      // full IDB _countFrames() the UI-facing getStorageInfo() does.
+      const info = await this.getStorageInfo({ withCount: false });
       if (info.percentUsed < this._evictThresholdPct) return;
-
-      const timeRange = await this.getTimeRange();
-      if (!timeRange) return;
-
-      const spanMs = timeRange.latest - timeRange.earliest;
-      if (spanMs <= 0) return;
-
-      // Delete the oldest 10 % of the recorded time span
-      const cutoffMs = timeRange.earliest + Math.floor(spanMs * 0.1);
-      await this.deleteFramesBefore(cutoffMs);
-      // Clip in-memory segments to match the new IDB lower bound so that
-      // getSegments() / detectGaps() / snapTimeToSegment() stay consistent
-      // with what actually exists in the database.
-      this._trimSegmentsBefore(cutoffMs);
+      // Delete the oldest 10 % of the recorded time span.
+      await this._evictOldest(0.1);
     } catch {
       // eviction failure must not crash the flush pipeline
     }
+  }
+
+  /**
+   * Delete the oldest `fraction` (0–1) of the recorded time span from BOTH
+   * backends: OPFS video chunks first (while their metadata is still queryable),
+   * then IDB frame rows, then clip in-memory segments to match. Returns the
+   * cutoff timestamp used, or null when there is nothing to evict.
+   *
+   * Used by the periodic threshold eviction (`_maybeEvict`, 10 %) and by
+   * `writeVideoChunk`'s emergency reclaim on `QuotaExceededError` (25 %).
+   */
+  private async _evictOldest(fraction: number): Promise<number | null> {
+    const timeRange = await this.getTimeRange();
+    if (!timeRange) return null;
+
+    const spanMs = timeRange.latest - timeRange.earliest;
+    if (spanMs <= 0) return null;
+
+    const cutoffMs = timeRange.earliest + Math.floor(spanMs * fraction);
+    // OPFS chunks BEFORE IDB rows: deleteVideoChunksBefore reads frame metadata
+    // to locate the `${t}.chunk` files, so the rows must still exist.
+    await this.deleteVideoChunksBefore(cutoffMs);
+    await this.deleteFramesBefore(cutoffMs);
+    // Clip in-memory segments to match the new IDB lower bound so that
+    // getSegments() / detectGaps() / snapTimeToSegment() stay consistent
+    // with what actually exists in the database.
+    this._trimSegmentsBefore(cutoffMs);
+    return cutoffMs;
   }
 
   private _trimSegmentsBefore(cutoffMs: number): void {

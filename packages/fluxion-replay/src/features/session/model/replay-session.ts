@@ -84,6 +84,13 @@ export class ReplaySession {
     const gen = ++this._opGen;
     this._player?.dispose();
 
+    // Pause quota eviction for the duration of replay: time-travel is read-only
+    // review of recorded history, so it must not delete the frames the user is
+    // seeking to. Set BEFORE flush() so the entry flush commits pending frames
+    // without triggering an eviction pass that would advance `earliest` and
+    // clamp this entry's seek forward. Resumed in exitReplay().
+    this._store.setEvictionPaused(true);
+
     // Commit the recorder's pending batch before anyone reads the IDB time
     // range — otherwise the last ~500ms of frames (still in the in-memory
     // queue) are invisible to both `getTimeRange()` and the player's
@@ -142,6 +149,8 @@ export class ReplaySession {
 
   exitReplay(): void {
     this._opGen++; // invalidate in-flight enterReplay calls
+    // Back to live → resume quota eviction (paused in enterReplay).
+    this._store.setEvictionPaused(false);
     this._player?.dispose();
     this._player = null;
     this._mode = "live";

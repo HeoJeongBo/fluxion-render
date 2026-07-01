@@ -59,6 +59,7 @@ export type {
 export { VideoReplayer } from "./features/video/model/video-replayer";
 // Format & producer utilities (pure, no React)
 export { formatBytes, formatMs } from "./shared/lib/format";
+export { isQuotaExceededError } from "./shared/lib/is-quota-exceeded-error";
 export type {
   LogSample,
   MetricSampleShape,

@@ -30,6 +30,12 @@ export interface UseVideoRecorderOptions {
   bitrate?: number;
   /** Frames per second. Default `30`. */
   framerate?: number;
+  /**
+   * Called when an encoded chunk fails to persist and the frame is dropped
+   * (e.g. OPFS storage quota exhausted). Wrap it in `useCallback` — a new
+   * identity re-creates the underlying `VideoRecorder`.
+   */
+  onWriteError?: (error: unknown) => void;
 }
 
 /**
@@ -57,6 +63,7 @@ export function useVideoRecorder(opts: UseVideoRecorderOptions): void {
     height = 720,
     bitrate = 2_000_000,
     framerate = 30,
+    onWriteError,
   } = opts;
 
   const recorderRef = useRef<VideoRecorder | null>(null);
@@ -72,6 +79,7 @@ export function useVideoRecorder(opts: UseVideoRecorderOptions): void {
       height,
       bitrate,
       framerate,
+      onWriteError,
     });
     recorderRef.current = vr;
     void vr.start(track).catch((e) => {
@@ -82,5 +90,15 @@ export function useVideoRecorder(opts: UseVideoRecorderOptions): void {
       vr.stop();
       recorderRef.current = null;
     };
-  }, [isRecording, session, track, channelId, width, height, bitrate, framerate]);
+  }, [
+    isRecording,
+    session,
+    track,
+    channelId,
+    width,
+    height,
+    bitrate,
+    framerate,
+    onWriteError,
+  ]);
 }

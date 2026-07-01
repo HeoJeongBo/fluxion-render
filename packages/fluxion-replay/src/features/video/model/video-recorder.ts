@@ -14,6 +14,14 @@ export interface VideoRecorderOptions {
   height?: number;
   bitrate?: number;
   framerate?: number;
+  /**
+   * Invoked when a single encoded chunk fails to persist — e.g. OPFS storage
+   * quota is exhausted even after the store's reclaim + retry. The frame is
+   * dropped and no metadata is recorded (so the timeline never points at a
+   * chunk that was never written); recording continues. Fires once per dropped
+   * chunk. Use it to surface a "storage full" indicator in the UI.
+   */
+  onWriteError?: (error: unknown) => void;
 }
 
 const DEFAULT_KEYFRAME_INTERVAL_SEC = 2;
@@ -22,6 +30,10 @@ const DEFAULT_WIDTH = 640;
 const DEFAULT_HEIGHT = 480;
 const DEFAULT_BITRATE = 1_000_000;
 const DEFAULT_FRAMERATE = 30;
+// Log at most one console.warn per this many consecutive chunk-write failures,
+// so a full disk during a 30 fps recording doesn't spam the console. The
+// onWriteError callback still fires on every drop; only the warn is throttled.
+const WARN_EVERY_N_FAILURES = 30;
 
 export class VideoRecorder {
   /**
@@ -39,6 +51,8 @@ export class VideoRecorder {
   private readonly _thumbnailStore: ThumbnailStore | undefined;
   private readonly _keyframeIntervalSec: number;
   private readonly _config: VideoEncoderConfig;
+  private readonly _onWriteError: ((error: unknown) => void) | undefined;
+  private _writeFailureCount = 0;
   private _encoder: VideoEncoder | null = null;
   private _processor: ReadableStreamDefaultReader<VideoFrame> | null = null;
   private _frameCount = 0;
@@ -54,6 +68,7 @@ export class VideoRecorder {
     this._recorder = opts.recorder;
     this._thumbnailStore = opts.thumbnailStore;
     this._keyframeIntervalSec = opts.keyframeIntervalSec ?? DEFAULT_KEYFRAME_INTERVAL_SEC;
+    this._onWriteError = opts.onWriteError;
     this._config = {
       codec: opts.codec ?? DEFAULT_CODEC,
       width: opts.width ?? DEFAULT_WIDTH,
@@ -178,7 +193,29 @@ export class VideoRecorder {
     const tMs = this._startWallMs + Math.round(offsetUs / 1000);
     const filename = `${tMs}.chunk`;
 
-    await this._store.writeVideoChunk(this._channelId, filename, data);
+    try {
+      await this._store.writeVideoChunk(this._channelId, filename, data);
+    } catch (e) {
+      // Persisting failed (typically OPFS quota exhausted even after the store's
+      // reclaim + retry). Drop the frame and DO NOT record metadata — otherwise
+      // the timeline would reference a chunk that was never written, breaking
+      // decode on replay. This runs in a fire-and-forget encoder callback, so
+      // swallowing here is what prevents an unhandled rejection.
+      this._writeFailureCount++;
+      if ((this._writeFailureCount - 1) % WARN_EVERY_N_FAILURES === 0) {
+        console.warn(
+          `[VideoRecorder] video-write failed; dropping frame` +
+            ` (${this._writeFailureCount} dropped so far):`,
+          e,
+        );
+      }
+      this._onWriteError?.(e);
+      return;
+    }
+
+    // Recovered (or never failed): reset the throttle so a later burst warns
+    // immediately again.
+    this._writeFailureCount = 0;
 
     const frameInfo: VideoFrameInfo = {
       opfsPath: `video/${this._channelId}/${filename}`,
